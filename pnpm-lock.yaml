@@ -194,6 +194,9 @@ importers:
       '@commitlint/config-conventional':
         specifier: ^20.5.3
         version: 20.5.3
+      '@commitlint/read':
+        specifier: 20.5.0
+        version: 20.5.0(conventional-commits-parser@6.4.0)
       '@types/better-sqlite3':
         specifier: ^9.6.0
         version: 9.6.0

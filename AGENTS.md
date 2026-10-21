@@ -12,7 +12,7 @@
 ## 命令与验证
 
 - `package.json` 已预置 `dev`、`build` 和 `start` 脚本，开发与生产启动均绑定 `127.0.0.1`；尚无应用入口，应用依赖安装、启动与构建仍未验证，不要把预置脚本写成已经可用。
-- 提交工具使用 Node `>=22.0.0`、pnpm `12.10.1`（最低 `12.0.0`）；实际通过 `pnpm install --dev --ignore-scripts --frozen-lockfile --offline`、`pnpm run test:commits`（18 项真实 CLI / 隔离 Git 测试），以及 `printf '%s\n' 'docs(git): clarify commit checks' | pnpm run commitlint`、`pnpm run commitlint --edit <消息文件>`、`pnpm run commitlint --from <base> --to HEAD`。占位参数须替换为实际文件或基线；`--from` 不包含起始提交。
+- 提交工具使用 Node `>=22.0.0`、pnpm `12.10.1`（最低 `12.0.0`）；实际通过 `pnpm install --dev --ignore-scripts --frozen-lockfile --offline`、`pnpm run test:commits`（22 项真实 CLI / 隔离 Git 测试），以及 `printf '%s\n' 'docs(git): clarify commit checks' | pnpm run commitlint`、`pnpm run commitlint --edit <消息文件>`、`pnpm run commitlint --from <base> --to HEAD`。占位参数须替换为实际文件或基线；`--from` 不包含起始提交。
 - `pnpm run prepare` 显式安装或修复 hook；本轮独立 worktree 已启用 `extensions.worktreeConfig`，实际使用 `GIT_CONFIG="$(git rev-parse --git-path config.worktree)" pnpm run prepare`，仅修改当前 worktree 的 hook 配置。完整安装和校验说明见[提交约定](docs/agents/git-commits.md)。
 - 初始化应用后，在此补充从项目根目录实际验证过的准确命令、必要环境变量，以及实际采用的自动化检查及测试运行方式。
 - 实现验收优先走浏览器完整用户流程，经过真实应用接口、SQLite 和实际下载的工作簿；仅在高德服务边界使用可控替身。

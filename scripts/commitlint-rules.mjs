@@ -7,7 +7,7 @@ const metadata = /^(?:(?:Refs?|Signed-off-by|Co-authored-by|Reviewed-by|Acked-by
 
 function hasExplanation(lines, parsed) {
   const retained = new Set([parsed.body, parsed.footer].filter(Boolean).join('\n').split(/\r?\n/));
-  return lines.some((line) => retained.has(line) && line.trim() && !/^\s*#/.test(line) && !metadata.test(line));
+  return lines.some((line) => retained.has(line) && line.trim() && !/^\s*#/.test(line) && !metadata.test(line.trimStart()));
 }
 
 export default {
@@ -17,17 +17,19 @@ export default {
       if (type !== 'revert') return [true];
       const lines = raw.split(/\r?\n/).slice(1);
       const record = /^This reverts commit [0-9a-fA-F]{40}\.$/;
+      const retained = new Set([parsed.body, parsed.footer].filter(Boolean).join('\n').split(/\r?\n/));
       return [
-        lines.some((line) => record.test(line)) && hasExplanation(lines.filter((line) => !record.test(line)), parsed),
+        lines.some((line) => retained.has(line) && record.test(line)) && hasExplanation(lines.filter((line) => !record.test(line)), parsed),
         'revert body must contain This reverts commit <40 hexadecimal characters>. on its own line and an actual reason',
       ];
     },
     'project-breaking-change': (parsed) => {
       const { raw } = parsed;
       const lines = raw.split(/\r?\n/);
-      const invalidAlias = lines.some((line) => /^\s*BREAKING-CHANGE:/.test(line));
-      const markers = lines.flatMap((line, index) => /^\s*BREAKING CHANGE:/.test(line) ? [index] : []);
-      const valid = !invalidAlias && markers.every((index) =>
+      const markers = lines.flatMap((line, index) =>
+        /^[\s|*]*BREAKING(?: CHANGE|-CHANGE)[:\s]+/i.test(line) ? [index] : []
+      );
+      const valid = markers.every((index) =>
         /^BREAKING CHANGE: \S.*$/.test(lines[index]) &&
         lines[index - 1]?.trim() === '' &&
         lines[index + 1]?.trim() === '' &&

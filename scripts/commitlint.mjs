@@ -2,12 +2,13 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
+import read from '@commitlint/read';
 
 const args = process.argv.slice(2);
 const require = createRequire(import.meta.url);
 
-// commitlint drops blank --edit messages before running any configured rule.
-// Guard that one input gap, then delegate all validation to the real CLI.
+// commitlint filters empty file and history messages before configured rules.
+// Check those inputs using its public reader, then delegate validation to the CLI.
 function option(names) {
   let result;
   for (let index = 0; index < args.length; index += 1) {
@@ -33,6 +34,19 @@ try {
     if (!content.trim()) {
       console.error('✖ commit message must not be empty; add type(scope): summary [project-message-empty]');
       process.exit(3);
+    }
+  } else {
+    const from = option(['--from', '-f']);
+    const to = option(['--to', '-t']);
+    const last = args.includes('--last') || args.includes('-l');
+    const fromLastTag = args.includes('--from-last-tag');
+    if (from !== undefined || to !== undefined || last || fromLastTag) {
+      const messages = await read({ cwd, from, to, last, fromLastTag, gitLogArgs: option(['--git-log-args']) });
+      const empty = messages.findIndex((message) => !message.trim());
+      if (empty !== -1) {
+        console.error(`✖ commit message ${empty + 1} in the selected history must not be empty [project-message-empty]`);
+        process.exit(3);
+      }
     }
   }
   const pkgPath = require.resolve('@commitlint/cli/package.json');

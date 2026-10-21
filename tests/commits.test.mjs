@@ -329,3 +329,60 @@ test('the configured Git comment character cannot hide the only required explana
     assert.notEqual(repo.git('rev-parse', '--verify', 'HEAD').status, 0);
   }
 });
+
+test('Git comment cleanup cannot remove the required revert SHA record', (t) => {
+  const repo = repository(t);
+  repo.ok('config', 'core.editor', 'true');
+  const path = join(repo.cwd, 'commit message.txt');
+  writeFileSync(path, `revert(route): restore point order\n\nThis reverts commit ${revertedSha}.\n\nRestore the intended point order.\n`);
+  const env = { ...repo.env, GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'core.commentChar', GIT_CONFIG_VALUE_0: 'T' };
+  const checked = run('pnpm', ['run', 'commitlint', '--edit', path], { cwd: repo.cwd, env });
+  assert.notEqual(checked.status, 0, checked.output);
+  assert.match(checked.output, /revert/);
+  const committed = run('git', ['commit', '--edit', '--allow-empty', '-F', path], { cwd: repo.cwd, env });
+  assert.notEqual(committed.status, 0, committed.output);
+  assert.notEqual(repo.git('rev-parse', '--verify', 'HEAD').status, 0);
+});
+
+test('indented metadata cannot stand in for a revert reason or migration instructions', () => {
+  for (const metadata of [' Refs: #123', '\tSigned-off-by: Example <example@example.invalid>', '  Fixes #123']) {
+    rejects(`revert(route): restore point order\n\nThis reverts commit ${revertedSha}.\n\n${metadata}\n`, /revert/);
+    rejects(`feat(storage): change storage layout\n\nBREAKING CHANGE: change the schema\n\n${metadata}\n`, /breaking|BREAKING/);
+  }
+  accepts('docs(git): explain commit metadata\n\nExplain how Refs: and Signed-off-by: metadata help review.\n');
+});
+
+
+test('breaking notes recognized by the parser must use the exact project marker', () => {
+  for (const marker of ['breaking change:', 'Breaking Change:', 'breaking-change:', 'BREAKING CHANGE']) {
+    rejects(`feat(storage): change storage layout\n\n${marker} change the schema\n`, /breaking|BREAKING/);
+  }
+  accepts('docs(git): explain compatibility notes\n\nDiscuss BREAKING CHANGE: notes and breaking-change wording in prose.\n');
+});
+
+
+test('empty historical messages fail without changing commit range boundaries', (t) => {
+  const repo = repository(t);
+  repo.ok('commit', '--allow-empty', '-m', 'build(git): establish a valid baseline');
+  const baseline = repo.ok('rev-parse', 'HEAD');
+  repo.ok('-c', 'core.hooksPath=/dev/null', 'commit', '--allow-empty', '--allow-empty-message', '-m', '');
+  const empty = repo.ok('rev-parse', 'HEAD');
+  for (const args of [
+    ['--from', baseline, '--to', empty],
+    [`--from=${baseline}`, `--to=${empty}`],
+    ['-f', baseline, '-t', empty],
+    ['--last'],
+  ]) {
+    const result = run('pnpm', ['run', 'commitlint', ...args], { cwd: repo.cwd, env: repo.env });
+    assert.notEqual(result.status, 0, result.output);
+    assert.match(result.output, /empty/i);
+  }
+  repo.ok('commit', '--allow-empty', '-m', 'docs(git): describe a valid latest change');
+  const range = (from, to) => run('pnpm', ['run', 'commitlint', '--from', from, '--to', to], { cwd: repo.cwd, env: repo.env });
+  const includesEmpty = range(baseline, 'HEAD');
+  assert.notEqual(includesEmpty.status, 0, includesEmpty.output);
+  const excludesEmpty = range(empty, 'HEAD');
+  assert.equal(excludesEmpty.status, 0, excludesEmpty.output);
+  const noCommits = range(baseline, baseline);
+  assert.equal(noCommits.status, 0, noCommits.output);
+});
