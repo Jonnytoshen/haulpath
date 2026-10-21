@@ -4,14 +4,16 @@
 
 ## 当前状态与技术栈
 
-- 当前已有需求、领域和代理约定文档及 `package.json` 依赖清单，尚无应用代码或数据库迁移。
+- 当前已有需求、领域和代理约定文档、应用依赖清单，以及已验证的本机提交消息约束；尚无应用代码或数据库迁移。
 - 已确认、待实现：pnpm、Next.js App Router、TypeScript；同一应用提供网页与本机服务端接口，默认监听 `127.0.0.1`。
 - 数据持久化使用 SQLite / `better-sqlite3`；Excel 读写使用 ExcelJS，CSV 解析使用 `csv-parse`。
 - 地图使用高德 JS API 2.0 与官方 `@amap/amap-jsapi-loader`；驾车测算由服务端调用高德 Web 服务 v5。
 
 ## 命令与验证
 
-- `package.json` 已预置 `dev`、`build` 和 `start` 脚本，开发与生产启动均绑定 `127.0.0.1`；尚未安装依赖或建立应用入口，安装、启动与构建未验证，也未配置测试或 lint 命令，不要把预置脚本写成已经可用。
+- `package.json` 已预置 `dev`、`build` 和 `start` 脚本，开发与生产启动均绑定 `127.0.0.1`；尚无应用入口，应用依赖安装、启动与构建仍未验证，不要把预置脚本写成已经可用。
+- 提交工具使用 Node `>=22.0.0`、pnpm `12.10.1`（最低 `12.0.0`）；实际通过 `pnpm install --dev --ignore-scripts --frozen-lockfile --offline`、`pnpm run test:commits`（18 项真实 CLI / 隔离 Git 测试），以及 `printf '%s\n' 'docs(git): clarify commit checks' | pnpm run commitlint`、`pnpm run commitlint --edit <消息文件>`、`pnpm run commitlint --from <base> --to HEAD`。占位参数须替换为实际文件或基线；`--from` 不包含起始提交。
+- `pnpm run prepare` 显式安装或修复 hook；本轮独立 worktree 已启用 `extensions.worktreeConfig`，实际使用 `GIT_CONFIG="$(git rev-parse --git-path config.worktree)" pnpm run prepare`，仅修改当前 worktree 的 hook 配置。完整安装和校验说明见[提交约定](docs/agents/git-commits.md)。
 - 初始化应用后，在此补充从项目根目录实际验证过的准确命令、必要环境变量，以及实际采用的自动化检查及测试运行方式。
 - 实现验收优先走浏览器完整用户流程，经过真实应用接口、SQLite 和实际下载的工作簿；仅在高德服务边界使用可控替身。
 - 浏览器自动化建议使用 Playwright。模拟高德响应与真实密钥联调分别验证；模拟测试不能证明真实地图可用。
@@ -24,6 +26,12 @@
 - `.scratch/` 被 Git 忽略，其他工作副本可能没有它；有相关 spec / issue 时先读，缺少任务必需的需求时明确指出缺口，不猜测细节。
 - 每个功能使用 `.scratch/<feature-slug>/spec.md`；实现工单分别放在 `issues/<NN>-<slug>.md`，从 `01` 编号，评论追加到文件末尾的 `## Comments`。
 - 技能要求“发布到 issue tracker”时写入上述本地文件；按编号取工单时，在对应功能目录解析。
+
+## Git 提交
+
+- 严格遵循[项目 Angular 扩展版提交约定](docs/agents/git-commits.md)，使用允许的 type 与可选单一 scope；英文小写祈使句摘要，标题最多 100 字符。合并、撤销和临时消息没有默认豁免。
+- 每次提交必须有独立目的并包含相关代码、必要测试及配置，能独立解释、验证和回退；不混入无关改动，不为增加次数拆散必要变更。提交前核对暂存内容，完成相关验证，按需在正文记录实际结果。
+- 本机 hook 可绕过，直接 `git revert` 不保证触发；需要拦截时用 `git revert --no-commit` 后普通 `git commit`，正文记录完整 SHA 和撤销原因。交付前主动校验本轮全部新增提交区间，同时人工检查语义与提交完整性；保持用户签名设置，不重写无关历史。
 
 ## 领域与实现约束
 
