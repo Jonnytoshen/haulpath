@@ -14,7 +14,10 @@
     "start": "next start --hostname 127.0.0.1",
     "prepare": "husky",
     "test:commits": "node --test tests/commits.test.mjs",
-    "commitlint": "node scripts/commitlint.mjs --strict"
+    "commitlint": "node scripts/commitlint.mjs --strict",
+    "typecheck": "next typegen && tsc --noEmit",
+    "test:api": "node --test --test-concurrency=1 tests/foundation.test.mjs",
+    "test": "node --test --test-concurrency=1 tests/*.test.mjs"
   },
   "dependencies": {
     "@amap/amap-jsapi-loader": "^1.0.1",

@@ -53,3 +53,13 @@
 - 遵循 `.gitignore`：本地凭证、SQLite 数据及备份、生成产物和 `.scratch/` 不纳入版本控制；环境变量示例只放占位值。
 - 提案与既有 ADR 冲突时，指出具体决策和重新考虑的理由；需求或约定变更时同步更新相关规格、术语、ADR 及本文件。
 - 本文件仅保留稳定、项目特有的操作约束；详细需求和流程放在对应文档中。代码与工具链建立后补充实际示例，删除过时说明，不套用尚未采用的代码风格或 Git 工作流。
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+## This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->
