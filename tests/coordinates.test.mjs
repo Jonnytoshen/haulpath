@@ -71,3 +71,20 @@ test('WGS84 entry converts in bounded batches and preserves originals and input 
   assert.equal(result.body[1].longitude, 121.471234567);
   assert.equal(upstreamRequests.length - beforeCount, 2);
 });
+
+test('coordinate entry rejects invalid inputs before conversion and never returns a partially converted batch', async () => {
+  const beforeCount = upstreamRequests.length;
+  for (const point of [inputPoint(''), inputPoint('越界', 181), inputPoint('无坐标', '121'), { ...inputPoint('未知系'), coordinateSystem: 'BD-09' }]) {
+    const result = await request('/api/coordinates', 'POST', { points: [{ ...inputPoint('有效GPS'), coordinateSystem: 'WGS84' }, point] });
+    assert.equal(result.status, 400);
+  }
+  assert.equal(upstreamRequests.length, beforeCount);
+  const gps = { ...inputPoint('GPS'), coordinateSystem: 'WGS84' };
+  for (const locations of ['', '181,31', '121,', '121,31;122,32']) {
+    handleUpstream = (_url, response) => { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ status: '1', locations })); };
+    const result = await request('/api/coordinates', 'POST', { points: [gps] });
+    assert.equal(result.status, 502);
+    assert.equal(typeof result.body.error, 'string');
+    assert.equal(result.body.points, undefined);
+  }
+});
