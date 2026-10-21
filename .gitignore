@@ -1,0 +1,32 @@
+# macOS
+.DS_Store
+
+# Dependencies and generated output
+node_modules/
+.pnpm-store/
+.next/
+out/
+dist/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+*.log
+
+# Local credentials; placeholder examples may be committed
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Local SQLite databases and sidecar files
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+/backups/
+
+# Local specifications and issues are not tracked in Git.
+.scratch/
