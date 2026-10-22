@@ -16,9 +16,9 @@
     "test:commits": "node --test tests/commits.test.mjs",
     "commitlint": "node scripts/commitlint.mjs --strict",
     "typecheck": "next typegen && tsc --noEmit",
-    "test:api": "node --test --test-concurrency=1 tests/foundation.test.mjs",
+    "test:api": "node --test --test-concurrency=1 tests/foundation.test.mjs tests/coordinates.test.mjs tests/configuration.test.mjs tests/map-proxy.test.mjs tests/planning.test.mjs tests/import.test.mjs tests/export.test.mjs tests/backup.test.mjs",
     "test": "node --test --test-concurrency=1 tests/*.test.mjs",
-    "test:browser": "node --test --test-concurrency=1 tests/workbench.test.mjs"
+    "test:browser": "node --test --test-concurrency=1 tests/workbench.test.mjs tests/acceptance.test.mjs"
   },
   "dependencies": {
     "@amap/amap-jsapi-loader": "^1.0.1",
