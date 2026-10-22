@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
 import { createServer } from 'node:net';
 
-export async function startApplication(extraEnvironment = {}, existingDirectory) {
+export async function startApplication(extraEnvironment = {}, existingDirectory, { mode = 'dev' } = {}) {
   const directory = existingDirectory ?? await mkdtemp(join(tmpdir(), 'zhongtu-test-'));
   const port = await new Promise((resolve, reject) => {
     const socket = createServer();
@@ -16,16 +16,16 @@ export async function startApplication(extraEnvironment = {}, existingDirectory)
     });
   });
   const baseUrl = `http://127.0.0.1:${port}`;
-  const server = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'dev', '--hostname', '127.0.0.1', '--port', String(port)], {
+  const server = spawn(process.execPath, ['node_modules/next/dist/bin/next', mode, '--hostname', '127.0.0.1', '--port', String(port)], {
     env: { ...process.env, NEXT_TELEMETRY_DISABLED: '1', ZHONGTU_DB_PATH: join(directory, 'test.sqlite'), ...extraEnvironment },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let output = '';
   server.stdout.on('data', (chunk) => { output += chunk; });
   server.stderr.on('data', (chunk) => { output += chunk; });
-  async function stop() {
+  async function stop(signal = 'SIGTERM') {
     if (server.exitCode === null) {
-      server.kill('SIGTERM');
+      server.kill(signal);
       await new Promise((resolve) => server.once('exit', resolve));
     }
   }

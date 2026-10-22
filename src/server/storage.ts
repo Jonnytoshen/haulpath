@@ -25,6 +25,18 @@ class Storage {
         CREATE INDEX IF NOT EXISTS points_project ON points(project_id);`);
       this.db.pragma('user_version = 1');
     })();
+    // The process-global storage instance survives route reloads; only an initial open recovers abandoned work.
+    this.db.transaction(() => {
+      const rows = this.db.prepare('SELECT payload FROM routes').all() as { payload: string }[];
+      for (const row of rows) {
+        const route = JSON.parse(row.payload) as Route;
+        if (route.planning?.status !== 'running') continue;
+        route.planning.status = 'failed';
+        route.planning.error = '上次规划因服务中断而停止，请重新规划';
+        route.updatedAt = new Date().toISOString();
+        this.writeRoute(route);
+      }
+    })();
   }
   listProjects(): Project[] {
     return this.db.prepare('SELECT id, name, created_at AS createdAt, updated_at AS updatedAt FROM projects ORDER BY created_at, id').all() as Project[];
