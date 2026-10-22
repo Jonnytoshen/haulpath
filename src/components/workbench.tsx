@@ -1,11 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { ArrowDown, ArrowUp, ArrowRight, Check, Download, FolderOpen, GripVertical, MapPin, Plus, Route as RouteIcon, Upload, X, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
-import { DialogRoot, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog } from './app-dialog';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { PLANNING_NOTICE, formatKilometers, routeStatus, strategyLabels, type CoordinateSystem, type Point, type Project, type Route, type Strategy } from '@/lib/domain';
 import MapPanel, { type MapCandidate, type MapConfig } from './map-panel';
@@ -18,10 +18,6 @@ export async function request<T>(path: string, method = 'GET', body?: unknown): 
     throw new Error(payload?.error ?? `操作失败（${response.status}），请稍后重试。`);
   }
   return response.status === 204 ? undefined as T : response.json();
-}
-
-export function Dialog({ title, children, onClose, wide = false, error }: { title: string; children: ReactNode; onClose: () => void; wide?: boolean; error?: string }) {
-  return <DialogRoot open onOpenChange={(open) => { if (!open) onClose(); }}><DialogContent className={wide ? 'max-w-4xl' : ''}><div className="dialog-title"><DialogTitle>{title}</DialogTitle><Button className="icon-button" aria-label="关闭对话框" onClick={onClose}><X /></Button></div><DialogDescription className="sr-only">{title}，填写内容并确认保存。</DialogDescription>{error && <p className="message error" role="alert">{error}</p>}{children}</DialogContent></DialogRoot>;
 }
 
 type Editor = { kind: 'project' | 'route'; id?: string; name: string };
