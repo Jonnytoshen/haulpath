@@ -63,6 +63,8 @@ pnpm test
 
 API 与浏览器测试会启动真实本机应用并使用临时 SQLite，下载和读取实际 Excel 文件；仅高德 HTTP 服务及地图 SDK 使用可控替身。`test:api` 的备份恢复用例需要系统 `sqlite3` 命令。浏览器测试默认使用已安装的 Google Chrome；可用 `PLAYWRIGHT_CHROMIUM_CHANNEL` 选择其他已安装的 Playwright 浏览器 channel。请串行运行这些命令，不要让多个 Next 开发服务共享本工作副本的 `.next`。
 
+生产中断恢复用例先执行 webpack 构建，使用临时生产服务和真实浏览器验证重启及备份恢复后的手动重试，因此 `test:api` 与 `test:browser` 都需要系统 `sqlite3` 和已安装的浏览器。该用例在两个分类入口中有交叉；`pnpm test` 按文件只执行一次。
+
 [本轮验收记录](docs/acceptance.md) 包含完整闭环、20 点 / 100 线路 / 1,000 点库的本机观测与证据边界。**真实高德联调尚未执行**：需要配置真实凭证后完成记录中的人工清单；模拟测试不证明真实地图、搜索或重卡通行可用。
 
 提交前阅读 [Angular 扩展提交约定](docs/agents/git-commits.md)。本次安装跳过生命周期脚本，可显式 `pnpm run prepare` 安装提交 hook；已启用独立 worktree 配置时使用该文档中的 `GIT_CONFIG` 命令。领域术语见 [GLOSSARY.md](GLOSSARY.md)，架构取舍见 [ADR](docs/adr/)；需求和工单按本地 [tracker 约定](docs/agents/issue-tracker.md) 管理。

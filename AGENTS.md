@@ -14,7 +14,7 @@
 
 - 已实际通过 Node `24.21.0` / pnpm `12.10.1` 的 `pnpm install --frozen-lockfile --ignore-scripts`（缓存齐全时也通过 `--offline`；本轮初装显式指定现有全局 store）、`pnpm run typecheck`（先 `next typegen`）、`pnpm run build`（`next build --webpack`）。应用要求 Node `>=22.0.0`、pnpm `>=12.0.0`。
 - `pnpm run dev` 与 `pnpm run start` 均使用真实入口；生产启动须先构建。端口可通过 `--port` 指定。当前受限环境的默认 Turbopack 生产构建有权限问题，webpack 构建已验证；不要改回默认构建后沿用旧的通过记录。
-- `pnpm test` 串行运行全部 `tests/*.test.mjs`；`test:api` 覆盖所有公开接口与 SQLite 备份恢复，`test:browser` 覆盖工作台及完整闭环/代表规模，`test:commits` 运行既有 22 项提交测试。浏览器默认系统 Chrome，可用 `PLAYWRIGHT_CHROMIUM_CHANNEL` 指定已安装的 channel；备份恢复测试需要系统 `sqlite3`。
+- `pnpm test` 串行运行全部 `tests/*.test.mjs`；`test:api` 覆盖所有公开接口与 SQLite 备份恢复，`test:browser` 覆盖工作台及完整闭环/代表规模，`test:commits` 运行既有 22 项提交测试。生产中断恢复用例同时列入 API 与浏览器入口，先执行 webpack 构建；这些入口需要系统 `sqlite3` 和已安装的浏览器。默认系统 Chrome，可用 `PLAYWRIGHT_CHROMIUM_CHANNEL` 指定 channel；分类数量不可直接相加，完整测试按文件只运行一次。
 - 运行配置见 [.env.example](.env.example) 和 [README](README.md)；默认数据库为启动目录下 `data/zhongtu.sqlite`，`ZHONGTU_DB_PATH` 可覆盖。开发、生产及备份应核对同一数据库位置，不把测试临时库当作用户数据。
 - `pnpm run prepare` 显式安装或修复 hook；本轮独立 worktree 已启用 `extensions.worktreeConfig`，实际使用 `GIT_CONFIG="$(git rev-parse --git-path config.worktree)" pnpm run prepare`，仅修改当前 worktree 的 hook 配置。完整说明见[提交约定](docs/agents/git-commits.md)。
 - 提交校验入口为 `printf '%s\n' 'docs(git): clarify commit checks' | pnpm run commitlint`、`pnpm run commitlint --edit <消息文件>`、`pnpm run commitlint --from <base> --to HEAD`；替换实际文件/基线，`--from` 不包含起始提交。
