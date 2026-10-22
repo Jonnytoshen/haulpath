@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
-import { startApplication } from './helpers/application.mjs';
+import { startApplication, jsonRequest } from './helpers/application.mjs';
 
 async function openWorkbench(environment = {}) {
   const app = await startApplication({ AMAP_JS_KEY: '', AMAP_JS_SECURITY_CODE: '', AMAP_WEB_SERVICE_KEY: '', ...environment });
@@ -24,6 +24,62 @@ async function createRoute(page, name) {
   await page.getByRole('button', { name: '创建线路', exact: true }).click();
   await page.getByRole('heading', { name, exact: true }).waitFor();
 }
+
+test('project loading blocks dependent writes and late responses cannot replace another project', { timeout: 120000 }, async () => {
+  const context = await openWorkbench();
+  const { page, app } = context;
+  const request = (path, method, body) => jsonRequest(app.baseUrl, path, method, body);
+  function deliveryGate() {
+    let release, started;
+    return { delivered: 0, ready: new Promise((resolve) => { started = resolve; }), held: new Promise((resolve) => { release = resolve; }), release: () => release(), started: () => started() };
+  }
+  let gate = deliveryGate();
+  try {
+    const project = (await request('/api/projects', 'POST', { name: '加载中的项目' })).body;
+    await request(`/api/projects/${project.id}/routes`, 'POST', { name: '原有线路' });
+    const points = (await request('/api/coordinates', 'POST', { points: [{ name: '原有点位', longitude: 121.47, latitude: 31.23, source: 'manual' }] })).body;
+    await request(`/api/projects/${project.id}/points`, 'POST', { points });
+    const other = (await request('/api/projects', 'POST', { name: '第二项目' })).body;
+    await request(`/api/projects/${other.id}/routes`, 'POST', { name: '第二项目线路' });
+    await request(`/api/projects/${other.id}/points`, 'POST', { points: [points[0], points[0]] });
+    await page.route(new RegExp(`/api/projects/${project.id}/(routes|points)$`), async (route) => {
+      const pending = gate;
+      if (route.request().method() !== 'GET' || !pending) return route.continue();
+      // Delay delivery of actual application responses; do not replace their data or persist through a side channel.
+      const response = await route.fetch();
+      if (++pending.delivered === 2) pending.started();
+      await pending.held;
+      await route.fulfill({ response });
+    });
+    await page.goto(app.baseUrl);
+    await gate.ready;
+    const create = page.getByRole('region', { name: '项目线路', exact: true }).getByRole('button', { name: '新建线路', exact: true });
+    assert.equal(await create.isDisabled(), true, 'new routes must wait until project routes and points are loaded');
+    await page.getByRole('button', { name: '管理点位库', exact: false }).click();
+    assert.equal(await page.getByRole('button', { name: '添加点位', exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole('button', { name: '导入表格', exact: true }).isDisabled(), true);
+    gate.release(); gate = null;
+    await page.locator('.route-item-name').filter({ hasText: '原有线路' }).waitFor();
+    await page.getByRole('button', { name: '线路点位', exact: true }).click();
+    await createRoute(page, '新建线路');
+    assert.deepEqual(await page.locator('.route-item-name').allTextContents(), ['原有线路', '新建线路']);
+    assert.match(await page.locator('.project-summary strong').innerText(), /1\s*个点位/);
+    assert.equal((await request(`/api/projects/${project.id}/routes`)).body.length, 2);
+    assert.equal((await request(`/api/projects/${project.id}/points`)).body.length, 1);
+    await page.getByRole('button', { name: '第二项目', exact: true }).click();
+    await page.getByRole('heading', { name: '第二项目线路', exact: true }).waitFor();
+    gate = deliveryGate();
+    await page.getByRole('button', { name: '加载中的项目', exact: true }).click();
+    await gate.ready;
+    await page.getByRole('button', { name: '第二项目', exact: true }).click();
+    await page.getByRole('heading', { name: '第二项目线路', exact: true }).waitFor();
+    const late = gate; gate = null; late.release();
+    await page.waitForResponse((response) => response.url().endsWith(`/api/projects/${project.id}/points`));
+    assert.deepEqual(await page.locator('.route-item-name').allTextContents(), ['第二项目线路']);
+    assert.match(await page.locator('.project-summary strong').innerText(), /2\s*个点位/);
+    assert.deepEqual(context.errors, []);
+  } finally { gate?.release(); await context.close(); }
+});
 
 test('planner creates and renames projects and route drafts, then reopens saved data', { timeout: 120000 }, async () => {
   const context = await openWorkbench();
