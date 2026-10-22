@@ -4,18 +4,21 @@
 
 ## 当前状态与技术栈
 
-- 当前已有需求、领域和代理约定文档、应用依赖清单，以及已验证的本机提交消息约束；尚无应用代码或数据库迁移。
-- 已确认、待实现：pnpm、Next.js App Router、TypeScript；同一应用提供网页与本机服务端接口，默认监听 `127.0.0.1`。
+- 当前已有 Next.js 工作台、SQLite 初始迁移、项目/线路/点库接口、坐标与导入、相邻区间测算及双表导出；自动化从真实应用 HTTP 和浏览器入口验收。
+- 使用 pnpm、Next.js App Router、TypeScript；同一应用提供网页与本机服务端接口，开发与生产默认监听 `127.0.0.1`。
 - 数据持久化使用 SQLite / `better-sqlite3`；Excel 读写使用 ExcelJS，CSV 解析使用 `csv-parse`。
 - 地图使用高德 JS API 2.0 与官方 `@amap/amap-jsapi-loader`；驾车测算由服务端调用高德 Web 服务 v5。
 - UI 使用 shadcn/ui 和 Tailwind CSS；图标统一使用 Lucide Icons（`lucide-react`），界面不使用 emoji 图标。
 
 ## 命令与验证
 
-- `package.json` 已预置 `dev`、`build` 和 `start` 脚本，开发与生产启动均绑定 `127.0.0.1`；尚无应用入口，应用依赖安装、启动与构建仍未验证，不要把预置脚本写成已经可用。
-- 提交工具使用 Node `>=22.0.0`、pnpm `12.10.1`（最低 `12.0.0`）；实际通过 `pnpm install --dev --ignore-scripts --frozen-lockfile --offline`、`pnpm run test:commits`（22 项真实 CLI / 隔离 Git 测试），以及 `printf '%s\n' 'docs(git): clarify commit checks' | pnpm run commitlint`、`pnpm run commitlint --edit <消息文件>`、`pnpm run commitlint --from <base> --to HEAD`。占位参数须替换为实际文件或基线；`--from` 不包含起始提交。
-- `pnpm run prepare` 显式安装或修复 hook；本轮独立 worktree 已启用 `extensions.worktreeConfig`，实际使用 `GIT_CONFIG="$(git rev-parse --git-path config.worktree)" pnpm run prepare`，仅修改当前 worktree 的 hook 配置。完整安装和校验说明见[提交约定](docs/agents/git-commits.md)。
-- 初始化应用后，在此补充从项目根目录实际验证过的准确命令、必要环境变量，以及实际采用的自动化检查及测试运行方式。
+- 已实际通过 Node `24.21.0` / pnpm `12.10.1` 的 `pnpm install --frozen-lockfile --ignore-scripts`（缓存齐全时也通过 `--offline`；本轮初装显式指定现有全局 store）、`pnpm run typecheck`（先 `next typegen`）、`pnpm run build`（`next build --webpack`）。应用要求 Node `>=22.0.0`、pnpm `>=12.0.0`。
+- `pnpm run dev` 与 `pnpm run start` 均使用真实入口；生产启动须先构建。端口可通过 `--port` 指定。当前受限环境的默认 Turbopack 生产构建有权限问题，webpack 构建已验证；不要改回默认构建后沿用旧的通过记录。
+- `pnpm test` 串行运行全部 `tests/*.test.mjs`；`test:api` 覆盖所有公开接口与 SQLite 备份恢复，`test:browser` 覆盖工作台及完整闭环/代表规模，`test:commits` 运行既有 22 项提交测试。浏览器默认系统 Chrome，可用 `PLAYWRIGHT_CHROMIUM_CHANNEL` 指定已安装的 channel；备份恢复测试需要系统 `sqlite3`。
+- 运行配置见 [.env.example](.env.example) 和 [README](README.md)；默认数据库为启动目录下 `data/zhongtu.sqlite`，`ZHONGTU_DB_PATH` 可覆盖。开发、生产及备份应核对同一数据库位置，不把测试临时库当作用户数据。
+- `pnpm run prepare` 显式安装或修复 hook；本轮独立 worktree 已启用 `extensions.worktreeConfig`，实际使用 `GIT_CONFIG="$(git rev-parse --git-path config.worktree)" pnpm run prepare`，仅修改当前 worktree 的 hook 配置。完整说明见[提交约定](docs/agents/git-commits.md)。
+- 提交校验入口为 `printf '%s\n' 'docs(git): clarify commit checks' | pnpm run commitlint`、`pnpm run commitlint --edit <消息文件>`、`pnpm run commitlint --from <base> --to HEAD`；替换实际文件/基线，`--from` 不包含起始提交。
+- 备份与恢复按[运行维护](docs/operations.md)：在线使用 SQLite `.backup`，恢复先停服务并整体隔离旧数据库与 sidecar。代表负载与实际验证记录见[验收记录](docs/acceptance.md)；缺少真实高德凭证时不得声称真实地图联调通过。
 - 实现验收优先走浏览器完整用户流程，经过真实应用接口、SQLite 和实际下载的工作簿；仅在高德服务边界使用可控替身。
 - 浏览器自动化建议使用 Playwright。模拟高德响应与真实密钥联调分别验证；模拟测试不能证明真实地图可用。
 - 纯文档改动核对链接、术语和 ADR 一致性，无需创建应用环境或测试框架。
