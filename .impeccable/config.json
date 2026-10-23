@@ -1,0 +1,26 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "gray-on-color",
+        "value": "*",
+        "files": [
+          "src/app/globals.css"
+        ],
+        "createdAt": "2026-10-23T01:37:19.679Z",
+        "reason": "Agent reviewed: all reported pairs refer to sibling backgrounds or active metadata now explicitly teal-700; actual active contrast is 5.237:1."
+      },
+      {
+        "rule": "border-accent-on-rounded",
+        "value": "*",
+        "files": [
+          "src/app/globals.css"
+        ],
+        "createdAt": "2026-10-23T01:37:23.822Z",
+        "reason": "Agent reviewed: existing tabs button explicitly uses rounded-none; border-b-2 is the selected-tab underline, not an accent border on a rounded card."
+      }
+    ]
+  }
+}

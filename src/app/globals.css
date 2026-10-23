@@ -80,6 +80,7 @@
   .route-item-name { @apply w-full break-words text-xs font-medium leading-5 text-slate-700; }
   .route-item.active .route-item-name { @apply text-teal-900; }
   .route-item-meta { @apply flex w-full items-center justify-between gap-1 text-[10px] font-normal text-slate-400; }
+  .route-item.active .route-item-meta { @apply text-teal-700; }
   .status { @apply inline-flex shrink-0 items-center rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-normal text-slate-500; }
   .status-已规划 { @apply border-teal-100 bg-teal-50 text-teal-700; }
   .status-待重算 { @apply border-amber-100 bg-amber-50 text-amber-700; }
