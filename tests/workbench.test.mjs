@@ -124,6 +124,120 @@ async function addPoint(page, name, longitude, latitude) {
   await dialog.waitFor({ state: 'hidden' });
 }
 
+test('route filtering and mobile navigation support point selection through planning and export', { timeout: 120000 }, async () => {
+  const { createServer } = await import('node:http');
+  const planningRequests = [];
+  const upstream = createServer((req, res) => {
+    const url = new URL(req.url, 'http://127.0.0.1');
+    planningRequests.push(['origin', 'destination'].map((key) => url.searchParams.get(key).split(',').map(Number)));
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ status: '1', route: { paths: [{ distance: planningRequests.length === 1 ? '1001' : '2002', steps: [{ polyline: `${url.searchParams.get('origin')};${url.searchParams.get('destination')}` }] }] } }));
+  });
+  await new Promise((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+  let context;
+  try {
+    context = await openWorkbench({ HAULPATH_TEST_MODE: '1', AMAP_API_BASE_URL: `http://127.0.0.1:${upstream.address().port}`, AMAP_WEB_SERVICE_KEY: 'test-web-key' });
+    const { page, app } = context;
+    const request = (path, method, body) => jsonRequest(app.baseUrl, path, method, body);
+    const project = (await request('/api/projects', 'POST', { name: '华东线路项目' })).body;
+    await request(`/api/projects/${project.id}/routes`, 'POST', { name: '上海日常线路' });
+    await request(`/api/projects/${project.id}/routes`, 'POST', { name: '华东回程' });
+    const points = (await request('/api/coordinates', 'POST', { points: [
+      { name: '苏州客户', longitude: 120.58, latitude: 31.3, source: 'manual' },
+      { name: '南京终点', longitude: 118.79, latitude: 32.06, source: 'manual' },
+    ] })).body;
+    await request(`/api/projects/${project.id}/points`, 'POST', { points });
+    await page.goto(app.baseUrl);
+    await page.getByRole('heading', { name: '上海日常线路', exact: true }).waitFor();
+
+    const search = page.getByRole('textbox', { name: '搜索线路', exact: true });
+    await search.fill('回程');
+    assert.deepEqual(await page.locator('.route-item-name').allTextContents(), ['华东回程']);
+    await search.fill('不存在的线路');
+    assert.equal(await page.locator('.route-item-name').count(), 0);
+    await page.getByRole('button', { name: '清除筛选', exact: true }).click();
+    assert.equal(await search.inputValue(), '');
+    assert.deepEqual(await page.locator('.route-item-name').allTextContents(), ['上海日常线路', '华东回程']);
+
+    async function assertNoHorizontalOverflow(state) {
+      const dimensions = await page.evaluate(() => ({ viewport: document.documentElement.clientWidth, content: document.documentElement.scrollWidth }));
+      assert.ok(dimensions.content <= dimensions.viewport + 1, `${state}: page width ${dimensions.content} exceeds viewport ${dimensions.viewport}`);
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole('button', { name: '展开项目与线路', exact: true }).click();
+    assert.equal(await page.getByRole('button', { name: '华东线路项目', exact: true }).isVisible(), true);
+    assert.equal(await search.isVisible(), true, 'route filtering remains reachable in mobile navigation');
+    await assertNoHorizontalOverflow('expanded mobile navigation');
+    await page.getByRole('region', { name: '项目线路', exact: true }).getByRole('button').filter({ hasText: '华东回程' }).click();
+    const collapseNavigation = page.getByRole('button', { name: '收起项目与线路', exact: true });
+    if (await collapseNavigation.isVisible()) await collapseNavigation.click();
+    assert.equal(await page.getByRole('heading', { name: '华东回程', exact: true }).isVisible(), true);
+    await assertNoHorizontalOverflow('mobile route editor');
+
+    await addPoint(page, '上海起点', 121.47, 31.23);
+    await page.getByText('再添加一个点位，即可开始规划。', { exact: true }).waitFor();
+    assert.equal(await page.getByRole('button', { name: '开始规划', exact: true }).isDisabled(), true);
+    await page.getByRole('button', { name: '从点位库选择', exact: true }).click();
+    const library = page.locator('.library-panel');
+    assert.ok((await library.innerText()).includes('华东回程'), 'library selection identifies its destination route');
+    await library.getByText('已添加 1 个点位', { exact: true }).waitFor();
+    await library.locator('.library-point').filter({ hasText: '苏州客户' }).getByRole('button', { name: '选入线路', exact: true }).click();
+    await library.getByText('已添加 2 个点位', { exact: true }).waitFor();
+    assert.equal(await library.isVisible(), true, 'selecting a point keeps the library open for the next point');
+    await library.locator('.library-point').filter({ hasText: '南京终点' }).getByRole('button', { name: '选入线路', exact: true }).click();
+    await library.getByText('已添加 3 个点位', { exact: true }).waitFor();
+    await assertNoHorizontalOverflow('mobile library selection');
+    await page.getByRole('button', { name: '返回线路点位', exact: true }).click();
+    assert.deepEqual(await page.getByLabel('有序点位', { exact: true }).locator('strong').allTextContents(), ['上海起点', '苏州客户', '南京终点']);
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    const editorScroll = page.locator('.editor-scroll');
+    await editorScroll.evaluate((element) => { element.scrollTop = 0; });
+    const editorBounds = await editorScroll.boundingBox();
+    const within = (inner, outer) => inner && outer && inner.x >= outer.x - 1 && inner.y >= outer.y - 1 && inner.x + inner.width <= outer.x + outer.width + 1 && inner.y + inner.height <= outer.y + outer.height + 1;
+    for (const index of [0, 1]) {
+      assert.ok(within(await editorScroll.locator('.point-card').nth(index).boundingBox(), editorBounds), `point ${index + 1} must be fully visible in the 1280x720 editor`);
+    }
+    const desktopViewport = { x: 0, y: 0, width: 1280, height: 720 };
+    const addPointButton = page.getByRole('button', { name: '手动添加点位', exact: true });
+    assert.ok(within(await addPointButton.boundingBox(), desktopViewport), 'the add-point action remains within the desktop viewport');
+    assert.ok(within(await page.getByRole('button', { name: '开始规划', exact: true }).boundingBox(), desktopViewport), 'planning remains within the desktop viewport');
+    await editorScroll.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+    assert.ok(await editorScroll.evaluate((element) => element.scrollTop > 0), 'the point editor has been scrolled to its bottom');
+    assert.ok(within(await addPointButton.boundingBox(), desktopViewport), 'the add-point action remains visible after scrolling the point list');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole('button', { name: '开始规划', exact: true }).click();
+    await page.getByText('路线方案已完整保存', { exact: true }).waitFor();
+    assert.deepEqual(planningRequests, [[[121.47, 31.23], [120.58, 31.3]], [[120.58, 31.3], [118.79, 32.06]]]);
+    assert.ok((await page.getByRole('region', { name: '路线方案', exact: true }).innerText()).includes('3.003'));
+    await assertNoHorizontalOverflow('mobile planning results');
+
+    const download = page.waitForEvent('download');
+    await page.getByRole('button', { name: '导出当前线路', exact: true }).click();
+    const file = await download;
+    const { default: ExcelJS } = await import('exceljs');
+    const book = new ExcelJS.Workbook();
+    await book.xlsx.readFile(await file.path());
+    assert.deepEqual(book.worksheets.map((sheet) => sheet.name), ['线路总览', '区间明细']);
+    assert.equal(book.getWorksheet('线路总览').getCell('C3').value, '华东回程');
+    assert.equal(book.getWorksheet('线路总览').getCell('F3').value, '上海起点 → 苏州客户 → 南京终点');
+    assert.equal(book.getWorksheet('线路总览').getCell('G3').value, 3.003);
+    assert.equal(book.getWorksheet('区间明细').rowCount, 4);
+    assert.equal(book.getWorksheet('区间明细').getCell('H4').value, 3.003);
+    await page.reload();
+    await page.getByRole('button', { name: '展开项目与线路', exact: true }).click();
+    await page.getByRole('region', { name: '项目线路', exact: true }).getByRole('button').filter({ hasText: '华东回程' }).click();
+    const collapseAfterReload = page.getByRole('button', { name: '收起项目与线路', exact: true });
+    if (await collapseAfterReload.isVisible()) await collapseAfterReload.click();
+    assert.deepEqual(await page.getByLabel('有序点位', { exact: true }).locator('strong').allTextContents(), ['上海起点', '苏州客户', '南京终点']);
+    assert.equal(planningRequests.length, 2, 'reopening a saved route does not automatically plan again');
+    assert.deepEqual(context.errors, []);
+  } finally {
+    if (context) await context.close();
+    await new Promise((resolve) => upstream.close(resolve));
+  }
+});
+
 test('planner edits ordered points, reuses an independent project library copy, and downloads a workbook', { timeout: 120000 }, async () => {
   const context = await openWorkbench();
   const { page } = context;
