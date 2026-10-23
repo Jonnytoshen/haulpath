@@ -15,7 +15,7 @@ before(async () => {
   });
   await new Promise((resolve) => upstream.listen(0, '127.0.0.1', resolve));
   application = await startApplication({
-    ZHONGTU_TEST_MODE: '1', AMAP_API_BASE_URL: `http://127.0.0.1:${upstream.address().port}`,
+    HAULPATH_TEST_MODE: '1', AMAP_API_BASE_URL: `http://127.0.0.1:${upstream.address().port}`,
     AMAP_WEB_SERVICE_KEY: 'private-web-key', AMAP_JS_KEY: 'public-browser-key', AMAP_JS_SECURITY_CODE: 'private-security-code',
   });
 });

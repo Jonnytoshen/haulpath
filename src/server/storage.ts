@@ -183,11 +183,11 @@ class Storage {
   }
 }
 
-const globalStorage = globalThis as typeof globalThis & { zhongtuStorage?: { path: string; storage: Storage } };
+const globalStorage = globalThis as typeof globalThis & { haulpathStorage?: { path: string; storage: Storage } };
 export function getStorage(): Storage {
-  const path = resolve(/* turbopackIgnore: true */ process.env.ZHONGTU_DB_PATH || 'data/zhongtu.sqlite');
-  if (globalStorage.zhongtuStorage?.path !== path) globalStorage.zhongtuStorage = { path, storage: new Storage(path) };
-  return globalStorage.zhongtuStorage.storage;
+  const path = resolve(/* turbopackIgnore: true */ process.env.HAULPATH_DB_PATH || 'data/haulpath.sqlite');
+  if (globalStorage.haulpathStorage?.path !== path) globalStorage.haulpathStorage = { path, storage: new Storage(path) };
+  return globalStorage.haulpathStorage.storage;
 }
 export const storage = new Proxy({} as Storage, { get(_target, property) {
   const repository = getStorage();

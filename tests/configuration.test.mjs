@@ -30,7 +30,7 @@ test('missing credentials allow local drafts and GCJ-02 entry but explain unavai
 });
 
 test('test upstream overrides reject non-loopback destinations before sending credentials', async () => {
-  const application = await startApplication({ ZHONGTU_TEST_MODE: '1', AMAP_API_BASE_URL: 'http://example.invalid', AMAP_WEB_SERVICE_KEY: 'private-web-key' });
+  const application = await startApplication({ HAULPATH_TEST_MODE: '1', AMAP_API_BASE_URL: 'http://example.invalid', AMAP_WEB_SERVICE_KEY: 'private-web-key' });
   try {
     const result = await jsonRequest(application.baseUrl, '/api/coordinates', 'POST', { points: [
       { name: 'GPS', longitude: 121.47, latitude: 31.23, coordinateSystem: 'WGS84', source: 'manual' },

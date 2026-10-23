@@ -12,7 +12,7 @@ import { startApplication, jsonRequest } from './helpers/application.mjs';
 const run = promisify(execFile);
 
 test('documented SQLite backup restores projects, library points and a complete route through public HTTP', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'zhongtu-restore-'));
+  const directory = await mkdtemp(join(tmpdir(), 'haulpath-restore-'));
   const dataDirectory = join(directory, 'data');
   const archiveDirectory = join(directory, 'before-restore');
   const backupPath = join(directory, 'snapshot.sqlite');
@@ -22,7 +22,7 @@ test('documented SQLite backup restores projects, library points and a complete 
     response.end(JSON.stringify({ status: '1', route: { paths: [{ distance: '1234', steps: [{ polyline: `${url.searchParams.get('origin')};${url.searchParams.get('destination')}` }] }] } }));
   });
   await new Promise((resolve) => upstream.listen(0, '127.0.0.1', resolve));
-  const environment = { ZHONGTU_TEST_MODE: '1', AMAP_API_BASE_URL: `http://127.0.0.1:${upstream.address().port}`, AMAP_WEB_SERVICE_KEY: 'backup-test-key' };
+  const environment = { HAULPATH_TEST_MODE: '1', AMAP_API_BASE_URL: `http://127.0.0.1:${upstream.address().port}`, AMAP_WEB_SERVICE_KEY: 'backup-test-key' };
   let app;
   try {
     app = await startApplication(environment, dataDirectory);

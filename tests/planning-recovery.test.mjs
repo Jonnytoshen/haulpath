@@ -14,7 +14,7 @@ const run = promisify(execFile);
 test('interrupted planning survives a production restart or online backup restore as a retryable failure', { timeout: 150000 }, async () => {
   // A production process is killed directly: dev launches a worker which SIGKILL would leave alive.
   await run(process.execPath, ['node_modules/next/dist/bin/next', 'build', '--webpack'], { env: { ...process.env, NEXT_TELEMETRY_DISABLED: '1' }, maxBuffer: 5_000_000 });
-  const directory = await mkdtemp(join(tmpdir(), 'zhongtu-planning-recovery-'));
+  const directory = await mkdtemp(join(tmpdir(), 'haulpath-planning-recovery-'));
   const dataDirectory = join(directory, 'data');
   const backupPath = join(directory, 'running.sqlite');
   let hold = false;
@@ -30,7 +30,7 @@ test('interrupted planning survives a production restart or online backup restor
   });
   await new Promise((resolve) => upstream.listen(0, '127.0.0.1', resolve));
   const environment = {
-    ZHONGTU_TEST_MODE: '1', AMAP_API_BASE_URL: `http://127.0.0.1:${upstream.address().port}`,
+    HAULPATH_TEST_MODE: '1', AMAP_API_BASE_URL: `http://127.0.0.1:${upstream.address().port}`,
     AMAP_WEB_SERVICE_KEY: 'recovery-test-key', AMAP_JS_KEY: '', AMAP_JS_SECURITY_CODE: '',
   };
   let app;

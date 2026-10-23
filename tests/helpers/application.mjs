@@ -6,7 +6,7 @@ import { setTimeout } from 'node:timers/promises';
 import { createServer } from 'node:net';
 
 export async function startApplication(extraEnvironment = {}, existingDirectory, { mode = 'dev' } = {}) {
-  const directory = existingDirectory ?? await mkdtemp(join(tmpdir(), 'zhongtu-test-'));
+  const directory = existingDirectory ?? await mkdtemp(join(tmpdir(), 'haulpath-test-'));
   const port = await new Promise((resolve, reject) => {
     const socket = createServer();
     socket.once('error', reject);
@@ -17,7 +17,7 @@ export async function startApplication(extraEnvironment = {}, existingDirectory,
   });
   const baseUrl = `http://127.0.0.1:${port}`;
   const server = spawn(process.execPath, ['node_modules/next/dist/bin/next', mode, '--hostname', '127.0.0.1', '--port', String(port)], {
-    env: { ...process.env, NEXT_TELEMETRY_DISABLED: '1', ZHONGTU_DB_PATH: join(directory, 'test.sqlite'), ...extraEnvironment },
+    env: { ...process.env, NEXT_TELEMETRY_DISABLED: '1', HAULPATH_DB_PATH: join(directory, 'test.sqlite'), ...extraEnvironment },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let output = '';

@@ -118,7 +118,7 @@ test('revert commits include an exact full SHA record and an independent reason'
 });
 
 function repository(t) {
-  const cwd = mkdtempSync(join(tmpdir(), 'zhongtu commit '));
+  const cwd = mkdtempSync(join(tmpdir(), 'haulpath commit '));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
   for (const name of ['package.json', 'commitlint.config.mjs', 'scripts']) {
     cpSync(join(root, name), join(cwd, name), { recursive: true });
@@ -182,7 +182,7 @@ test('the declared types, optional scopes, and full-header length boundaries are
 });
 
 test('stdin and message files including paths with spaces reach the same rules', (t) => {
-  const dir = mkdtempSync(join(tmpdir(), 'zhongtu message '));
+  const dir = mkdtempSync(join(tmpdir(), 'haulpath message '));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const path = join(dir, 'commit message.txt');
   for (const message of [

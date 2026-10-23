@@ -23,7 +23,7 @@ async function amapFixture(delay = 30) {
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   return {
     requests,
-    environment: { ZHONGTU_TEST_MODE: '1', AMAP_API_BASE_URL: `http://127.0.0.1:${server.address().port}`, AMAP_WEB_SERVICE_KEY: 'acceptance-test-key', AMAP_JS_KEY: 'acceptance-js-key', AMAP_JS_SECURITY_CODE: 'acceptance-js-secret' },
+    environment: { HAULPATH_TEST_MODE: '1', AMAP_API_BASE_URL: `http://127.0.0.1:${server.address().port}`, AMAP_WEB_SERVICE_KEY: 'acceptance-test-key', AMAP_JS_KEY: 'acceptance-js-key', AMAP_JS_SECURITY_CODE: 'acceptance-js-secret' },
     close: () => new Promise((resolve) => server.close(resolve)),
   };
 }

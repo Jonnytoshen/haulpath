@@ -18,7 +18,7 @@ export function GET(request: Request, context: Context) {
     const filename = `${project.name}${routeId ? `-${routes[0].name}` : ''}.xlsx`;
     return new Response(content, { headers: {
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'Content-Disposition': `attachment; filename="zhongtu.xlsx"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+      'Content-Disposition': `attachment; filename="haulpath.xlsx"; filename*=UTF-8''${encodeURIComponent(filename)}`,
       'Cache-Control': 'no-store',
     } });
   });

@@ -1,6 +1,8 @@
-# 重途（zhongtu）
+# 重途·HaulPath
 
 个人使用的本机中文网页工作台，按项目整理重卡业务的行前线路、点位与里程测算。支持有序多点规划、地图预览、Excel / CSV 点位导入，以及单线路和项目 Excel 导出。
+
+中文名称为“重途”，英文名称为“HaulPath”，仓库名称为 `haulpath`。
 
 **未校验重卡限高、限重及货车限行。** 首版采用高德普通驾车规划 2.0，按相邻点位分别规划后汇总；不保证重卡可通行，不提供实时导航，也不自动优化点位顺序。
 
@@ -23,7 +25,9 @@ pnpm run dev
 | `AMAP_WEB_SERVICE_KEY` | 服务端驾车规划、WGS84 坐标转换 |
 | `AMAP_JS_KEY` | 高德 JS API 2.0 地图、地点搜索；浏览器可见 |
 | `AMAP_JS_SECURITY_CODE` | 与 JS Key 配套的安全密钥，服务端通过受控代理使用 |
-| `ZHONGTU_DB_PATH` | SQLite 路径，默认 `./data/zhongtu.sqlite`；相对路径以启动目录为准 |
+| `HAULPATH_DB_PATH` | SQLite 路径，默认 `./data/haulpath.sqlite`；相对路径以启动目录为准 |
+
+配置统一使用 `HAULPATH_DB_PATH`、测试变量 `HAULPATH_TEST_MODE`，默认数据库为 `data/haulpath.sqlite`。
 
 Web 服务 Key 与 JS 安全密钥不发送到浏览器。请按高德控制台要求配置对应服务权限与本机访问来源。无凭证时仍可管理项目、线路草稿、GCJ-02 点位及导出；地图、规划和 WGS84 转换会提示缺少相应配置。
 

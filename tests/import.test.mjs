@@ -15,7 +15,7 @@ before(async () => {
     handleUpstream(url, response);
   });
   await new Promise((resolve) => upstream.listen(0, '127.0.0.1', resolve));
-  application = await startApplication({ ZHONGTU_TEST_MODE: '1', AMAP_API_BASE_URL: `http://127.0.0.1:${upstream.address().port}`, AMAP_WEB_SERVICE_KEY: 'test-import-key' });
+  application = await startApplication({ HAULPATH_TEST_MODE: '1', AMAP_API_BASE_URL: `http://127.0.0.1:${upstream.address().port}`, AMAP_WEB_SERVICE_KEY: 'test-import-key' });
 });
 after(async () => {
   await application?.stop(); await application?.cleanup();

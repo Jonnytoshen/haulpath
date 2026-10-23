@@ -136,7 +136,7 @@ hook 复用统一的 `pnpm run commitlint --edit "$1"` 入口，正确引用 Git
 printf '%s\n' 'docs(git): clarify commit checks' | pnpm run commitlint
 
 # 消息文件，路径含空格时保留引号
-pnpm run commitlint --edit '/tmp/zhongtu commit message.txt'
+pnpm run commitlint --edit '/tmp/haulpath commit message.txt'
 
 # 校验基线之后的全部新增提交；先将 base 设为本轮起点
 pnpm run commitlint --from "$base" --to HEAD

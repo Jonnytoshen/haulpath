@@ -2,7 +2,7 @@ import { HttpError } from './http';
 
 export function amapUrl(path: string): URL {
   let base = 'https://restapi.amap.com';
-  if (process.env.ZHONGTU_TEST_MODE === '1' && process.env.AMAP_API_BASE_URL) {
+  if (process.env.HAULPATH_TEST_MODE === '1' && process.env.AMAP_API_BASE_URL) {
     const candidate = new URL(process.env.AMAP_API_BASE_URL);
     if (candidate.protocol !== 'http:' || !['127.0.0.1', 'localhost', '[::1]'].includes(candidate.hostname)
       || candidate.username || candidate.password || candidate.pathname !== '/' || candidate.search || candidate.hash) {

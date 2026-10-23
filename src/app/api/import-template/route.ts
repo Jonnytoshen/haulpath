@@ -14,7 +14,7 @@ export function GET() {
     sheet.getCell('C1').note = '填写数值纬度（-90 至 90），坐标系应与经度一致';
     return new Response(new Uint8Array(await workbook.xlsx.writeBuffer()), { headers: {
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'Content-Disposition': `attachment; filename="zhongtu-points-template.xlsx"; filename*=UTF-8''${encodeURIComponent('重途点位模板.xlsx')}`,
+      'Content-Disposition': `attachment; filename="haulpath-points-template.xlsx"; filename*=UTF-8''${encodeURIComponent('重途点位模板.xlsx')}`,
       'Cache-Control': 'no-store',
     } });
   });

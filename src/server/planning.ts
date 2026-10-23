@@ -4,9 +4,9 @@ import { HttpError } from './http';
 import { storage } from './storage';
 
 type PlanningSlots = { active: number; waiting: (() => void)[] };
-const planningGlobal = globalThis as typeof globalThis & { zhongtuPlanningSlots?: PlanningSlots };
+const planningGlobal = globalThis as typeof globalThis & { haulpathPlanningSlots?: PlanningSlots };
 async function withPlanningSlot<T>(operation: () => Promise<T>): Promise<T> {
-  const slots = planningGlobal.zhongtuPlanningSlots ??= { active: 0, waiting: [] };
+  const slots = planningGlobal.haulpathPlanningSlots ??= { active: 0, waiting: [] };
   if (slots.active >= 2) await new Promise<void>((resolve) => { slots.waiting.push(resolve); });
   else slots.active++;
   try { return await operation(); }

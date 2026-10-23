@@ -1,6 +1,8 @@
-# 重途（zhongtu）
+# 重途·HaulPath
 
 面向个人规划者的本机中文网页工作台，用于重卡业务的行前路线与里程测算，按项目管理线路和点位库。
+
+中文名称为“重途”，英文名称为“HaulPath”，仓库名称为 `haulpath`。
 
 ## 当前状态与技术栈
 
@@ -15,7 +17,7 @@
 - 已实际通过 Node `24.21.0` / pnpm `12.10.1` 的 `pnpm install --frozen-lockfile --ignore-scripts`（缓存齐全时也通过 `--offline`；本轮初装显式指定现有全局 store）、`pnpm run typecheck`（先 `next typegen`）、`pnpm run build`（`next build --webpack`）。应用要求 Node `>=22.0.0`、pnpm `>=12.0.0`。
 - `pnpm run dev` 与 `pnpm run start` 均使用真实入口；生产启动须先构建。端口可通过 `--port` 指定。当前受限环境的默认 Turbopack 生产构建有权限问题，webpack 构建已验证；不要改回默认构建后沿用旧的通过记录。
 - `pnpm test` 串行运行全部 `tests/*.test.mjs`；`test:api` 覆盖所有公开接口与 SQLite 备份恢复，`test:browser` 覆盖工作台及完整闭环/代表规模，`test:commits` 运行既有 22 项提交测试。生产中断恢复用例同时列入 API 与浏览器入口，先执行 webpack 构建；这些入口需要系统 `sqlite3` 和已安装的浏览器。默认系统 Chrome，可用 `PLAYWRIGHT_CHROMIUM_CHANNEL` 指定 channel；分类数量不可直接相加，完整测试按文件只运行一次。
-- 运行配置见 [.env.example](.env.example) 和 [README](README.md)；默认数据库为启动目录下 `data/zhongtu.sqlite`，`ZHONGTU_DB_PATH` 可覆盖。开发、生产及备份应核对同一数据库位置，不把测试临时库当作用户数据。
+- 运行配置见 [.env.example](.env.example) 和 [README](README.md)；默认数据库为启动目录下 `data/haulpath.sqlite`，`HAULPATH_DB_PATH` 可覆盖。环境变量统一使用 `HAULPATH_DB_PATH`、`HAULPATH_TEST_MODE`。开发、生产及备份应核对同一数据库位置，不把测试临时库当作用户数据。
 - `pnpm run prepare` 显式安装或修复 hook；本轮独立 worktree 已启用 `extensions.worktreeConfig`，实际使用 `GIT_CONFIG="$(git rev-parse --git-path config.worktree)" pnpm run prepare`，仅修改当前 worktree 的 hook 配置。完整说明见[提交约定](docs/agents/git-commits.md)。
 - 提交校验入口为 `printf '%s\n' 'docs(git): clarify commit checks' | pnpm run commitlint`、`pnpm run commitlint --edit <消息文件>`、`pnpm run commitlint --from <base> --to HEAD`；替换实际文件/基线，`--from` 不包含起始提交。
 - 备份与恢复按[运行维护](docs/operations.md)：在线使用 SQLite `.backup`，恢复先停服务并整体隔离旧数据库与 sidecar。代表负载与实际验证记录见[验收记录](docs/acceptance.md)；缺少真实高德凭证时不得声称真实地图联调通过。
@@ -26,7 +28,7 @@
 ## 开始任务前
 
 - 阅读 [领域约定](docs/agents/domain.md)、[术语表](GLOSSARY.md) 和与任务相关的 [ADR](docs/adr/)。领域文档尚不存在时按领域约定继续，不为占位而创建。
-- 需求与工单遵循 [本地 Markdown tracker 约定](docs/agents/issue-tracker.md)；当前首版需求基线为 `.scratch/zhongtu-v1/spec.md`。
+- 需求与工单遵循 [本地 Markdown tracker 约定](docs/agents/issue-tracker.md)；当前首版需求基线为 `.scratch/haulpath-v1/spec.md`，产品及仓库名称以 `.scratch/haulpath-name/spec.md` 的更名规格为准，规格目录与文内引用统一使用当前名称。
 - `.scratch/` 被 Git 忽略，其他工作副本可能没有它；有相关 spec / issue 时先读，缺少任务必需的需求时明确指出缺口，不猜测细节。
 - 每个功能使用 `.scratch/<feature-slug>/spec.md`；实现工单分别放在 `issues/<NN>-<slug>.md`，从 `01` 编号，评论追加到文件末尾的 `## Comments`。
 - 技能要求“发布到 issue tracker”时写入上述本地文件；按编号取工单时，在对应功能目录解析。

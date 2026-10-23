@@ -222,7 +222,7 @@ export default function Workbench() {
 
   return <div className="app-shell">
     <aside className="sidebar">
-      <a href="/" className="brand" aria-label="重途首页"><span className="brand-icon">重</span><span>重途<small>ZHONGTU · 行前测算</small></span></a>
+      <a href="/" className="brand" aria-label="重途首页"><span className="brand-icon">重</span><span>重途<small>HaulPath · 行前测算</small></span></a>
       <div className="sidebar-section-title"><span>我的项目</span><Button className="sidebar-add" aria-label="新建项目" onClick={() => setEditor({ kind: 'project', name: '' })}><Plus /></Button></div>
       <div className="project-list">{projects.map((item) => <Button className={`project-item ${item.id === projectId ? 'selected' : ''}`} key={item.id} onClick={() => { if (!busy) setProjectId(item.id); }} aria-pressed={item.id === projectId}><FolderOpen className="folder-icon" /><span>{item.name}</span></Button>)}</div>
       {!projects.length && !loading && <p className="sidebar-empty">创建项目，开始整理<br />您的线路与点位。</p>}

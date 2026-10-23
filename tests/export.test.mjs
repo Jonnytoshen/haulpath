@@ -84,7 +84,7 @@ test('planned exports reuse complete results with numeric kilometer cells and Sh
   await new Promise((resolve) => upstream.listen(0, '127.0.0.1', resolve));
   let application;
   try {
-    application = await startApplication({ ZHONGTU_TEST_MODE: '1', AMAP_API_BASE_URL: `http://127.0.0.1:${upstream.address().port}`, AMAP_WEB_SERVICE_KEY: 'test-export-key' });
+    application = await startApplication({ HAULPATH_TEST_MODE: '1', AMAP_API_BASE_URL: `http://127.0.0.1:${upstream.address().port}`, AMAP_WEB_SERVICE_KEY: 'test-export-key' });
     const request = (path, method, body) => jsonRequest(application.baseUrl, path, method, body);
     const project = (await request('/api/projects', 'POST', { name: '有效导出项目' })).body;
     const coordinates = await request('/api/coordinates', 'POST', { points: [
@@ -144,7 +144,7 @@ test('mixed project exports keep valid results after failure and omit stale or u
   await new Promise((resolve) => upstream.listen(0, '127.0.0.1', resolve));
   let application;
   try {
-    application = await startApplication({ ZHONGTU_TEST_MODE: '1', AMAP_API_BASE_URL: `http://127.0.0.1:${upstream.address().port}`, AMAP_WEB_SERVICE_KEY: 'test-export-key' });
+    application = await startApplication({ HAULPATH_TEST_MODE: '1', AMAP_API_BASE_URL: `http://127.0.0.1:${upstream.address().port}`, AMAP_WEB_SERVICE_KEY: 'test-export-key' });
     const request = (path, method, body) => jsonRequest(application.baseUrl, path, method, body);
     const project = (await request('/api/projects', 'POST', { name: '混合状态项目' })).body;
     const points = (await request('/api/coordinates', 'POST', { points: [
