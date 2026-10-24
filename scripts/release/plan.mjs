@@ -1,8 +1,12 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import semver from 'semver';
+import { redact } from './output.mjs';
 import { probeVersion } from './nx.mjs';
-export const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
+export const git = (...args) => {
+  try { return execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim(); }
+  catch (error) { throw new Error(`Git ${args[0]} failed: ${redact(error.stderr || 'command failed')}`); }
+};
 const channels = ['alpha', 'beta', 'rc', 'stable'];
 const core = (v) => `${semver.major(v)}.${semver.minor(v)}.${semver.patch(v)}`;
 export function parseReleaseArgs(argv) {
