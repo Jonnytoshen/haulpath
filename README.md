@@ -8,7 +8,7 @@
 
 ## 本机启动
 
-准备 Node.js **22 或更高版本**、pnpm **12.10.1**（最低 12）。在仓库根目录执行：
+准备 Node.js **22.12.0 或更高版本**、pnpm **12.10.1**（最低 12）。在仓库根目录执行：
 
 ```sh
 pnpm install --frozen-lockfile --ignore-scripts
@@ -61,7 +61,8 @@ pnpm run build
 pnpm run test:api
 pnpm run test:browser
 pnpm run test:commits
-# 一次串行运行上述全部测试用例：
+pnpm run test:release
+# 一次串行运行全部测试文件（分类入口存在交叉）：
 pnpm test
 ```
 
@@ -72,3 +73,9 @@ API 与浏览器测试会启动真实本机应用并使用临时 SQLite，下载
 [本轮验收记录](docs/acceptance.md) 包含完整闭环、20 点 / 100 线路 / 1,000 点库的本机观测与证据边界。**真实高德联调尚未执行**：需要配置真实凭证后完成记录中的人工清单；模拟测试不证明真实地图、搜索或重卡通行可用。
 
 提交前阅读 [Angular 扩展提交约定](docs/agents/git-commits.md)。本次安装跳过生命周期脚本，可显式 `pnpm run prepare` 安装提交 hook；已启用独立 worktree 配置时使用该文档中的 `GIT_CONFIG` 命令。领域术语见 [GLOSSARY.md](GLOSSARY.md)，架构取舍见 [ADR](docs/adr/)；需求和工单按本地 [tracker 约定](docs/agents/issue-tracker.md) 管理。
+
+## 软件发布
+
+使用本机 Nx Release 工作流；先以 `pnpm run release --first-release --dry-run` 预览首个 `0.1.0` 正式基线。后续支持自动版本、位置参数 `patch` / `minor` / `major` / `X.Y.Z`、`--channel stable|alpha|beta|rc` 及 `--dry-run`；API 失败后使用 `pnpm run release:resume <目标tag>` 补建。完整门禁、认证、候选规则和精确恢复步骤见[发布指南](docs/releasing.md)。
+
+发布功能与 Node `22.12.0` 最低环境的实际验证待发布工单 04 补齐；既有应用通过记录不代表发布流程已经验收。发布仅维护源码版本、日志、Git tag 与 GitHub Release，始终跳过 npm 发布，不生成安装包或自动部署。
