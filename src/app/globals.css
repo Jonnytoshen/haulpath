@@ -94,6 +94,8 @@
 .message { display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; gap: 12px; margin-top: 12px; border: 1px solid var(--border); padding: 10px 14px; border-radius: 6px; font-size: 13px; }
 .message.error { background: #fff5f3; color: #a2372e; border-color: #f1d1cc; }
 .message.success { position: fixed; right: 26px; bottom: 24px; z-index: 40; max-width: min(540px, calc(100vw - 32px)); background: #edf7f0; color: #205b3d; border-color: #bed8c7; }
+.message-copy { display: flex; min-width: 0; flex-direction: column; gap: 3px; overflow-wrap: anywhere; }
+.message .undo-button { width: auto; min-height: 32px; height: auto; padding: 4px 8px; font-size: 12px; font-weight: 600; color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
 .message button { width: 30px; height: 30px; padding: 0; flex-shrink: 0; }
 .welcome { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; min-height: 440px; padding: 40px 20px; text-align: center; }
 .welcome-mark { color: var(--primary); margin-bottom: 24px; }
@@ -195,6 +197,12 @@
 .strategy-row label { flex-shrink: 0; color: #4b6354; font-size: 12px; font-weight: 550; }
 .strategy-row select { height: 36px; max-width: 210px; margin-left: auto; box-shadow: none; font-size: 13px; background: white; }
 .planning-controls .helper { margin: 9px 0; font-size: 12px; }
+.planning-readiness { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 9px 0; color: var(--secondary); font-size: 12px; line-height: 1.8; }
+.planning-readiness .text-button { min-height: 22px; padding-block: 0; flex-shrink: 0; }
+.configuration-help { font-size: 14px; line-height: 1.9; color: var(--secondary); overflow-wrap: anywhere; }
+.configuration-help ol { list-style: decimal; padding-left: 22px; margin-block: 14px; }
+.configuration-help p + p { margin-top: 12px; }
+.configuration-help code { font-size: 12px; color: var(--foreground); }
 .plan-button { width: 100%; height: 42px; justify-content: space-between; padding: 0 15px; font-size: 14px; }
 progress { width: 100%; height: 5px; margin-top: 12px; accent-color: var(--primary); }
 .planning-error { margin-top: 10px; color: #a2372e; font-size: 12px; line-height: 1.7; }
@@ -422,6 +430,8 @@ td { padding: 13px 16px; border-bottom: 1px solid #edf1ed; font-size: 12px; font
   .planning-controls { padding-top: 11px; padding-bottom: 10px; }
   .strategy-row select { height: 32px; }
   .planning-controls .helper { margin-block: 6px; font-size: 11px; }
+  .planning-readiness { margin-block: 6px; font-size: 11px; }
+  .planning-readiness .text-button { font-size: 11px; min-height: 20px; }
   .plan-button { height: 40px; }
   .save-indicator { margin-top: 7px; }
   .workspace-footer { padding-block: 10px; }
