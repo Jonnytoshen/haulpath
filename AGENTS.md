@@ -14,9 +14,9 @@
 
 ## 命令与验证
 
-- 已实际通过 Node `24.21.0` / pnpm `12.10.1` 的 `pnpm install --frozen-lockfile --ignore-scripts`（缓存齐全时也通过 `--offline`；本轮初装显式指定现有全局 store）、`pnpm run typecheck`（先 `next typegen`）、`pnpm run build`（`next build --webpack`）。应用要求 Node `>=22.0.0`、pnpm `>=12.0.0`。
+- 已实际通过 Node `24.21.0` / pnpm `12.10.1` 的 `pnpm install --frozen-lockfile --ignore-scripts`（缓存齐全时也通过 `--offline`；本轮初装显式指定现有全局 store）、`pnpm run typecheck`（先 `next typegen`）、`pnpm run build`（`next build --webpack`）。应用要求 Node `>=22.12.0`、pnpm `>=12.0.0`。
 - `pnpm run dev` 与 `pnpm run start` 均使用真实入口；生产启动须先构建。端口可通过 `--port` 指定。当前受限环境的默认 Turbopack 生产构建有权限问题，webpack 构建已验证；不要改回默认构建后沿用旧的通过记录。
-- `pnpm test` 串行运行全部 `tests/*.test.mjs`；`test:api` 覆盖所有公开接口与 SQLite 备份恢复，`test:browser` 覆盖工作台及完整闭环/代表规模，`test:commits` 运行既有 22 项提交测试。生产中断恢复用例同时列入 API 与浏览器入口，先执行 webpack 构建；这些入口需要系统 `sqlite3` 和已安装的浏览器。默认系统 Chrome，可用 `PLAYWRIGHT_CHROMIUM_CHANNEL` 指定 channel；分类数量不可直接相加，完整测试按文件只运行一次。
+- `pnpm test` 串行运行全部 `tests/*.test.mjs`；`test:api` 覆盖所有公开接口与 SQLite 备份恢复，`test:browser` 覆盖工作台及完整闭环/代表规模，`test:commits` 运行既有 22 项提交测试；`test:release` 验证公开发布命令并纳入完整测试入口，新增验收结果待发布工单 04 记录。生产中断恢复用例同时列入 API 与浏览器入口，先执行 webpack 构建；这些入口需要系统 `sqlite3` 和已安装的浏览器。默认系统 Chrome，可用 `PLAYWRIGHT_CHROMIUM_CHANNEL` 指定 channel；分类数量不可直接相加，完整测试按文件只运行一次。
 - 运行配置见 [.env.example](.env.example) 和 [README](README.md)；默认数据库为启动目录下 `data/haulpath.sqlite`，`HAULPATH_DB_PATH` 可覆盖。环境变量统一使用 `HAULPATH_DB_PATH`、`HAULPATH_TEST_MODE`。开发、生产及备份应核对同一数据库位置，不把测试临时库当作用户数据。
 - `pnpm run prepare` 显式安装或修复 hook；本轮独立 worktree 已启用 `extensions.worktreeConfig`，实际使用 `GIT_CONFIG="$(git rev-parse --git-path config.worktree)" pnpm run prepare`，仅修改当前 worktree 的 hook 配置。完整说明见[提交约定](docs/agents/git-commits.md)。
 - 提交校验入口为 `printf '%s\n' 'docs(git): clarify commit checks' | pnpm run commitlint`、`pnpm run commitlint --edit <消息文件>`、`pnpm run commitlint --from <base> --to HEAD`；替换实际文件/基线，`--from` 不包含起始提交。
@@ -24,6 +24,9 @@
 - 实现验收优先走浏览器完整用户流程，经过真实应用接口、SQLite 和实际下载的工作簿；仅在高德服务边界使用可控替身。
 - 浏览器自动化建议使用 Playwright。模拟高德响应与真实密钥联调分别验证；模拟测试不能证明真实地图可用。
 - 纯文档改动核对链接、术语和 ADR 一致性，无需创建应用环境或测试框架。
+- 软件发布按[发布指南](docs/releasing.md)与 [ADR 0003](docs/adr/0003-prerelease-version-consistency.md)：从干净 main 执行，首发显式 `--first-release`；支持位置参数 `patch` / `minor` / `major` / `X.Y.Z`、`--channel` 与 `--dry-run`，恢复使用 `release:resume <目标tag>`。完整门禁通过后才写版本和日志，只推送 main 与本次 tag，始终跳过 npm 发布，不关闭 hook 或用户签名。
+- 候选转正保持同一基版；累计下限提高时先生成新候选。API 恢复从目标 tag 读取原始日志，只补 Release，不重做版本和 Git 操作，不覆盖人工说明或让旧版本抢占 Latest。API token 优先 `GITHUB_TOKEN`、其次 `GH_TOKEN`，与 Git 推送认证分开检查，禁止输出凭证。
+- Node `22.12.0` 为统一支持下限；上述历史 Node 24 应用记录继续有效，发布新增验证与最低环境实际结果待工单 04 补齐，不能写成已通过。
 
 ## 开始任务前
 
