@@ -78,7 +78,7 @@ test('planner imports points, plans, invalidates, successfully replans and downl
     await dialog.getByRole('button', { name: '确认导入 3 行', exact: true }).click();
     await dialog.waitFor({ state: 'hidden' });
     for (const name of ['上海仓', '苏州客户', '南京客户']) {
-      await page.locator('.library-point').filter({ has: page.getByText(name, { exact: true }) }).getByRole('button', { name: '选入线路', exact: true }).click();
+      await page.locator('.library-point').filter({ has: page.getByText(name, { exact: true }) }).getByRole('button', { name: `将 ${name} 选入当前线路`, exact: true }).click();
       await page.getByText('点位已复制到线路，之后独立维护', { exact: true }).waitFor();
     }
     await page.getByRole('button', { name: '线路点位', exact: true }).click();
