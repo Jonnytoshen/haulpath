@@ -50,3 +50,6 @@ test-results/
 **/.impeccable/live/pending-manual-edits.json
 **/.impeccable/live/deferred-svelte-component-accepts.json
 **/.impeccable/live/*.png
+
+# Nx runtime cache
+.nx/
