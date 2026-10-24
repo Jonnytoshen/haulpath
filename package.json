@@ -20,7 +20,8 @@
     "test": "node --test --test-concurrency=1 tests/*.test.mjs",
     "test:browser": "node --test --test-concurrency=1 tests/workbench.test.mjs tests/acceptance.test.mjs tests/planning-recovery.test.mjs",
     "release": "node scripts/release.mjs",
-    "test:release": "node --test --test-concurrency=1 tests/release*.test.mjs"
+    "test:release": "node --test --test-concurrency=1 tests/release*.test.mjs",
+    "release:resume": "node scripts/release-resume.mjs"
   },
   "dependencies": {
     "@amap/amap-jsapi-loader": "^1.0.1",

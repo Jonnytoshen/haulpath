@@ -84,13 +84,12 @@ test('a raised minimum requires a new candidate before promotion', (t) => {
   let r = f.cli('--dry-run'); assert.notEqual(r.status, 0); assert.match(r.stderr, /new candidate first/);
   r = f.cli('--channel', 'alpha', '--dry-run'); assert.equal(r.status, 0, r.stdout + r.stderr); assert.match(r.stdout, /Preview: 1\.1\.0-alpha\.0/);
 });
-test('invalid parameters, repeated first releases and actual execution fail before writes', (t) => {
+test('invalid parameters and repeated first releases fail before writes', (t) => {
   const f = fixture(t);
   for (const args of [['--publish'], ['--channel', 'preview'], ['--first-release', 'minor'], ['1.0.0-beta.1'], ['--dry-run', '--dry-run']]) {
     const r = f.cli(...args, ...(args.includes('--dry-run') ? [] : ['--dry-run'])); assert.notEqual(r.status, 0, args.join(' '));
   }
-  let r = f.cli('--first-release'); assert.notEqual(r.status, 0); assert.match(r.stderr, /not implemented/);
-  f.git('tag', 'v0.1.0'); r = f.cli('--first-release', '--dry-run'); assert.notEqual(r.status, 0);
+  f.git('tag', 'v0.1.0'); const r = f.cli('--first-release', '--dry-run'); assert.notEqual(r.status, 0);
   assert.equal(f.git('status', '--porcelain'), '');
 });
 test('preview rejects a target tag already present outside main history', (t) => {
