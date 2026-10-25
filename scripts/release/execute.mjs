@@ -29,7 +29,7 @@ export async function executeRelease(plan) {
       command('pnpm', ['run', gate]);
       completed.push(gate);
     }
-    if (git('rev-parse', 'HEAD') !== plan.head || git('status', '--porcelain')) throw new Error('HEAD or worktree changed during quality gates');
+    if (git('branch', '--show-current') !== 'main' || git('rev-parse', 'HEAD') !== plan.head || git('status', '--porcelain')) throw new Error('Branch, HEAD or worktree changed during quality gates');
     stage = 'local Nx version/changelog/commit/tag';
     await writeRelease(plan);
     const release = taggedRelease(plan.tag);

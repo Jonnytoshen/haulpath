@@ -121,6 +121,7 @@ test('candidate publication and promotion keep the same core and formal notes co
   const posts=readFileSync(join(f.base,'requests'),'utf8').trim().split('\n').map(JSON.parse).filter(r=>r.method==='POST');
   assert.equal(posts[1].body.prerelease,true); assert.equal(posts[1].body.make_latest,'false');
   assert.match(posts[2].body.body,/retain candidate input/); assert.equal(posts[2].body.prerelease,false);
+  assert.doesNotMatch(posts[2].body.body, /preserve point order/);
 });
 test('resume preview is read-only and rejects a remote tag that points elsewhere', (t) => {
   const f=fixture(t); assert.equal(f.cli(['--first-release']).status,0);
@@ -159,4 +160,42 @@ test('explicit release preview never runs fixture gates, Git push hooks or GitHu
 test('actual release rejects a non-main context even when maintenance changes would otherwise skip', (t) => {
   const f=fixture(t); f.git('tag','v0.1.0'); f.git('checkout','-b','maintenance'); f.commit('docs: explain release context');
   const r=f.cli([]); assert.notEqual(r.status,0); assert.match(r.stderr,/clean main/);
+});
+
+test('same-HEAD branch switch during gates stops before release writes or remote publication', (t) => {
+  const f = fixture(t);
+  const gate = join(f.dir, 'gate.cjs');
+  writeFileSync(gate, readFileSync(gate, 'utf8') + "\nif(process.argv[2]==='test')require('node:child_process').execFileSync('git',['checkout','-b','release-detour']);\n");
+  f.git('add', '.'); f.git('commit', '-m', 'test: simulate concurrent branch change');
+  const head = f.git('rev-parse', 'HEAD');
+  const r = f.cli(['--first-release']);
+  assert.notEqual(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stderr, /changed during quality gates/);
+  assert.equal(f.git('rev-parse', 'HEAD'), head);
+  assert.equal(f.git('rev-parse', 'main'), head);
+  assert.equal(f.git('tag'), '');
+  assert.equal(f.git('status', '--porcelain'), '');
+  assert.equal(existsSync(join(f.dir, 'CHANGELOG.md')), false);
+  assert.equal(f.git('ls-remote', 'origin'), '');
+  assert.doesNotMatch(readFileSync(join(f.base, 'requests'), 'utf8'), /"method":"POST"/);
+});
+
+test('multi-commit first release preserves root features and migration notes in preview and published notes', (t) => {
+  const f = fixture(t);
+  f.git('commit', '--amend', '-m', 'feat(route): preserve point order\n\nBREAKING CHANGE: require explicit point order\n\nReview point order before importing existing routes.');
+  f.commit('fix(map): restore map preview');
+  const before = f.git('show-ref', '--head');
+  const preview = f.cli(['--first-release', '--dry-run']);
+  assert.equal(preview.status, 0, preview.stdout + preview.stderr);
+  for (const text of ['preserve point order', 'restore map preview', 'Review point order before importing existing routes.']) assert.ok(preview.stdout.includes(text), text);
+  assert.match(preview.stdout, /Preview: 0\.1\.0/);
+  assert.equal(f.git('show-ref', '--head'), before);
+  assert.equal(f.git('status', '--porcelain'), '');
+  assert.equal(existsSync(join(f.base, 'requests')), false);
+  const actual = f.cli(['--first-release']);
+  assert.equal(actual.status, 0, actual.stdout + actual.stderr);
+  const notes = readFileSync(join(f.base, 'requests'), 'utf8').trim().split('\n').map(JSON.parse).find(r => r.method === 'POST').body.body;
+  for (const text of ['preserve point order', 'restore map preview', 'Review point order before importing existing routes.']) assert.ok(notes.includes(text), text);
+  assert.equal(f.git('rev-parse', 'main'), f.git('rev-parse', 'v0.1.0^{commit}'));
+  assert.equal(f.git('rev-parse', 'main'), f.git('ls-remote', 'origin', 'refs/heads/main').split(/\s/)[0]);
 });
