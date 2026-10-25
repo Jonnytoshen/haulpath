@@ -78,4 +78,4 @@ API 与浏览器测试会启动真实本机应用并使用临时 SQLite，下载
 
 使用本机 Nx Release 工作流；先以 `pnpm run release --first-release --dry-run` 预览首个 `0.1.0` 正式基线。后续支持自动版本、位置参数 `patch` / `minor` / `major` / `X.Y.Z`、`--channel stable|alpha|beta|rc` 及 `--dry-run`；API 失败后使用 `pnpm run release:resume <目标tag>` 补建。完整门禁、认证、候选规则和精确恢复步骤见[发布指南](docs/releasing.md)。
 
-发布功能与 Node `22.12.0` 最低环境的实际验证待发布工单 04 补齐；既有应用通过记录不代表发布流程已经验收。发布仅维护源码版本、日志、Git tag 与 GitHub Release，始终跳过 npm 发布，不生成安装包或自动部署。
+发布功能已完成 Node `24.21.0` 完整回归及 Node `22.12.0` 入口烟测，实际结果见[发布验证记录](docs/releasing.md#验证记录边界)。最低 Node 未运行完整套件，真实 GitHub 联调未执行。发布仅维护源码版本、日志、Git tag 与 GitHub Release，始终跳过 npm 发布，不生成安装包或自动部署。
