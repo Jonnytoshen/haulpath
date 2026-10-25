@@ -94,7 +94,7 @@ pnpm run release --channel stable
 3. `pnpm run build`，保留现有 `next build --webpack`。
 4. `pnpm test`，串行执行全部测试文件，包含发布测试；不叠加重复运行分类入口。
 
-全部通过后再次确认 HEAD 和工作区未变，才由 Nx 写入精确版本及日志、创建发布提交和 tag。任何检查失败或输入变化都在发布写入前停止。门禁不放入 Nx 会在预览中执行的前置版本命令，也不依赖 pre-push hook；通过检查后直接执行，不增加第二次交互确认。
+全部通过后再次确认仍在 main、HEAD 和工作区未变，才由 Nx 写入精确版本及日志、创建发布提交和 tag。任何检查失败或输入变化都在发布写入前停止。门禁不放入 Nx 会在预览中执行的前置版本命令，也不依赖 pre-push hook；通过检查后直接执行，不增加第二次交互确认。
 
 发布提交使用合规标题 `chore: release v<版本>`，不新增 `release` scope。只原子推送 `main` 和本次 tag，不推送其他 tag、不强推或覆盖历史。推送成功后通过 GitHub API 为该已存在 tag 创建已发布 Release，避免 GitHub 为其他提交隐式建立 tag。
 
@@ -112,7 +112,7 @@ Git 与 GitHub API 不是跨系统原子事务。根据命令报告的阶段处�
 推送失败时按命令给出的远端及 tag 替换以下占位符；先确认两项仍指向该次发布结果：
 
 ```sh
-git push --atomic <远端> main refs/tags/<目标tag>
+git -c push.followTags=false push --atomic <远端> refs/heads/main:refs/heads/main refs/tags/<目标tag>:refs/tags/<目标tag>
 pnpm run release:resume <目标tag> --dry-run
 pnpm run release:resume <目标tag>
 ```
@@ -125,9 +125,9 @@ pnpm run release:resume <目标tag>
 
 ## 验证记录边界
 
-`pnpm run test:release` 从公开命令贯穿真实 Nx、临时 Git 仓库、hook、文件及隔离 bare remote；仅 GitHub API 与夹具质量命令使用可控替身。工单 03 在相同集成代码验收该独立入口，25 项通过；工单 04 的完整 `pnpm test` 再次覆盖同组发布测试，未叠加分类入口。夹具不会递归调用真实完整测试，也不会向真实仓库发布。
+`pnpm run test:release` 从公开命令贯穿真实 Nx、临时 Git 仓库、hook、文件及隔离 bare remote；仅 GitHub API 与夹具质量命令使用可控替身。评审修复后的独立入口通过 27 项，完整 `pnpm test` 再次覆盖同组发布测试；分类计数不相加。夹具不会递归调用真实完整测试，也不会向真实仓库发布。
 
-2026-10-25（Asia/Shanghai），以集成代码 `f68ae455d0c3491c6d7cdb02c4966939c8eb3dbc` 在 macOS arm64 完成以下验证。使用 pnpm `12.10.1`，仅安装当前 worktree 的 hook，保留用户 SSH 提交签名配置。
+首次验收于 2026-10-25（Asia/Shanghai），以集成代码 `f68ae455d0c3491c6d7cdb02c4966939c8eb3dbc` 在 macOS arm64 完成以下验证。使用 pnpm `12.10.1`，仅安装当前 worktree 的 hook，保留用户 SSH 提交签名配置。
 
 | 环境 / 检查 | 实际结果 |
 | --- | --- |
@@ -137,6 +137,18 @@ pnpm run release:resume <目标tag>
 | Node `24.21.0` 类型与构建 | `pnpm run typecheck` 与 `pnpm run build` 通过，后者实际为 `next build --webpack` |
 | Node `24.21.0` 完整串行测试 | `pnpm test` 单次串行运行 **86 项通过，0 失败、0 跳过、0 取消**，耗时约 172 秒；包含 25 项发布测试与既有 61 项应用及提交测试 |
 | Node `22.12.0` 最低入口 | 相同冻结离线安装、Nx 项目发现与真实首发 dry-run 通过；2 项发布入口烟测通过，覆盖真实 Nx、Git、隔离 bare remote 原子推送及只读恢复；前后工作区、HEAD 和 refs 不变 |
+
+评审修复于同日针对源码提交 `fe7e0e7e93921956c33ef1356c352e5f8556d2ac` 重新验证，结果如下；上表 86 项为修复前历史记录，不作为修复后通过记录。
+
+| 环境 / 检查 | 评审修复后实际结果 |
+| --- | --- |
+| Node `24.21.0` 安装与项目发现 | 相同冻结离线安装通过，539 包复用、0 下载、锁文件未变；Nx 返回 `["haulpath"]` |
+| Node `24.21.0` 发布专项与预览 | 独立 `test:release` 27/27；无 token 的真实首发预览通过，版本、锁文件、日志、暂存区、HEAD、refs 和工作区状态不变 |
+| Node `24.21.0` 类型与构建 | 重新通过 `pnpm run typecheck` 与 `pnpm run build`（`next build --webpack`） |
+| Node `24.21.0` 完整串行测试 | 单次 `pnpm test` **88/88，0 失败、0 跳过、0 取消**，约 175 秒；包含 27 项发布测试与既有 61 项应用及提交测试 |
+| Node `22.12.0` 入口烟测 | 重新通过下述 2 项真实 Nx/Git 发布与只读恢复烟测；未运行最低 Node 完整套件 |
+
+新增两个公开 CLI 回归均先确认失败，再以最小修复通过：门禁期间切换到同 HEAD 的其他分支会在写入前停止；多提交首发的预览和实际发布均保留根提交功能与破坏性变更迁移说明，并保持 `0.1.0`。首发通过 Nx 24 公开 `from`/`to` 参数指定同一个冻结 HEAD，使用其完整历史范围语义；后续仍排除上一正式 tag，候选转正回归同时确认旧基线内容不会重新进入日志。发布提交、main 和 tag 的指向在隔离发布中核对一致。
 
 从初始基线 `8e16126e7b4546cc95d9664f5597a92caf3c9d48` 开始的新增提交区间通过项目 commitlint；逐个检查提交目的、内容及 SSH 签名头，沿用用户签名配置。未配置 allowed signers，未将签名头存在写成密码学验签通过。文档本地链接与 `git diff --check` 通过。
 
