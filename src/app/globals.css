@@ -193,9 +193,10 @@
 .add-points { display: flex; flex-shrink: 0; flex-wrap: wrap; gap: 6px; padding: 12px 20px; border-top: 1px solid var(--border); }
 .add-points .button { height: 36px; padding: 0 10px; font-size: 12px; }
 .planning-controls { flex-shrink: 0; padding: 16px 20px 12px; background: #f8faf8; border-top: 1px solid var(--border); }
-.strategy-row { display: flex; align-items: center; gap: 15px; }
+.strategy-row { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
 .strategy-row label { flex-shrink: 0; color: #4b6354; font-size: 12px; font-weight: 550; }
-.strategy-row select { height: 36px; max-width: 210px; margin-left: auto; box-shadow: none; font-size: 13px; background: white; }
+.strategy-row select { height: 36px; min-width: 0; box-shadow: none; font-size: 13px; background: white; }
+.strategy-description { margin: 6px 0 0; color: var(--secondary); font-size: 12px; line-height: 1.65; overflow-wrap: anywhere; }
 .planning-controls .helper { margin: 9px 0; font-size: 12px; }
 .planning-readiness { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 9px 0; color: var(--secondary); font-size: 12px; line-height: 1.8; }
 .planning-readiness .text-button { min-height: 22px; padding-block: 0; flex-shrink: 0; }
@@ -425,8 +426,10 @@ td { padding: 13px 16px; border-bottom: 1px solid #edf1ed; font-size: 12px; font
   .point-actions button { height: 26px; }
   .add-points { padding-block: 9px; }
   .add-points .button { height: 34px; }
-  .planning-controls { padding-top: 11px; padding-bottom: 10px; }
-  .strategy-row select { height: 32px; }
+  .planning-controls { padding-top: 8px; padding-bottom: 8px; }
+  .strategy-row { flex-direction: row; align-items: center; gap: 10px; }
+  .strategy-row select { flex: 1; height: 32px; }
+  .strategy-description { margin-top: 4px; font-size: 11px; line-height: 1.5; }
   .planning-controls .helper { margin-block: 6px; font-size: 11px; }
   .planning-readiness { margin-block: 6px; font-size: 11px; }
   .planning-readiness .text-button { font-size: 11px; min-height: 20px; }

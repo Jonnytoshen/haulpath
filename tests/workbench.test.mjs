@@ -29,6 +29,53 @@ async function createRoute(page, name) {
   await page.getByRole('heading', { name, exact: true }).waitFor();
 }
 
+test('planner selects grouped preferences with descriptions, keyboard focus and failed-save recovery', { timeout: 120000 }, async () => {
+  const context = await openWorkbench();
+  const { page, app } = context;
+  const request = (path, method, body) => jsonRequest(app.baseUrl, path, method, body);
+  try {
+    await page.goto(app.baseUrl);
+    await createProject(page, '规划偏好项目');
+    await createRoute(page, '偏好草稿');
+    const select = page.getByLabel('规划偏好', { exact: true });
+    assert.deepEqual(await select.locator('optgroup').evaluateAll((groups) => groups.map((group) => ({
+      label: group.label, options: Array.from(group.children).map((option) => [option.value, option.textContent]),
+    }))), [
+      { label: '常用偏好', options: [['32', '高德推荐'], ['33', '躲避拥堵'], ['34', '高速优先'], ['35', '不走高速'], ['36', '少收费'], ['37', '大路优先'], ['38', '速度最快']] },
+      { label: '组合偏好', options: [['39', '躲避拥堵＋高速优先'], ['40', '躲避拥堵＋不走高速'], ['41', '躲避拥堵＋少收费'], ['42', '少收费＋不走高速'], ['43', '躲避拥堵＋少收费＋不走高速'], ['44', '躲避拥堵＋大路优先'], ['45', '躲避拥堵＋速度最快']] },
+      { label: '其他策略', options: [['0', '速度优先'], ['1', '费用优先'], ['2', '常规最快']] },
+    ]);
+    assert.equal(await select.locator('option').count(), 17);
+    assert.match(await describedText(select), /高德地图 App 默认/);
+    await select.focus();
+    assert.equal(await select.evaluate((element) => element === document.activeElement), true);
+    await select.press('Tab');
+    assert.equal(await select.evaluate((element) => element === document.activeElement), false);
+    for (const [value, description] of [['33', /拥堵/], ['0', /只返回一条路线.*不一定距离最短/], ['1', /只返回一条.*不走收费路段/], ['2', /只返回一条路线.*综合距离与耗时/], ['43', /躲避拥堵、少收费与不走高速/]]) {
+      await Promise.all([
+        page.waitForResponse((response) => response.request().method() === 'PATCH' && response.url().includes('/api/routes/')),
+        select.selectOption(value),
+      ]);
+      await page.waitForFunction((expected) => document.getElementById('strategy')?.value === expected && !document.getElementById('strategy')?.disabled, value);
+      assert.match(await describedText(select), description);
+    }
+    const project = (await request('/api/projects')).body[0];
+    const route = (await request(`/api/projects/${project.id}/routes`)).body[0];
+    const path = `/api/routes/${route.id}?projectId=${project.id}`;
+    assert.equal(route.strategy, 43);
+    assert.equal((await request(path, 'PATCH', { strategy: 44, expectedVersion: route.inputVersion })).status, 200);
+    await select.selectOption('45');
+    await page.getByRole('alert').filter({ hasText: '线路已被更新' }).waitFor();
+    assert.equal(await select.inputValue(), '43', 'failed saves must retain the last preference shown before the attempt');
+    assert.match(await describedText(select), /躲避拥堵、少收费与不走高速/);
+    assert.equal((await request(path)).body.strategy, 44, 'the stale browser must not overwrite the actual saved preference');
+    await page.reload();
+    await page.getByRole('heading', { name: '偏好草稿', exact: true }).waitFor();
+    assert.equal(await select.inputValue(), '44');
+    assert.deepEqual(context.errors, []);
+  } finally { await context.close(); }
+});
+
 test('project loading blocks dependent writes and late responses cannot replace another project', { timeout: 120000 }, async () => {
   const context = await openWorkbench();
   const { page, app } = context;
