@@ -14,7 +14,7 @@ async function amapFixture(delay = 30) {
     response.setHeader('Content-Type', 'application/json');
     if (url.pathname !== '/v5/direction/driving') { response.writeHead(404).end(); return; }
     await new Promise((resolve) => setTimeout(resolve, delay));
-    const distance = url.searchParams.get('strategy') === '34' ? '2345' : '1234';
+    const distance = url.searchParams.get('strategy') === '43' ? '2345' : '1234';
     const polyline = `${url.searchParams.get('origin')};${url.searchParams.get('destination')}`;
     response.end(JSON.stringify({ status: '1', route: { paths: [
       { distance, steps: [{ polyline }] }, { distance: '999999', steps: [{ polyline }] },
@@ -87,7 +87,7 @@ test('planner imports points, plans, invalidates, successfully replans and downl
     await page.getByText('路线方案已完整保存', { exact: true }).waitFor();
     assert.equal(await page.locator('[data-sdk-polyline]').count(), 2);
     assert.match(await page.getByRole('region', { name: '路线方案', exact: true }).innerText(), /2\.468/);
-    await page.getByLabel('规划偏好', { exact: true }).selectOption('34');
+    await page.getByLabel('规划偏好', { exact: true }).selectOption('43');
     await page.getByText('点位或偏好已变更，请重新规划。最近成功方案已保留。', { exact: true }).waitFor();
     assert.equal(await page.locator('[data-sdk-polyline]').count(), 0);
     assert.doesNotMatch(await page.getByRole('region', { name: '路线方案', exact: true }).innerText(), /2\.468/);
@@ -99,10 +99,10 @@ test('planner imports points, plans, invalidates, successfully replans and downl
     assert.deepEqual(book.worksheets.map((sheet) => sheet.name), ['线路总览', '区间明细']);
     assert.equal(book.getWorksheet('线路总览').getCell('G3').value, 4.69);
     assert.equal(book.getWorksheet('线路总览').getCell('G3').numFmt, '0.000');
-    assert.equal(book.getWorksheet('线路总览').getCell('H3').value, '高速优先');
+    assert.equal(book.getWorksheet('线路总览').getCell('H3').value, '躲避拥堵＋少收费＋不走高速');
     assert.equal(book.getWorksheet('区间明细').rowCount, 4);
     assert.equal(book.getWorksheet('区间明细').getCell('H4').value, 4.69);
-    assert.deepEqual(upstream.requests.map((url) => url.searchParams.get('strategy')), ['32', '32', '34', '34']);
+    assert.deepEqual(upstream.requests.map((url) => url.searchParams.get('strategy')), ['32', '32', '43', '43']);
     assert.deepEqual(errors, []);
   } finally { await browser.close(); await app.stop(); await app.cleanup(); await upstream.close(); }
 });
