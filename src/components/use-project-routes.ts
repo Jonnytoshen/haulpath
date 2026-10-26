@@ -117,6 +117,8 @@ export function useProjectRoutes(projectId: string) {
   const isPlanningCurrent = useCallback((planning: LocalPlanningRequest) => isSessionCurrent(planning) && pending.current.get(planning.id)?.requestId === planning.requestId, [isSessionCurrent]);
   const endPlanning = useCallback((planning: LocalPlanningRequest) => {
     if (!isPlanningCurrent(planning)) return;
+    // A completed planning request makes previously captured list data obsolete.
+    generation.current++; queued.current = true;
     pending.current.delete(planning.id); setPlanningRequests([...pending.current.values()]);
     void refreshRef.current();
   }, [isPlanningCurrent]);

@@ -172,3 +172,40 @@ test('overview refresh failure and retry preserve the current comparison and scr
     assert.equal(planningPosts, 0); assert.deepEqual(context.errors, []);
   } finally { release.resolve(); await context.close(); }
 });
+
+test('planning completion invalidates an older list captured after the local POST began', { timeout: 120000 }, async () => {
+  const planArrived = deferred(), releasePlan = deferred(), listArrived = deferred(), releaseList = deferred();
+  const context = await openPlanner((_request, response) => drivingResponse(response, 1001));
+  const { app, page, request } = context;
+  try {
+    const project = await request('/api/projects', 'POST', { name: '列表与规划结果竞争项目' });
+    const points = await createPoints(request, ['上海仓', '苏州终点']);
+    const route = await request(`/api/projects/${project.id}/routes`, 'POST', { name: '规划完成后保留新结果', points });
+    await page.goto(app.baseUrl); await assertOverview(page); await openRouteFromSidebar(page, route.name);
+    await page.waitForLoadState('networkidle');
+    await page.route(`**/api/routes/${route.id}/plan?projectId=${project.id}`, async (pending) => {
+      planArrived.resolve(); await releasePlan.promise; await pending.continue();
+    });
+    let reads = 0;
+    await page.route(`**/api/projects/${project.id}/routes`, async (pending) => {
+      if (pending.request().method() !== 'GET' || ++reads !== 1) return pending.continue();
+      const response = await pending.fetch();
+      const captured = (await response.json()).find((item) => item.id === route.id);
+      assert.equal(captured.snapshot, null); assert.equal(captured.planning, null);
+      listArrived.resolve(); await releaseList.promise; await pending.fulfill({ response });
+    });
+    await page.getByRole('button', { name: '开始规划', exact: true }).click(); await planArrived.promise;
+    await page.getByRole('button', { name: '刷新线路', exact: true }).click(); await listArrived.promise;
+    releasePlan.resolve();
+    await page.getByText('路线方案已完整保存', { exact: true }).waitFor();
+    const sidebarRoute = page.getByRole('region', { name: '项目线路', exact: true }).locator('.route-item').filter({ hasText: route.name });
+    await sidebarRoute.getByText('已规划', { exact: true }).waitFor();
+    assert.equal((await request(`/api/routes/${route.id}?projectId=${project.id}`)).snapshot.totalDistanceMeters, 1001);
+    releaseList.resolve();
+    await page.waitForLoadState('networkidle');
+    await sidebarRoute.getByText('已规划', { exact: true }).waitFor({ timeout: 3000 });
+    assert.match(await page.locator('.result-summary').innerText(), /1\.001/);
+    assert.ok(reads >= 2, 'planning completion invalidates the held list and obtains a fresh project read');
+    assert.deepEqual(context.errors, []);
+  } finally { releasePlan.resolve(); releaseList.resolve(); await context.close(); }
+});
