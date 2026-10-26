@@ -6,7 +6,7 @@
 
 ## 当前状态与技术栈
 
-- 当前已有 Next.js 工作台、SQLite 版本 2 迁移、项目/线路/点库接口、坐标与导入、相邻区间测算及双表导出；自动化从真实应用 HTTP 和浏览器入口验收。
+- 当前已有 Next.js 工作台、SQLite schema 版本 2 迁移、项目/线路/点库接口、坐标与导入、相邻区间测算及双表导出；自动化从真实应用 HTTP 和浏览器入口验收。
 - 使用 pnpm、Next.js App Router、TypeScript；同一应用提供网页与本机服务端接口，开发与生产默认监听 `127.0.0.1`。
 - 数据持久化使用 SQLite / `better-sqlite3`；Excel 读写使用 ExcelJS，CSV 解析使用 `csv-parse`。
 - 地图使用高德 JS API 2.0 与官方 `@amap/amap-jsapi-loader`；驾车测算由服务端调用高德 Web 服务 v5。
