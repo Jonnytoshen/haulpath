@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { createServer } from 'node:http';
 import { chromium } from 'playwright';
 import { startApplication, jsonRequest } from './helpers/application.mjs';
+import { assertOverview, openRouteFromSidebar } from './helpers/browser-navigation.mjs';
 
 const run = promisify(execFile);
 
@@ -52,6 +53,8 @@ test('interrupted planning survives a production restart or online backup restor
     browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHROMIUM_CHANNEL || 'chrome', headless: true });
     const page = await browser.newPage({ viewport: { width: 1600, height: 1050 } });
     await page.goto(app.baseUrl);
+    await assertOverview(page);
+    await openRouteFromSidebar(page, route.name);
     await page.getByRole('heading', { name: route.name, exact: true }).waitFor();
     hold = true;
     await page.getByRole('button', { name: '重新规划', exact: true }).click();
@@ -61,6 +64,8 @@ test('interrupted planning survives a production restart or online backup restor
     assert.equal(running.planning.completed, 1);
     assert.deepEqual(running.snapshot, previous);
     await page.reload();
+    await assertOverview(page);
+    await openRouteFromSidebar(page, route.name);
     const runningButton = page.getByRole('button', { name: '规划中 1/2', exact: true });
     await runningButton.waitFor();
     assert.equal(await runningButton.isDisabled(), true);
@@ -88,6 +93,8 @@ test('interrupted planning survives a production restart or online backup restor
       assert.deepEqual(recovered.points, running.points);
       assert.deepEqual(recovered.snapshot, previous);
       await page.goto(app.baseUrl);
+      await assertOverview(page);
+      await openRouteFromSidebar(page, route.name);
       const retry = page.getByRole('button', { name: '重新规划', exact: true });
       await retry.waitFor();
       assert.equal(await retry.isEnabled(), true);

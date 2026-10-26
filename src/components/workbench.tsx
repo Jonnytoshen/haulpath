@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction, type FormEvent } from 'react';
 import { ArrowDown, ArrowUp, ArrowRight, Check, Download, FolderOpen, GripVertical, MapPin, Plus, Route as RouteIcon, Upload, X, AlertTriangle, Search, Menu, ChevronDown, Pencil, Trash2, ArrowLeft, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { PLANNING_NOTICE, formatKilometers, routeStatus, strategyGroups, type CoordinateSystem, type Point, type Project, type Route, type Strategy } from '@/lib/domain';
 import MapPanel, { type MapCandidate, type MapConfig } from './map-panel';
 import ImportDialog from './import-dialog';
+import RouteOverview, { emptyOverviewBrowsing, type OverviewBrowsing } from './route-overview';
 import { request } from '@/lib/client-request';
 import { useProjectRoutes, type ProjectRouteRead } from './use-project-routes';
 export { request } from '@/lib/client-request';
@@ -27,7 +28,17 @@ export default function Workbench() {
   const [projectId, setProjectId] = useState('');
   const routeCache = useProjectRoutes(projectId);
   const { routes, routesRef, refreshing, loaded: routesLoaded, refreshError, refreshRoutes, captureRead, isReadCurrent, isSessionCurrent, beginWrite, commitRoute, removeRoute: removeCachedRoute, endWrite, planningRequests, beginPlanning, isPlanningCurrent, endPlanning } = routeCache;
-  const initialSelection = useRef(true);
+  const [projectView, setProjectView] = useState<{ projectId: string; view: 'overview' | 'workbench' }>({ projectId: '', view: 'overview' });
+  const view = projectView.projectId === projectId ? projectView.view : 'overview';
+  const setView = (next: 'overview' | 'workbench') => setProjectView({ projectId, view: next });
+  const [focusRequest, requestFocus] = useState(0);
+  const consumedFocus = useRef(0);
+  const [overviewSession, setOverviewSession] = useState(() => ({ projectId: '', value: emptyOverviewBrowsing() }));
+  const overviewBrowsing = overviewSession.projectId === projectId ? overviewSession.value : emptyOverviewBrowsing();
+  const setOverviewBrowsing: Dispatch<SetStateAction<OverviewBrowsing>> = (next) => setOverviewSession((current) => {
+    const value = current.projectId === projectId ? current.value : emptyOverviewBrowsing();
+    return { projectId, value: typeof next === 'function' ? next(value) : next };
+  });
   const [route, setRoute] = useState<Route | null>(null);
   const routeRef = useRef<Route | null>(null);
   const projectRef = useRef('');
@@ -72,9 +83,7 @@ export default function Workbench() {
 
   useEffect(() => {
     const current = routeRef.current;
-    if (initialSelection.current && routesLoaded) {
-      initialSelection.current = false; selectRoute(routes[0] ?? null);
-    } else if (current) selectRoute(routes.find((item) => item.id === current.id) ?? null);
+    if (current) selectRoute(routes.find((item) => item.id === current.id) ?? null);
   }, [routes, routesLoaded, selectRoute]);
 
   useEffect(() => {
@@ -92,7 +101,7 @@ export default function Workbench() {
   useEffect(() => {
     projectRef.current = projectId;
     const epoch = ++selection.current;
-    initialSelection.current = true; selectRoute(null); setLibrary([]); setPointEditor(null); setImporting(false); setError(''); setNotice(''); setRouteSearch(''); setLibrarySearch(''); setTab('route'); setLibraryDelete(null);
+    setView('overview'); setOverviewBrowsing(emptyOverviewBrowsing()); selectRoute(null); setLibrary([]); setPointEditor(null); setImporting(false); setError(''); setNotice(''); setRouteSearch(''); setLibrarySearch(''); setTab('route'); setLibraryDelete(null);
     if (!projectId) return;
     setLoading(true);
     const read = captureRead();
@@ -101,6 +110,33 @@ export default function Workbench() {
       setLibrary(nextLibrary);
     }).catch((failure) => { if (epoch === selection.current) setError(errorMessage(failure)); }).finally(() => { if (epoch === selection.current) setLoading(false); });
   }, [projectId, selectRoute, captureRead, isSessionCurrent]);
+
+  useEffect(() => {
+    if (focusRequest === consumedFocus.current) return;
+    consumedFocus.current = focusRequest;
+    document.getElementById(view === 'overview' ? 'route-overview' : 'line-editor')?.focus({ preventScroll: true });
+  }, [focusRequest, view]);
+
+  function openRoute(item: Route) {
+    if (busy) return;
+    selectRoute(item); setView('workbench'); setTab('route'); setError(''); setNotice(''); setNavigationOpen(false); requestFocus((current) => current + 1);
+    const read = captureRead();
+    request<Route>(routePath(item)).then((next) => applyRoute(next, read)).catch((failure) => {
+      if (isReadCurrent(read) && routeRef.current?.id === item.id) setError(errorMessage(failure));
+    });
+  }
+
+  function showWorkbench(nextTab: 'route' | 'library' = 'route') {
+    const recent = routesRef.current.find((item) => item.id === routeRef.current?.id) ?? routesRef.current[0];
+    if (recent) openRoute(recent);
+    else { selectRoute(null); setView('workbench'); requestFocus((current) => current + 1); }
+    setTab(nextTab); setNavigationOpen(false);
+  }
+
+  function showOverview() {
+    setView('overview'); setError(''); setNotice(''); requestFocus((current) => current + 1);
+    void refreshRoutes();
+  }
 
   async function perform(action: () => Promise<void>, message?: string) {
     if (busy) return;
@@ -133,7 +169,7 @@ export default function Workbench() {
         try {
           const next = await request<Route>(editor.id && routeRef.current ? routePath(routeRef.current) : `/api/projects/${projectId}/routes`, editor.id ? 'PATCH' : 'POST', { name: editor.name.trim() });
           if (!commitRoute(next, write)) return;
-          selectRoute(next); setTab('route'); setRouteSearch(''); setNavigationOpen(false);
+          selectRoute(next); setView('workbench'); setTab('route'); setRouteSearch(''); setNavigationOpen(false); requestFocus((current) => current + 1);
         } finally { endWrite(write); }
       }
       setEditor(null);
@@ -279,7 +315,7 @@ export default function Workbench() {
   const currentStep = valid ? 2 : planningRunning || (route?.points.length ?? 0) >= 2 ? 1 : 0;
 
   return <div className="app-shell">
-    <a className="skip-link" href="#line-editor">跳到线路编辑</a>
+    <a className="skip-link" href={project ? view === 'overview' ? '#route-overview' : '#line-editor' : '#workspace-content'}>{project ? view === 'overview' ? '跳到线路总览' : '跳到线路编辑' : '跳到主内容'}</a>
     <aside className={`sidebar ${navigationOpen ? 'navigation-open' : ''}`} aria-label="项目与线路导航">
       <div className="brand-row"><a href="/" className="brand" aria-label="重途首页"><BrandLogo /></a><Button className="navigation-toggle" aria-label={navigationOpen ? '收起项目与线路' : '展开项目与线路'} aria-expanded={navigationOpen} aria-controls="workspace-navigation" onClick={() => setNavigationOpen((open) => !open)}>{navigationOpen ? <X /> : <Menu />}</Button></div>
       <div className="mobile-context"><span>{project?.name ?? '我的项目'}</span><ChevronDown aria-hidden="true" /><span>{route?.name ?? '选择或创建线路'}</span></div>
@@ -290,24 +326,25 @@ export default function Workbench() {
         {project && <section className="route-sidebar" aria-label="项目线路">
           <div className="panel-heading"><div><h2>线路</h2><span className="count">{routes.length}</span></div><Button className="text-button" disabled={busy || loading} onClick={() => setEditor({ kind: 'route', name: '' })}><Plus />新建线路</Button></div>
           <div className="nav-search"><Search aria-hidden="true" /><Input aria-label="搜索线路" placeholder="搜索线路" value={routeSearch} onChange={(event) => setRouteSearch(event.target.value)} />{routeSearch && <Button className="search-clear" aria-label="清除线路搜索" onClick={() => setRouteSearch('')}><X /></Button>}</div>
-          <div className="route-list">{visibleRoutes.map((item) => <Button key={item.id} className={`route-item ${item.id === route?.id ? 'active' : ''}`} aria-pressed={item.id === route?.id} onClick={() => { if (!busy) { selectRoute(item); setTab('route'); setError(''); setNotice(''); setNavigationOpen(false); const read = captureRead(); request<Route>(routePath(item)).then((next) => applyRoute(next, read)).catch((failure) => { if (isReadCurrent(read) && routeRef.current?.id === item.id) setError(errorMessage(failure)); }); } }}><span className="route-item-name">{item.name}</span><span className="route-item-meta"><span>{item.points.length} 个点位</span><span className={`status status-${routeStatus(item)}`}>{routeStatus(item)}</span></span></Button>)}</div>
+          <div className="route-list">{visibleRoutes.map((item) => <Button key={item.id} className={`route-item ${item.id === route?.id ? 'active' : ''}`} aria-pressed={item.id === route?.id} onClick={() => openRoute(item)}><span className="route-item-name">{item.name}</span><span className="route-item-meta"><span>{item.points.length} 个点位</span><span className={`status status-${routeStatus(item)}`}>{routeStatus(item)}</span></span></Button>)}</div>
           {routes.length > 0 && !visibleRoutes.length && <div className="empty compact"><Search /><p>没有匹配的线路</p><Button className="text-button" onClick={() => setRouteSearch('')}>清除筛选</Button></div>}
           {!routes.length && routesLoaded && <div className="empty compact"><RouteIcon /><p>还没有线路</p><small>创建线路后，按顺序添加起点、途经点和终点。</small></div>}
-          <div className="project-summary"><div><MapPin aria-hidden="true" /><span>项目点位库</span><strong>{library.length} <small>个点位</small></strong></div><Button className="text-button" onClick={() => { setTab('library'); setNavigationOpen(false); }}>管理点位库 <ArrowRight /></Button></div>
+          <div className="project-summary"><div><MapPin aria-hidden="true" /><span>项目点位库</span><strong>{library.length} <small>个点位</small></strong></div><Button className="text-button" onClick={() => showWorkbench('library')}>管理点位库 <ArrowRight /></Button></div>
         </section>}
         <div className="sidebar-bottom"><span className="connection-dot" />本机工作台<span className="local-caption">项目资料自动保存在本机</span></div>
       </div>
     </aside>
 
-    <main className="workspace">
-      <header className="topbar"><div className="workspace-title"><h1>{project?.name ?? '让每一段行程心中有数'}</h1><p>{project ? '线路规划工作台' : '重途 · 行前线路与里程测算'}</p></div><div className="toolbar">{project && <><Button className="icon-button" aria-label="重命名项目" title="重命名项目" onClick={() => setEditor({ kind: 'project', id: project.id, name: project.name })}><Pencil /></Button><Button className="icon-button danger-text" aria-label="删除项目" title="删除项目" onClick={() => setConfirmDelete('project')}><Trash2 /></Button><span className="toolbar-divider" /><Button className="button" aria-label="刷新线路" disabled={refreshing} onClick={() => void refreshRoutes()}><RefreshCw />{refreshing ? '正在刷新' : '刷新线路'}</Button><Button className="button" disabled={busy || loading} onClick={() => downloadExport()}><Download />导出项目</Button></>}</div></header>
+    <main className="workspace" id="workspace-content" tabIndex={-1}>
+      <header className="topbar"><div className="workspace-title"><h1>{project?.name ?? '让每一段行程心中有数'}</h1><p>{project ? view === 'overview' ? '项目线路总览' : '线路规划工作台' : '重途 · 行前线路与里程测算'}</p></div><div className="toolbar">{project && <><Button className="icon-button" aria-label="重命名项目" title="重命名项目" onClick={() => setEditor({ kind: 'project', id: project.id, name: project.name })}><Pencil /></Button><Button className="icon-button danger-text" aria-label="删除项目" title="删除项目" onClick={() => setConfirmDelete('project')}><Trash2 /></Button><span className="toolbar-divider" /><Button className="button" aria-label="刷新线路" disabled={refreshing} onClick={() => void refreshRoutes()}><RefreshCw />{refreshing ? '正在刷新' : '刷新线路'}</Button><Button className="button" disabled={busy || loading} onClick={() => downloadExport()}><Download />导出项目</Button></>}</div></header>
       <div className="capability-notice"><AlertTriangle aria-hidden="true" /><div><strong>行前测算参考</strong><span>{PLANNING_NOTICE}</span></div><small>普通驾车测算</small></div>
       {refreshError && <div className="message error" role="alert"><span>读取项目线路失败：{refreshError}</span><Button className="text-button" disabled={refreshing} onClick={() => void refreshRoutes()}>重试读取线路</Button></div>}
       {error && <div className="message error" role="alert"><span>{error}</span><Button aria-label="关闭错误提示" onClick={() => setError('')}><X /></Button></div>}
       {(notice || canUndo) && <div className="message success" role="status"><div className="message-copy">{notice && <span>{notice}</span>}{canUndo && <span>已移除点位 {removedPoint!.point.name}</span>}</div>{canUndo && <Button className="undo-button" disabled={busy} onClick={undoPointRemoval}>撤销移除</Button>}<Button aria-label="关闭成功提示" onClick={() => { setNotice(''); setRemovedPoint(null); }}><X /></Button></div>}
       {project && loading && <p className="message" role="status">正在加载项目线路与点位库…</p>}
-      {!project ? <div className="welcome" id="line-editor"><span className="welcome-mark"><BrandLogo variant="mark" /></span><h2>从一个项目，规划下一程</h2><p>集中管理线路和点位，预览行驶方案，<br />将区间与里程导出为清晰的 Excel 表格。</p><Button className="button primary" onClick={() => setEditor({ kind: 'project', name: '' })}>创建第一个项目</Button><small>个人使用 · 本机保存 · 手动规划</small></div> : <>
-        <ol className="workflow" aria-label="线路规划流程">{[{ label: '编排点位', detail: '按实际行驶顺序' }, { label: '测算线路', detail: planningReady ? '逐段计算并汇总' : '先完成测算配置' }, { label: '核对与导出', detail: '地图与里程保持一致' }].map((step, index) => <li className={index === currentStep ? 'current' : index < currentStep ? 'complete' : ''} key={step.label} aria-current={index === currentStep ? 'step' : undefined}><span className="workflow-number">{index < currentStep ? <Check /> : index + 1}</span><div><span>{step.label}</span><small>{step.detail}</small></div>{index < 2 && <ArrowRight className="workflow-arrow" aria-hidden="true" />}</li>)}</ol>
+      {project && <div className="project-modebar"><div className="project-views" role="group" aria-label="项目主视图"><Button aria-pressed={view === 'overview'} className={view === 'overview' ? 'active' : ''} onClick={showOverview}>线路总览</Button><Button aria-pressed={view === 'workbench'} className={view === 'workbench' ? 'active' : ''} onClick={() => showWorkbench()}>线路工作台</Button></div>{view === 'workbench' && <ol className="workflow" aria-label="线路规划流程">{[{ label: '编排点位', detail: '按实际行驶顺序' }, { label: '测算线路', detail: planningReady ? '逐段计算并汇总' : '先完成测算配置' }, { label: '核对与导出', detail: '地图与里程保持一致' }].map((step, index) => <li className={index === currentStep ? 'current' : index < currentStep ? 'complete' : ''} key={step.label} aria-current={index === currentStep ? 'step' : undefined}><span className="workflow-number">{index < currentStep ? <Check /> : index + 1}</span><div><span>{step.label}</span><small>{step.detail}</small></div>{index < 2 && <ArrowRight className="workflow-arrow" aria-hidden="true" />}</li>)}</ol>}</div>}
+      {!project ? <div className="welcome" id="line-editor"><span className="welcome-mark"><BrandLogo variant="mark" /></span><h2>从一个项目，规划下一程</h2><p>集中管理线路和点位，预览行驶方案，<br />将区间与里程导出为清晰的 Excel 表格。</p><Button className="button primary" onClick={() => setEditor({ kind: 'project', name: '' })}>创建第一个项目</Button><small>个人使用 · 本机保存 · 手动规划</small></div> : view === 'overview' ? <RouteOverview key={projectId} browsing={overviewBrowsing} onBrowsingChange={setOverviewBrowsing} planningRequests={planningRequests} routes={routes.filter((item) => item.projectId === projectId)} loaded={routesLoaded} refreshError={refreshError} onOpen={openRoute} onCreate={() => setEditor({ kind: 'route', name: '' })} createDisabled={busy || loading} /> : <>
+
         <div className="workbench-grid">
         <section className="editor-panel panel" aria-label="线路编辑" id="line-editor" tabIndex={-1}>
           <div className="tabs" role="group" aria-label="编辑内容"><Button aria-pressed={tab === 'route'} className={tab === 'route' ? 'active' : ''} onClick={() => setTab('route')}>线路点位</Button><Button aria-pressed={tab === 'library'} className={tab === 'library' ? 'active' : ''} onClick={() => setTab('library')}>项目点位库 <span>{library.length}</span></Button></div>

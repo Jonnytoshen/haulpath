@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { startApplication, jsonRequest } from './helpers/application.mjs';
+import { assertOverview, openRouteFromSidebar } from './helpers/browser-navigation.mjs';
 
 async function openWorkbench(environment = {}) {
   const app = await startApplication({ AMAP_JS_KEY: '', AMAP_JS_SECURITY_CODE: '', AMAP_WEB_SERVICE_KEY: '', ...environment });
@@ -41,15 +42,28 @@ test('planning completion updates a route after the planner opens another route'
     ] })).body;
     await request(`/api/routes/${routeA.id}?projectId=${project.id}`, 'PATCH', { points, expectedVersion: routeA.inputVersion });
     await page.goto(app.baseUrl);
+    await assertOverview(page);
+    await openRouteFromSidebar(page, routeA.name);
     await page.getByRole('heading', { name: routeA.name, exact: true }).waitFor();
     await page.getByRole('button', { name: '开始规划', exact: true }).click();
     await started;
     await page.getByRole('region', { name: '项目线路', exact: true }).locator('.route-item').filter({ hasText: '继续编辑的线路 B' }).click();
     await page.getByRole('heading', { name: '继续编辑的线路 B', exact: true }).waitFor();
+    await page.getByRole('button', { name: '线路总览', exact: true }).click();
+    const overview = await assertOverview(page);
+    const rowA = overview.getByRole('row').filter({ has: page.getByRole('button', { name: routeA.name, exact: true }) });
+    await rowA.getByText('规划中 0/1', { exact: true }).waitFor();
+    await page.getByRole('button', { name: '线路工作台', exact: true }).click();
+    await page.getByRole('heading', { name: '继续编辑的线路 B', exact: true }).waitFor();
     finishPlanning();
     await page.getByRole('region', { name: '项目线路', exact: true }).locator('.route-item').filter({ hasText: routeA.name }).getByText('已规划', { exact: true }).waitFor({ timeout: 10000 });
     assert.equal(await page.getByRole('heading', { name: '继续编辑的线路 B', exact: true }).isVisible(), true);
     assert.equal(await page.getByText('路线方案已完整保存', { exact: true }).count(), 0, 'completion on another route does not show a success notice for the current route');
+    await page.getByRole('button', { name: '线路总览', exact: true }).click();
+    await rowA.getByText('已规划', { exact: true }).waitFor();
+    assert.equal(await rowA.getByRole('cell').nth(5).innerText(), '1.001');
+    await page.getByRole('button', { name: '线路工作台', exact: true }).click();
+    await page.getByRole('heading', { name: '继续编辑的线路 B', exact: true }).waitFor();
     assert.deepEqual(context.errors, []);
   } finally {
     finishPlanning();
@@ -66,6 +80,8 @@ test('project refresh preserves saved routes when an older list response arrives
     const project = (await jsonRequest(app.baseUrl, '/api/projects', 'POST', { name: '刷新与保存项目' })).body;
     await jsonRequest(app.baseUrl, `/api/projects/${project.id}/routes`, 'POST', { name: '保存前的线路' });
     await page.goto(app.baseUrl);
+    await assertOverview(page);
+    await openRouteFromSidebar(page, '保存前的线路');
     await page.getByRole('heading', { name: '保存前的线路', exact: true }).waitFor();
     let started;
     const ready = new Promise((resolve) => { started = resolve; });
@@ -102,6 +118,8 @@ test('delayed project refresh cannot remove a new route, revive a deleted route 
     const project = (await jsonRequest(app.baseUrl, '/api/projects', 'POST', { name: '写入竞争项目' })).body;
     const first = (await jsonRequest(app.baseUrl, `/api/projects/${project.id}/routes`, 'POST', { name: '已有线路' })).body;
     await page.goto(app.baseUrl);
+    await assertOverview(page);
+    await openRouteFromSidebar(page, first.name);
     await page.getByRole('heading', { name: first.name, exact: true }).waitFor();
     for (const action of ['preference', 'create', 'delete']) {
       let started;
@@ -148,6 +166,8 @@ test('returning to a project creates a new session that ignores old reads and er
     const projectB = (await jsonRequest(app.baseUrl, '/api/projects', 'POST', { name: '会话项目 B' })).body;
     await jsonRequest(app.baseUrl, `/api/projects/${projectB.id}/routes`, 'POST', { name: '会话 B 线路' });
     await page.goto(app.baseUrl);
+    await assertOverview(page);
+    await openRouteFromSidebar(page, routeA.name);
     await page.getByRole('heading', { name: routeA.name, exact: true }).waitFor();
     for (const outcome of ['success', 'error']) {
       let started;
@@ -164,10 +184,14 @@ test('returning to a project creates a new session that ignores old reads and er
       });
       await page.getByRole('button', { name: '刷新线路', exact: true }).click(); await ready;
       await page.getByRole('button', { name: projectB.name, exact: true }).click();
+      await assertOverview(page);
+      await openRouteFromSidebar(page, '会话 B 线路');
       await page.getByRole('heading', { name: '会话 B 线路', exact: true }).waitFor();
       const name = `会话 A 已保存 ${outcome}`;
       await jsonRequest(app.baseUrl, `/api/routes/${routeA.id}?projectId=${projectA.id}`, 'PATCH', { name });
       await page.getByRole('button', { name: projectA.name, exact: true }).click();
+      await assertOverview(page);
+      await openRouteFromSidebar(page, name);
       await page.getByRole('heading', { name, exact: true }).waitFor();
       release(); await page.waitForLoadState('networkidle'); await page.unroute(pattern);
       assert.deepEqual(await page.locator('.route-item-name').allTextContents(), [name]);
@@ -201,6 +225,8 @@ test('running project refreshes stay serial, retain data on network failure and 
     ] })).body;
     await jsonRequest(app.baseUrl, `/api/routes/${routeA.id}?projectId=${project.id}`, 'PATCH', { points, expectedVersion: routeA.inputVersion });
     await page.goto(app.baseUrl);
+    await assertOverview(page);
+    await openRouteFromSidebar(page, routeA.name);
     await page.getByRole('heading', { name: routeA.name, exact: true }).waitFor();
     let reads = 0, ready;
     const arrived = new Promise((resolve) => { ready = resolve; });
@@ -253,6 +279,8 @@ test('first list failure offers retry and native window focus refreshes saved pr
     await page.getByRole('alert').filter({ hasText: '读取项目线路失败' }).waitFor();
     assert.equal(await page.getByText('还没有线路', { exact: true }).count(), 0, 'failed initial loading is not an empty project');
     await page.getByRole('button', { name: '重试读取线路', exact: true }).click();
+    await assertOverview(page);
+    await openRouteFromSidebar(page, route.name);
     await page.getByRole('heading', { name: route.name, exact: true }).waitFor();
     const cdp = await page.context().newCDPSession(page);
     await cdp.send('Emulation.setFocusEmulationEnabled', { enabled: false });

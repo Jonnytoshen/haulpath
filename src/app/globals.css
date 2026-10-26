@@ -444,3 +444,54 @@ td { padding: 13px 16px; border-bottom: 1px solid #edf1ed; font-size: 12px; font
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
 }
+
+.project-views { display: flex; flex-shrink: 0; gap: 24px; margin: 14px 0; border-bottom: 1px solid var(--border); }
+.project-views button { height: 42px; padding: 0; border-radius: 0; border-bottom: 2px solid transparent; color: var(--secondary); font-size: 13px; }
+.project-views button:hover { background: transparent; color: var(--primary); }
+.project-views button.active { color: var(--primary); border-color: var(--primary); }
+.route-overview { display: flex; flex: 1; min-height: 0; flex-direction: column; }
+.route-overview > .panel-heading { flex-shrink: 0; }
+.overview-count { font-size: 12px; color: var(--secondary); font-variant-numeric: tabular-nums; }
+.overview-scroll { min-height: 0; flex: 1; overflow: auto; overscroll-behavior: contain; }
+.overview-table { table-layout: fixed; min-width: 1160px; }
+.overview-table th { position: sticky; top: 0; z-index: 1; background: #f3f6f4; font-weight: 550; }
+.overview-table td { vertical-align: top; line-height: 1.7; overflow-wrap: anywhere; }
+.overview-table .overview-number { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.overview-name-col { width: 160px; }
+.overview-points-col { width: 300px; }
+.overview-count-col { width: 72px; }
+.overview-strategy-col { width: 166px; }
+.overview-status-col { width: 160px; }
+.overview-distance-col { width: 120px; }
+.overview-time-col { width: 182px; }
+.overview-route-name { justify-content: flex-start; display: inline; height: auto; padding: 0; white-space: normal; text-align: left; color: var(--primary); font-size: 13px; font-weight: 550; line-height: 1.7; border-radius: 3px; }
+.overview-route-name:hover { text-decoration: underline; background: transparent; }
+.overview-muted { color: var(--secondary); }
+.overview-time { font-variant-numeric: tabular-nums; }
+@media (max-width: 900px) { .route-overview { min-height: 420px; } .overview-scroll { max-height: 65dvh; flex: none; } }
+@media (max-width: 640px) { .route-overview > .panel-heading { padding-inline: 16px; } .project-views { margin-block: 12px; } }
+
+.overview-controls { display: flex; flex-shrink: 0; align-items: flex-end; gap: 14px; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.overview-controls > label { display: flex; flex: 0 0 160px; min-width: 0; flex-direction: column; gap: 6px; color: var(--secondary); font-size: 12px; }
+.overview-controls > .overview-search { flex: 1; }
+.overview-search > div { position: relative; }
+.overview-search svg { position: absolute; top: 12px; left: 11px; width: 15px; height: 15px; pointer-events: none; }
+.overview-search input { padding-left: 34px; }
+.overview-controls input, .overview-controls select { height: 38px; font-size: 13px; color: var(--foreground); background: white; }
+.overview-task { display: block; margin-top: 5px; font-size: 12px; color: var(--secondary); }
+.overview-task-error { color: #a43a30; }
+@media (max-width: 640px) { .overview-controls { flex-wrap: wrap; gap: 12px; padding: 14px 16px; } .overview-controls > .overview-search { flex-basis: 100%; } .overview-controls > label { flex: 1; } }
+
+.overview-points { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.overview-points.expanded { display: block; -webkit-line-clamp: unset; overflow: visible; }
+.overview-expand { margin-top: 4px; min-height: 28px; font-size: 12px; }
+
+.project-modebar { flex-shrink: 0; }
+@media (min-width: 901px) and (max-height: 800px) {
+  .project-modebar { display: flex; align-items: center; gap: 20px; padding-block: 4px; }
+  .project-modebar .project-views { flex: 0 0 auto; margin: 0; }
+  .project-modebar .project-views button { height: 36px; }
+  .project-modebar .workflow { flex: 1; justify-content: flex-end; gap: 18px; padding: 0; }
+  .project-modebar .workflow-arrow { margin-left: 8px; }
+}
+@media (min-width: 901px) and (max-width: 1100px) and (max-height: 800px) { .project-modebar .workflow { gap: 12px; } .project-modebar .workflow-arrow { display: none; } }
