@@ -10,7 +10,7 @@
 - 使用 pnpm、Next.js App Router、TypeScript；同一应用提供网页与本机服务端接口，开发与生产默认监听 `127.0.0.1`。
 - 数据持久化使用 SQLite / `better-sqlite3`；Excel 读写使用 ExcelJS，CSV 解析使用 `csv-parse`。
 - 地图使用高德 JS API 2.0 与官方 `@amap/amap-jsapi-loader`；驾车测算由服务端调用高德 Web 服务 v5。
-- UI 使用 shadcn/ui 和 Tailwind CSS；图标统一使用 Lucide Icons（`lucide-react`），界面不使用 emoji 图标。
+- UI 使用 shadcn/ui 和 Tailwind CSS；功能图标统一使用 Lucide Icons（`lucide-react`），界面不使用 emoji 图标。品牌标志使用原创 HaulPath 资产，遵循[品牌标志规范](docs/brand.md)；不以品牌标志替换业务功能图标。
 
 ## 命令与验证
 
