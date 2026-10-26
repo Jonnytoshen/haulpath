@@ -76,6 +76,55 @@ test('planner selects grouped preferences with descriptions, keyboard focus and 
   } finally { await context.close(); }
 });
 
+// This verifies integrated public behavior; a direct green result is not a bug-fix red phase.
+test('new route drafts inherit project preferences after viewing old routes, reloading and opening another browser context', { timeout: 120000 }, async () => {
+  const context = await openWorkbench();
+  const { page, app, browser } = context;
+  let otherBrowserContext;
+  try {
+    await page.goto(app.baseUrl);
+    await createProject(page, '偏好继承项目');
+    await createRoute(page, '原有推荐线路');
+    assert.equal(await page.getByLabel('规划偏好', { exact: true }).inputValue(), '32');
+    await createRoute(page, '主动选择组合线路');
+    await Promise.all([
+      page.waitForResponse((response) => response.request().method() === 'PATCH' && response.url().includes('/api/routes/') && response.ok()),
+      page.getByLabel('规划偏好', { exact: true }).selectOption('43'),
+    ]);
+    await page.waitForFunction(() => document.getElementById('strategy')?.value === '43' && !document.getElementById('strategy')?.disabled);
+
+    await page.getByRole('region', { name: '项目线路', exact: true }).locator('.route-item').filter({ has: page.getByText('原有推荐线路', { exact: true }) }).click();
+    await page.getByRole('heading', { name: '原有推荐线路', exact: true }).waitFor();
+    assert.equal(await page.getByLabel('规划偏好', { exact: true }).inputValue(), '32', 'viewing an old route must retain its own preference');
+    await createRoute(page, '查看旧线后继承');
+    assert.equal(await page.getByLabel('规划偏好', { exact: true }).inputValue(), '43');
+
+    await page.reload();
+    await page.getByRole('heading', { name: '原有推荐线路', exact: true }).waitFor();
+    assert.equal(await page.getByLabel('规划偏好', { exact: true }).inputValue(), '32');
+    await createRoute(page, '刷新后继承');
+    assert.equal(await page.getByLabel('规划偏好', { exact: true }).inputValue(), '43');
+
+    otherBrowserContext = await browser.newContext({ viewport: { width: 1600, height: 1050 } });
+    const otherPage = await otherBrowserContext.newPage();
+    otherPage.on('pageerror', (error) => context.errors.push(error.message));
+    await otherPage.goto(app.baseUrl);
+    await otherPage.getByRole('heading', { name: '原有推荐线路', exact: true }).waitFor();
+    assert.equal(await otherPage.getByLabel('规划偏好', { exact: true }).inputValue(), '32');
+    await createRoute(otherPage, '新浏览器上下文继承');
+    assert.equal(await otherPage.getByLabel('规划偏好', { exact: true }).inputValue(), '43');
+
+    await createProject(otherPage, '独立偏好项目');
+    await createRoute(otherPage, '独立项目初始线路');
+    assert.equal(await otherPage.getByLabel('规划偏好', { exact: true }).inputValue(), '32');
+    await otherPage.getByRole('button', { name: '偏好继承项目', exact: true }).click();
+    await otherPage.getByRole('heading', { name: '原有推荐线路', exact: true }).waitFor();
+    await createRoute(otherPage, '切回项目后继承');
+    assert.equal(await otherPage.getByLabel('规划偏好', { exact: true }).inputValue(), '43');
+    assert.deepEqual(context.errors, []);
+  } finally { await otherBrowserContext?.close(); await context.close(); }
+});
+
 test('project loading blocks dependent writes and late responses cannot replace another project', { timeout: 120000 }, async () => {
   const context = await openWorkbench();
   const { page, app } = context;
