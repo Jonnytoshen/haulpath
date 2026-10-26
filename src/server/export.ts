@@ -9,7 +9,7 @@ const overviewColumns = [
   { header: '终点', key: 'destination', width: 24 },
   { header: '有序点位', key: 'points', width: 60 },
   { header: '总里程（km）', key: 'distance', width: 18, style: { numFmt: '0.000' } },
-  { header: '规划偏好', key: 'strategy', width: 16 },
+  { header: '规划偏好', key: 'strategy', width: 32, style: { alignment: { wrapText: true } } },
   { header: '计算时间', key: 'calculatedAt', width: 24 },
   { header: '状态', key: 'status', width: 14 },
 ];
