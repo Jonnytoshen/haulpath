@@ -127,6 +127,36 @@ test('progress is observable while the previous complete result remains intact u
   assert.equal(completed.body.planning, null);
 });
 
+test('same-value explicit saves remember the selection without interrupting a running task or invalidating its snapshot', async () => {
+  const route = await createRoute(32);
+  const projectId = route.route.projectId;
+  handleUpstream = (_url, response) => drivingResponse(response);
+  const previous = (await request(route.plan, 'POST')).body.snapshot;
+  assert.equal((await request(`/api/projects/${projectId}/routes`, 'POST', { name: '另一个显式选择', strategy: 43 })).status, 201);
+  const started = deferred();
+  const release = deferred();
+  let count = 0;
+  handleUpstream = async (_url, response) => {
+    if (++count === 1) { started.resolve(); await release.promise; }
+    drivingResponse(response);
+  };
+  const pending = request(route.plan, 'POST');
+  try {
+    await started.promise;
+    const running = (await request(route.path)).body;
+    assert.equal((await request(`/api/projects/${projectId}/routes`, 'POST', { name: '规划不改变项目最近选择' })).body.strategy, 43);
+    const same = await request(route.path, 'PATCH', { strategy: 32, expectedVersion: running.inputVersion });
+    assert.equal(same.status, 200);
+    assert.equal(same.body.inputVersion, running.inputVersion);
+    assert.deepEqual(same.body.planning, running.planning);
+    assert.deepEqual(same.body.snapshot, previous);
+    assert.equal((await request(`/api/projects/${projectId}/routes`, 'POST', { name: '同值保存后继承' })).body.strategy, 32);
+  } finally { release.resolve(); }
+  const completed = await pending;
+  assert.equal(completed.status, 200);
+  assert.equal(completed.body.snapshot.inputVersion, previous.inputVersion);
+});
+
 test('a failed leg reports its interval and preserves the entire previous result for fresh and stale inputs', async () => {
   for (const state of ['first', 'valid', 'stale']) {
     const route = await createRoute();
@@ -149,6 +179,8 @@ test('a failed leg reports its interval and preserves the entire previous result
     assert.equal(current.planning.completed, 1);
     assert.equal(current.planning.error, failed.body.error);
     if (state !== 'first') assert.equal(current.inputVersion === current.snapshot.inputVersion, state === 'valid');
+    const inherited = await request(`/api/projects/${route.route.projectId}/routes`, 'POST', { name: '失败后保留已保存选择' });
+    assert.equal(inherited.body.strategy, state === 'stale' ? 34 : 32);
   }
 });
 
