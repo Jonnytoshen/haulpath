@@ -15,10 +15,7 @@
 ```sh
 pnpm install --frozen-lockfile --ignore-scripts
 test -e .env.local || cp .env.example .env.local
-pnpm run dev
 ```
-
-打开 [http://127.0.0.1:3000](http://127.0.0.1:3000)。应用默认只监听本机 `127.0.0.1`。端口占用时可以使用 `pnpm run dev --port 3001`。环境变量修改后需重启服务。
 
 在 `.env.local` 填写自己的高德凭证：
 
@@ -29,18 +26,18 @@ pnpm run dev
 | `AMAP_JS_SECURITY_CODE` | 与 JS Key 配套的安全密钥，服务端通过受控代理使用 |
 | `HAULPATH_DB_PATH` | SQLite 路径，默认 `./data/haulpath.sqlite`；相对路径以启动目录为准 |
 
-配置统一使用 `HAULPATH_DB_PATH`、测试变量 `HAULPATH_TEST_MODE`，默认数据库为 `data/haulpath.sqlite`。
-
 Web 服务 Key 与 JS 安全密钥不发送到浏览器。请按高德控制台要求配置对应服务权限与本机访问来源。无凭证时仍可管理项目、线路草稿、GCJ-02 点位及导出；地图、规划和 WGS84 转换会提示缺少相应配置。
 
-生产模式：
+配置完成后构建并启动：
 
 ```sh
 pnpm run build
 pnpm run start
 ```
 
-`build` 使用 `next build --webpack`。当前受限环境的默认 Turbopack 生产构建曾遇到权限失败，webpack 构建及生产启动已实际验证。项目使用 Next.js App Router、TypeScript、SQLite / better-sqlite3、ExcelJS；界面采用 shadcn/ui、Tailwind CSS 和 Lucide Icons。
+打开 [http://127.0.0.1:3000](http://127.0.0.1:3000)。应用默认只监听本机 `127.0.0.1`。端口占用时可以使用 `pnpm run start --port 3001`。环境变量修改后需重启服务；`build` 使用 `next build --webpack`。
+
+项目资料保存在本机 SQLite，默认位置为 `data/haulpath.sqlite`。**同一数据库仅运行一个应用服务**，包括不同端口、开发与生产模式和不同工作副本；切换前先停止原服务。数据位置、备份与恢复见[运行维护](docs/operations.md)。
 
 ## 使用流程
 
@@ -57,7 +54,15 @@ pnpm run start
 
 项目、点库、线路及最近成功方案由本机服务写入 SQLite；更换浏览器不丢失项目数据。请阅读 [备份、恢复与配置排查](docs/operations.md)，备份时不能在线直接复制 SQLite 主文件。
 
-## 验证与开发
+## 开发与验证
+
+项目使用 Next.js App Router、TypeScript、SQLite / better-sqlite3、ExcelJS；界面采用 shadcn/ui、Tailwind CSS 和 Lucide Icons。开发时使用以下入口，默认同样只监听本机；端口可通过 `--port 3001` 指定：
+
+```sh
+pnpm run dev
+```
+
+验证入口：
 
 ```sh
 pnpm run typecheck
@@ -70,16 +75,16 @@ pnpm run test:release
 pnpm test
 ```
 
-API 与浏览器测试会启动真实本机应用并使用临时 SQLite，下载和读取实际 Excel 文件；仅高德 HTTP 服务及地图 SDK 使用可控替身。`test:api` 的备份恢复用例需要系统 `sqlite3` 命令。浏览器测试默认使用已安装的 Google Chrome；可用 `PLAYWRIGHT_CHROMIUM_CHANNEL` 选择其他已安装的 Playwright 浏览器 channel。请串行运行这些命令，不要让多个 Next 开发服务共享本工作副本的 `.next`。
+API 与浏览器测试会启动真实本机应用并使用临时 SQLite，下载和读取实际 Excel 文件；仅高德 HTTP 服务及地图 SDK 使用可控替身。浏览器测试默认使用已安装的 Google Chrome；可用 `PLAYWRIGHT_CHROMIUM_CHANNEL` 选择其他已安装的 Playwright 浏览器 channel。请先停止当前工作副本的开发或生产服务，再串行运行这些命令，避免多个服务共享 `.next`。
 
 生产中断恢复用例先执行 webpack 构建，使用临时生产服务和真实浏览器验证重启及备份恢复后的手动重试，因此 `test:api` 与 `test:browser` 都需要系统 `sqlite3` 和已安装的浏览器。该用例在两个分类入口中有交叉；`pnpm test` 按文件只执行一次。
 
-[本轮验收记录](docs/acceptance.md) 包含完整闭环、20 点 / 100 线路 / 1,000 点库的本机观测与证据边界。**真实高德联调尚未执行**：需要配置真实凭证后完成记录中的人工清单；模拟测试不证明真实地图、搜索或重卡通行可用。
+[验收记录](docs/acceptance.md) 按日期与代码基线记录完整闭环、代表规模、发布与品牌验证及其证据边界。**真实高德联调尚未执行**：需要配置真实凭证后完成[人工联调清单](docs/acceptance.md#待真实凭证的人工联调)；模拟测试不证明真实地图、搜索或重卡通行可用。
 
-提交前阅读 [Angular 扩展提交约定](docs/agents/git-commits.md)。本次安装跳过生命周期脚本，可显式 `pnpm run prepare` 安装提交 hook；已启用独立 worktree 配置时使用该文档中的 `GIT_CONFIG` 命令。领域术语见 [GLOSSARY.md](GLOSSARY.md)，架构取舍见 [ADR](docs/adr/)；需求和工单按本地 [tracker 约定](docs/agents/issue-tracker.md) 管理。
+提交前阅读 [Angular 扩展提交约定](docs/agents/git-commits.md)。若使用上述跳过生命周期脚本的安装命令，需要安装或修复提交 hook 时显式执行 `pnpm run prepare`；已启用独立 worktree 配置时使用该文档中的 `GIT_CONFIG` 命令。领域术语见 [GLOSSARY.md](GLOSSARY.md)，架构取舍见 [ADR](docs/adr/)；需求和工单按本地 [tracker 约定](docs/agents/issue-tracker.md) 管理。
 
 ## 软件发布
 
 使用本机 Nx Release 工作流；先以 `pnpm run release --first-release --dry-run` 预览首个 `0.1.0` 正式基线。后续支持自动版本、位置参数 `patch` / `minor` / `major` / `X.Y.Z`、`--channel stable|alpha|beta|rc` 及 `--dry-run`；API 失败后使用 `pnpm run release:resume <目标tag>` 补建。完整门禁、认证、候选规则和精确恢复步骤见[发布指南](docs/releasing.md)。
 
-发布功能已完成 Node `24.21.0` 完整回归及 Node `22.12.0` 入口烟测，实际结果见[发布验证记录](docs/releasing.md#验证记录边界)。最低 Node 未运行完整套件，真实 GitHub 联调未执行。发布仅维护源码版本、日志、Git tag 与 GitHub Release，始终跳过 npm 发布，不生成安装包或自动部署。
+发布仅维护源码版本、日志、Git tag 与 GitHub Release，始终跳过 npm 发布，不生成安装包或自动部署。历史验证基线与真实服务联调边界见[验收记录](docs/acceptance.md)。

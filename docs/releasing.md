@@ -2,13 +2,13 @@
 
 重途通过本机 `pnpm` 入口调用 Nx Release，维护软件版本、`CHANGELOG.md`、发布提交和 `v` 前缀 tag，再推送到 GitHub 并创建 Release。软件包保持私有，始终跳过 npm / registry 发布；本流程不生成安装包、不部署应用，也不接入自动发布 CI。
 
-本文描述已实现的发布工作流；本机与隔离远端的实际验收见文末。真实 GitHub 发布与真实高德联调未执行。
+本文描述已实现的发布工作流；本机与隔离远端的历史验收见[验收记录](acceptance.md#2026-10-25-发布工作流验收)。真实 GitHub 发布与真实高德联调未执行。
 
 ## 环境与准备
 
 使用 Node.js `>=22.12.0`、pnpm `12.10.1`（最低 `12.0.0`），在仓库根目录安装冻结依赖。完整测试还需要系统 `sqlite3` 和已安装的 Chrome，细节见 [README](../README.md) 与[运行维护](operations.md)。Node 22.12.0 已完成冻结安装、项目发现与发布入口烟测；完整应用回归使用 Node 24.21.0，详见文末。
 
-实际发布从干净的 `main` 执行。先配置指向目标 GitHub 仓库的 Git 远端，确保远端可访问、历史未分叉、Git 推送认证有效，并为 GitHub API 配置具有目标仓库 Release 写入权限的 token。允许本机有尚未推送的合法提交，无需提前单独推送所有代码。
+实际发布从干净的 `main` 执行。发布入口固定使用 `origin`，其地址须指向目标 GitHub 仓库，支持 `https://github.com/<owner>/<repo>`、`git@github.com:<owner>/<repo>` 或 `ssh://git@github.com/<owner>/<repo>`，可带 `.git` 后缀，不允许内嵌凭证。若配置独立 `pushurl`，其文本必须与 fetch URL 完全相同。确保远端可访问、历史未分叉、Git 推送认证有效，并为 GitHub API 配置具有目标仓库 Release 写入权限的 token。允许本机有尚未推送的合法提交，无需提前单独推送所有代码。
 
 API 优先读取进程环境中的 `GITHUB_TOKEN`，其次读取 `GH_TOKEN`。通过安全的本机凭证管理方式注入进程，不把真实值写入命令示例、源码、规格、可提交环境文件或日志。API token 与 Git SSH / HTTPS 推送认证分别检查；API 可用不能证明 Git 可推送。沿用用户的 Git 身份、hook、SSH 提交签名和 tag 签名策略；签名失败应修复环境，不能通过关闭签名绕过。
 
@@ -45,7 +45,7 @@ pnpm run release --first-release --dry-run
 pnpm run release --first-release
 ```
 
-首次发布模式只用于建立 `0.1.0` 正式基线，不能重复覆盖，也不与候选渠道或手动版本混用。完成首个正式发布后，再开始 alpha / beta / rc 周期。本次发布工程实施验收不执行以上真实发布命令。
+首次发布模式只用于建立 `0.1.0` 正式基线，不能重复覆盖，也不与候选渠道或手动版本混用。完成首个正式发布后，再开始 alpha / beta / rc 周期。
 
 ## 自动版本与手动覆盖
 
@@ -109,10 +109,10 @@ Git 与 GitHub API 不是跨系统原子事务。根据命令报告的阶段处�
 | 已有发布提交与 tag，推送失败 | 保留本地结果，修复 Git 认证或远端问题，仅补推该 `main` 与目标 tag；推送完成前不创建 Release。 |
 | 推送成功，API 失败或结果不确定 | 使用该目标 tag 的恢复入口，核对或补建 Release。 |
 
-推送失败时按命令给出的远端及 tag 替换以下占位符；先确认两项仍指向该次发布结果：
+推送失败时按命令给出的 tag 替换以下占位符，远端仍使用 `origin`；先确认 main 和目标 tag 仍指向该次发布结果：
 
 ```sh
-git -c push.followTags=false push --atomic <远端> refs/heads/main:refs/heads/main refs/tags/<目标tag>:refs/tags/<目标tag>
+git -c push.followTags=false push --atomic origin refs/heads/main:refs/heads/main refs/tags/<目标tag>:refs/tags/<目标tag>
 pnpm run release:resume <目标tag> --dry-run
 pnpm run release:resume <目标tag>
 ```
@@ -125,37 +125,8 @@ pnpm run release:resume <目标tag>
 
 ## 验证记录边界
 
-`pnpm run test:release` 从公开命令贯穿真实 Nx、临时 Git 仓库、hook、文件及隔离 bare remote；仅 GitHub API 与夹具质量命令使用可控替身。评审修复后的独立入口通过 27 项，完整 `pnpm test` 再次覆盖同组发布测试；分类计数不相加。夹具不会递归调用真实完整测试，也不会向真实仓库发布。
+`pnpm run test:release` 从公开命令贯穿真实 Nx、临时 Git 仓库、hook、文件及隔离 bare remote；仅 GitHub API 与夹具质量命令使用可控替身。夹具不会递归调用真实完整测试，也不会向真实仓库发布。
 
-首次验收于 2026-10-25（Asia/Shanghai），以集成代码 `f68ae455d0c3491c6d7cdb02c4966939c8eb3dbc` 在 macOS arm64 完成以下验证。使用 pnpm `12.10.1`，仅安装当前 worktree 的 hook，保留用户 SSH 提交签名配置。
+2026-10-25 的发布工作流验收覆盖 Node `24.21.0` 完整回归，以及最低 Node `22.12.0` 的安装、项目发现、首发预览与入口烟测；详细源码、命令、结果与复测边界统一见[发布验收记录](acceptance.md#2026-10-25-发布工作流验收)。这些是对应源码的历史结果，不能代表当前 HEAD 已通过；正式发布仍须执行上述完整质量门禁。
 
-| 环境 / 检查 | 实际结果 |
-| --- | --- |
-| Node `24.21.0` 冻结安装 | `pnpm install --frozen-lockfile --offline --ignore-scripts --store-dir <本机已有全局缓存>` 通过，539 包复用、0 下载；锁文件两份 YAML 文档及既有应用依赖保留，安装未修改锁文件 |
-| Node `24.21.0` 项目发现 | `NX_DAEMON=false NX_ISOLATE_PLUGINS=false pnpm exec nx show projects` 返回 `["haulpath"]` |
-| Node `24.21.0` 本地预览 | 未配置 API token 或远端时，`pnpm run release --first-release --dry-run` 成功预览 `0.1.0`；前后版本文件、锁文件、日志、暂存区、HEAD 和 refs 不变 |
-| Node `24.21.0` 类型与构建 | `pnpm run typecheck` 与 `pnpm run build` 通过，后者实际为 `next build --webpack` |
-| Node `24.21.0` 完整串行测试 | `pnpm test` 单次串行运行 **86 项通过，0 失败、0 跳过、0 取消**，耗时约 172 秒；包含 25 项发布测试与既有 61 项应用及提交测试 |
-| Node `22.12.0` 最低入口 | 相同冻结离线安装、Nx 项目发现与真实首发 dry-run 通过；2 项发布入口烟测通过，覆盖真实 Nx、Git、隔离 bare remote 原子推送及只读恢复；前后工作区、HEAD 和 refs 不变 |
-
-评审修复于同日针对源码提交 `fe7e0e7e93921956c33ef1356c352e5f8556d2ac` 重新验证，结果如下；上表 86 项为修复前历史记录，不作为修复后通过记录。
-
-| 环境 / 检查 | 评审修复后实际结果 |
-| --- | --- |
-| Node `24.21.0` 安装与项目发现 | 相同冻结离线安装通过，539 包复用、0 下载、锁文件未变；Nx 返回 `["haulpath"]` |
-| Node `24.21.0` 发布专项与预览 | 独立 `test:release` 27/27；无 token 的真实首发预览通过，版本、锁文件、日志、暂存区、HEAD、refs 和工作区状态不变 |
-| Node `24.21.0` 类型与构建 | 重新通过 `pnpm run typecheck` 与 `pnpm run build`（`next build --webpack`） |
-| Node `24.21.0` 完整串行测试 | 单次 `pnpm test` **88/88，0 失败、0 跳过、0 取消**，约 175 秒；包含 27 项发布测试与既有 61 项应用及提交测试 |
-| Node `22.12.0` 入口烟测 | 重新通过下述 2 项真实 Nx/Git 发布与只读恢复烟测；未运行最低 Node 完整套件 |
-
-新增两个公开 CLI 回归均先确认失败，再以最小修复通过：门禁期间切换到同 HEAD 的其他分支会在写入前停止；多提交首发的预览和实际发布均保留根提交功能与破坏性变更迁移说明，并保持 `0.1.0`。首发通过 Nx 24 公开 `from`/`to` 参数指定同一个冻结 HEAD，使用其完整历史范围语义；后续仍排除上一正式 tag，候选转正回归同时确认旧基线内容不会重新进入日志。发布提交、main 和 tag 的指向在隔离发布中核对一致。
-
-从初始基线 `8e16126e7b4546cc95d9664f5597a92caf3c9d48` 开始的新增提交区间通过项目 commitlint；逐个检查提交目的、内容及 SSH 签名头，沿用用户签名配置。未配置 allowed signers，未将签名头存在写成密码学验签通过。文档本地链接与 `git diff --check` 通过。
-
-最低 Node 的两项烟测命令为：
-
-```sh
-node --test --test-name-pattern='first release writes|resume preview' tests/release-publish.test.mjs
-```
-
-最低 Node 只运行上述入口烟测，没有运行完整应用或全部发布测试。完整应用验收通过真实本机 HTTP、浏览器、临时 SQLite 与实际下载的工作簿；既有记录见[验收记录](acceptance.md)。发布用例仅在隔离仓库与可控 GitHub API 边界验证，没有创建重途真实 tag、推送真实远端或创建真实 GitHub Release。真实高德三项凭证未配置，真实地图联调未执行；未校验重卡限高、限重及货车限行。
+最低 Node 未运行完整应用或全部发布测试。真实 GitHub 发布与真实高德联调未执行；可控替身验证不能证明真实地图可用，也不提供重卡通行保证。未校验重卡限高、限重及货车限行。

@@ -112,16 +112,16 @@ Git 自动生成的 `Merge ...`、`Revert ...`、纯版本号消息没有豁免�
 
 在项目根目录使用已声明的 Node `>=22.12.0`、pnpm `12.10.1`（最低 `12.0.0`）。当前锁定的提交工具是 commitlint `20.5.3` 与 Husky `9.1.7`，兼容现有 Node 约定；应用依赖安装、启动和构建另行验证。
 
-仅安装本轮提交工具所在的开发依赖，可运行：
+仅安装提交工具所在的开发依赖，可运行：
 
 ```sh
 pnpm install --dev --ignore-scripts --frozen-lockfile
 pnpm run prepare
 ```
 
-缓存齐全时，安装命令可加 `--offline`；本轮已验证离线安装 86 个开发依赖包且无下载。安装开发依赖时通常由 `prepare` 生命周期配置 hook；若跳过生命周期脚本，或需要修复 hook，显式执行 `pnpm run prepare`。不要依赖重复安装一定会再次执行生命周期。项目仅配置 `commit-msg`，没有借机接入应用检查或 `pre-commit`。
+缓存齐全时，安装命令可加 `--offline`。安装开发依赖时通常由 `prepare` 生命周期配置 hook；若跳过生命周期脚本，或需要修复 hook，显式执行 `pnpm run prepare`。不要依赖重复安装一定会再次执行生命周期。项目仅配置 `commit-msg`，不在该 hook 中运行应用检查，也未配置 `pre-commit`。
 
-在已启用 `extensions.worktreeConfig` 的独立 worktree 中，本轮使用以下命令仅向当前 worktree 配置安装 hook，避免改变共享的 `core.hooksPath`：
+在已启用 `extensions.worktreeConfig` 的独立 worktree 中，使用以下命令仅向当前 worktree 配置安装 hook，避免改变共享的 `core.hooksPath`：
 
 ```sh
 GIT_CONFIG="$(git rev-parse --git-path config.worktree)" pnpm run prepare
@@ -149,11 +149,11 @@ pnpm run test:commits
 
 统一入口通过薄启动层执行真实 commitlint CLI，并默认传入 `--strict`。薄层补齐 commitlint `20.5.3` 跳过空消息文件及历史空消息的行为；历史范围复用官方读取 API，保持起止边界一致，消息规则仍由同一份共享配置与项目规则完成。项目关闭默认忽略，将必要空行设为错误，保留 100 字符标题上限并关闭正文与页脚行长限制；仅继承 conventional preset 不足以表达全部约定。
 
-错误返回非零退出码，并显示规则名称和修正提示。按反馈修改原消息后重新校验或提交即可；`git commit --amend` 同样执行检查。`pnpm run test:commits` 已通过 22 项测试，覆盖真实 CLI、消息文件和区间，以及隔离临时 Git 仓库中的安装修复、普通提交、修订、合并和撤销；测试不修改当前仓库签名设置。
+错误返回非零退出码，并显示规则名称和修正提示。按反馈修改原消息后重新校验或提交即可；`git commit --amend` 同样执行检查。`pnpm run test:commits` 覆盖真实 CLI、消息文件和区间，以及隔离临时 Git 仓库中的安装修复、普通提交、修订、合并和撤销；测试不修改当前仓库签名设置。历史 22 项通过记录见[提交工具验收记录](../acceptance.md#2026-10-21-提交工具验收)，不代表当前 HEAD 已重新验证。
 
 ## 检查边界与维护
 
-本机 hook 可以被 `git commit --no-verify`、`HUSKY=0` 等方式绕过，直接撤销也不能依赖它必然触发。本轮没有远端 CI、服务器端 hook 或分支保护门禁，因此执行者必须在交付前主动检查全部新增提交。
+本机 hook 可以被 `git commit --no-verify`、`HUSKY=0` 等方式绕过，直接撤销也不能依赖它必然触发。仓库未配置远端 CI，也不能假定有服务器端 hook 或分支保护门禁，因此执行者必须在交付前主动检查全部新增提交。
 
 工具检查结构、允许值、空行、SHA 形式及必要说明是否存在；执行者和审查者负责判断英文祈使句是否准确、type 和 scope 是否合适、摘要是否真实、提交是否完整、撤销目标是否正确，以及迁移说明能否执行。格式通过不能证明这些语义正确，也不能发现未声明的破坏性变更。
 
@@ -165,4 +165,4 @@ pnpm run test:commits
 
 Nx 的提交分析不以 scope 筛选软件包，现有领域 scope 无需改名。基础映射为 `feat` → minor、`fix` / `perf` → patch，其余允许类型 → none；零主版本调整使 0.x 的普通 feat、fix、perf 都递增 patch，破坏性变更递增 minor，1.x 起破坏性变更递增 major。任何允许类型的破坏性变更均须满足本文的页脚与迁移说明要求。维护提交默认不单独发版，但进入下次日志；原提交与 revert 采用 Nx 原生版本和日志配对语义，不承诺按净代码差异决定版本。
 
-发布测试和最低 Node 环境的实际验证由发布工单 04 补齐；本文保留的既有提交工具验证记录不作为新发布功能已通过的依据。
+发布工作流与最低 Node 入口的实际验证见[发布验收记录](../acceptance.md#2026-10-25-发布工作流验收)。最低 Node 未运行完整套件，真实 GitHub 发布未执行；提交工具的历史通过记录不能替代发布验证。

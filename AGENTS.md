@@ -14,11 +14,11 @@
 
 ## 命令与验证
 
-- 已实际通过 Node `24.21.0` / pnpm `12.10.1` 的 `pnpm install --frozen-lockfile --ignore-scripts`（缓存齐全时也通过 `--offline`；本轮初装显式指定现有全局 store）、`pnpm run typecheck`（先 `next typegen`）、`pnpm run build`（`next build --webpack`）。应用要求 Node `>=22.12.0`、pnpm `>=12.0.0`。
-- `pnpm run dev` 与 `pnpm run start` 均使用真实入口；生产启动须先构建。端口可通过 `--port` 指定。当前受限环境的默认 Turbopack 生产构建有权限问题，webpack 构建已验证；不要改回默认构建后沿用旧的通过记录。
-- `pnpm test` 串行运行全部 `tests/*.test.mjs`；`test:api` 覆盖所有公开接口与 SQLite 备份恢复，`test:browser` 覆盖工作台及完整闭环/代表规模，`test:commits` 运行既有 22 项提交测试；`test:release` 验证公开发布命令并纳入完整测试入口，本轮评审修复后 Node 24 完整串行入口实际通过 88 项（含 27 项发布测试），详见[发布验收](docs/releasing.md#验证记录边界)。生产中断恢复用例同时列入 API 与浏览器入口，先执行 webpack 构建；这些入口需要系统 `sqlite3` 和已安装的浏览器。默认系统 Chrome，可用 `PLAYWRIGHT_CHROMIUM_CHANNEL` 指定 channel；分类数量不可直接相加，完整测试按文件只运行一次。
+- 应用要求 Node `>=22.12.0`、pnpm `>=12.0.0`，仓库指定 pnpm `12.10.1`。依赖使用 `pnpm install --frozen-lockfile --ignore-scripts`，缓存齐全时可加 `--offline`；类型检查使用 `pnpm run typecheck`（先 `next typegen`），生产构建使用 `pnpm run build`（`next build --webpack`）。
+- `pnpm run dev` 与 `pnpm run start` 均使用真实入口；生产启动须先构建，端口可通过 `--port` 指定。更换构建器后必须重新验证，不能沿用 webpack 的通过记录。
+- `pnpm test` 串行运行全部 `tests/*.test.mjs`；`test:api` 覆盖所有公开接口与 SQLite 备份恢复，`test:browser` 覆盖工作台及完整闭环/代表规模，`test:commits` 验证提交约束，`test:release` 验证公开发布命令并纳入完整测试入口。生产中断恢复用例同时列入 API 与浏览器入口，先执行 webpack 构建；这些入口需要系统 `sqlite3` 和已安装的浏览器。默认系统 Chrome，可用 `PLAYWRIGHT_CHROMIUM_CHANNEL` 指定 channel；分类数量不可直接相加，完整测试按文件只运行一次。
 - 运行配置见 [.env.example](.env.example) 和 [README](README.md)；默认数据库为启动目录下 `data/haulpath.sqlite`，`HAULPATH_DB_PATH` 可覆盖。环境变量统一使用 `HAULPATH_DB_PATH`、`HAULPATH_TEST_MODE`。开发、生产及备份应核对同一数据库位置，不把测试临时库当作用户数据。
-- `pnpm run prepare` 显式安装或修复 hook；本轮独立 worktree 已启用 `extensions.worktreeConfig`，实际使用 `GIT_CONFIG="$(git rev-parse --git-path config.worktree)" pnpm run prepare`，仅修改当前 worktree 的 hook 配置。完整说明见[提交约定](docs/agents/git-commits.md)。
+- `pnpm run prepare` 显式安装或修复 hook；独立 worktree 已启用 `extensions.worktreeConfig` 时，使用 `GIT_CONFIG="$(git rev-parse --git-path config.worktree)" pnpm run prepare`，仅修改当前 worktree 的 hook 配置。完整说明见[提交约定](docs/agents/git-commits.md)。
 - 提交校验入口为 `printf '%s\n' 'docs(git): clarify commit checks' | pnpm run commitlint`、`pnpm run commitlint --edit <消息文件>`、`pnpm run commitlint --from <base> --to HEAD`；替换实际文件/基线，`--from` 不包含起始提交。
 - 备份与恢复按[运行维护](docs/operations.md)：在线使用 SQLite `.backup`，恢复先停服务并整体隔离旧数据库与 sidecar。代表负载与实际验证记录见[验收记录](docs/acceptance.md)；缺少真实高德凭证时不得声称真实地图联调通过。
 - 实现验收优先走浏览器完整用户流程，经过真实应用接口、SQLite 和实际下载的工作簿；仅在高德服务边界使用可控替身。
@@ -26,7 +26,7 @@
 - 纯文档改动核对链接、术语和 ADR 一致性，无需创建应用环境或测试框架。
 - 软件发布按[发布指南](docs/releasing.md)与 [ADR 0003](docs/adr/0003-prerelease-version-consistency.md)：从干净 main 执行，首发显式 `--first-release`；支持位置参数 `patch` / `minor` / `major` / `X.Y.Z`、`--channel` 与 `--dry-run`，恢复使用 `release:resume <目标tag>`。完整门禁通过后才写版本和日志，只推送 main 与本次 tag，始终跳过 npm 发布，不关闭 hook 或用户签名。
 - 候选转正保持同一基版；累计下限提高时先生成新候选。API 恢复从目标 tag 读取原始日志，只补 Release，不重做版本和 Git 操作，不覆盖人工说明或让旧版本抢占 Latest。API token 优先 `GITHUB_TOKEN`、其次 `GH_TOKEN`，与 Git 推送认证分开检查，禁止输出凭证。
-- Node `22.12.0` 为统一支持下限，已通过冻结离线安装、Nx 项目发现、首发 dry-run 与 2 项发布入口烟测；完整应用与发布回归在 Node `24.21.0` / pnpm `12.10.1` 通过（88 项）。最低 Node 未运行完整套件，真实 GitHub 与真实高德联调未执行；详见[发布指南](docs/releasing.md#验证记录边界)。
+- 实际验证按日期、源码与覆盖范围记录在[验收记录](docs/acceptance.md)，历史结果不能代表当前 HEAD 已通过。最低 Node 未运行完整套件，真实 GitHub 与真实高德联调未执行；发布验证边界见[发布指南](docs/releasing.md#验证记录边界)。
 
 ## 开始任务前
 

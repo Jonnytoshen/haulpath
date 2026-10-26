@@ -1,6 +1,6 @@
 # 本机运行与数据维护
 
-应用默认监听 `127.0.0.1`；开发使用 `pnpm run dev`，生产使用 `pnpm run build` 后 `pnpm run start`。在仓库根目录启动，默认数据库为 `data/haulpath.sqlite`。启动时自动创建目录和当前 SQLite schema。
+应用默认监听 `127.0.0.1`；开发使用 `pnpm run dev`，生产使用 `pnpm run build` 后 `pnpm run start`。在仓库根目录启动，默认数据库为 `data/haulpath.sqlite`。服务首次访问数据库时自动创建目录和当前 SQLite schema。
 
 **同一数据库仅运行一个应用服务**，包括不同端口、开发与生产模式、不同工作副本。切换前先停止原服务；SQLite 在线备份不属于第二个应用服务。
 
@@ -9,8 +9,6 @@
 ## 配置与数据位置
 
 复制 `.env.example` 为 `.env.local`，填写高德三项凭证；修改后重启服务。`HAULPATH_DB_PATH` 可为相对路径或绝对路径，更换路径会打开另一份数据库。不要把“新路径中项目为空”误认为旧资料已被删除。
-
-项目及仓库更名后，环境变量统一使用 `HAULPATH_DB_PATH` 和 `HAULPATH_TEST_MODE`，默认数据库文件名为 `data/haulpath.sqlite`。
 
 数据库使用 WAL 模式，运行时可能同时出现主文件、`-wal` 和 `-shm`。这些文件及 `.env.local`、备份均不进入 Git。保存环境文件与数据的操作权限应由本机用户控制；不要把真实密钥放进截图、工单或提交。
 
