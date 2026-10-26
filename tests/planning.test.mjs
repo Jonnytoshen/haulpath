@@ -60,12 +60,14 @@ function deferred() {
 }
 
 test('ordered adjacent planning uses each preference and the first returned path with integer meter totals', async () => {
-  for (const strategy of [32, 34, 36]) {
+  for (const strategy of [0, 1, 2, ...Array.from({ length: 14 }, (_, index) => index + 32)]) {
     const route = await createRoute(strategy);
     const requests = [];
     handleUpstream = (url, response) => { requests.push(url); drivingResponse(response, requests.length === 1 ? '1001' : '2002'); };
     const result = await request(route.plan, 'POST');
     assert.equal(result.status, 200);
+    assert.equal(result.body.strategy, strategy);
+    assert.equal(result.body.snapshot.strategy, strategy);
     assert.equal(result.body.snapshot.totalDistanceMeters, 3003);
     assert.equal(result.body.planning, null);
     assert.deepEqual(result.body.snapshot.legs.map((leg) => [leg.index, leg.from.name, leg.to.name, leg.distanceMeters]), [
@@ -82,6 +84,18 @@ test('ordered adjacent planning uses each preference and the first returned path
     assert.deepEqual(persisted.snapshot, result.body.snapshot);
     assert.equal((await request(route.path, 'PATCH', { name: '重命名后的线路' })).body.inputVersion, route.route.inputVersion);
     assert.equal(requests.length, 2);
+  }
+});
+
+test('route preferences reject unsupported values and nonnumeric types without changing saved inputs', async () => {
+  const route = await createRoute(32);
+  const invalidStrategies = [-1, 3, 31, 46, 999, 32.5, '32', null, true, {}, []];
+  for (const strategy of invalidStrategies) {
+    const created = await request(`/api/projects/${route.route.projectId}/routes`, 'POST', { name: '无效偏好', strategy });
+    assert.equal(created.status, 400, `create rejects ${JSON.stringify(strategy)}`);
+    const updated = await request(route.path, 'PATCH', { strategy });
+    assert.equal(updated.status, 400, `update rejects ${JSON.stringify(strategy)}`);
+    assert.deepEqual((await request(route.path)).body, route.route);
   }
 });
 

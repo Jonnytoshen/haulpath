@@ -23,6 +23,55 @@ function sheetRows(sheet) {
   return rows;
 }
 
+test('all documented driving preferences retain their Chinese labels in downloaded current results', async () => {
+  const preferences = [
+    [0, '速度优先'], [1, '费用优先'], [2, '常规最快'], [32, '高德推荐'], [33, '躲避拥堵'],
+    [34, '高速优先'], [35, '不走高速'], [36, '少收费'], [37, '大路优先'], [38, '速度最快'],
+    [39, '躲避拥堵＋高速优先'], [40, '躲避拥堵＋不走高速'], [41, '躲避拥堵＋少收费'],
+    [42, '少收费＋不走高速'], [43, '躲避拥堵＋少收费＋不走高速'],
+    [44, '躲避拥堵＋大路优先'], [45, '躲避拥堵＋速度最快'],
+  ];
+  const requests = [];
+  const upstream = createServer((request, response) => {
+    const url = new URL(request.url, 'http://127.0.0.1');
+    requests.push(Number(url.searchParams.get('strategy')));
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({ status: '1', route: { paths: [
+      { distance: '1001', steps: [{ polyline: `${url.searchParams.get('origin')};${url.searchParams.get('destination')}` }] },
+      { distance: '9999999', steps: [{ polyline: '0,0;1,1' }] },
+    ] } }));
+  });
+  await new Promise((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+  let application;
+  try {
+    application = await startApplication({ HAULPATH_TEST_MODE: '1', AMAP_API_BASE_URL: `http://127.0.0.1:${upstream.address().port}`, AMAP_WEB_SERVICE_KEY: 'preference-export-key' });
+    const request = (path, method, body) => jsonRequest(application.baseUrl, path, method, body);
+    const project = (await request('/api/projects', 'POST', { name: '完整偏好导出' })).body;
+    const points = (await request('/api/coordinates', 'POST', { points: [
+      { name: '上海仓', longitude: 121.47, latitude: 31.23, source: 'manual' },
+      { name: '杭州客户', longitude: 120.15, latitude: 30.27, source: 'manual' },
+    ] })).body;
+    const routeIds = [];
+    for (const [strategy, label] of preferences) {
+      const created = await request(`/api/projects/${project.id}/routes`, 'POST', { name: `${label}线路`, points, strategy });
+      assert.equal(created.status, 201);
+      routeIds.push(created.body.id);
+      const planned = await request(`/api/routes/${created.body.id}/plan?projectId=${project.id}`, 'POST');
+      assert.equal(planned.status, 200);
+      assert.equal(planned.body.snapshot.strategy, strategy);
+    }
+    const workbook = await downloadWorkbook(application.baseUrl, `/api/projects/${project.id}/export`);
+    const overview = sheetRows(workbook.getWorksheet('线路总览'));
+    assert.deepEqual(overview.map((row) => [row.线路编号, row.规划偏好, row['总里程（km）'], row.状态]),
+      preferences.map(([, label], index) => [routeIds[index], label, 1.001, '已规划']));
+    assert.deepEqual(sheetRows(workbook.getWorksheet('区间明细')).map((row) => row['区间里程（km）']), preferences.map(() => 1.001));
+    assert.deepEqual(requests, preferences.map(([strategy]) => strategy), 'export never recalculates a stored route');
+  } finally {
+    await application?.stop(); await application?.cleanup();
+    await new Promise((resolve) => upstream.close(resolve));
+  }
+});
+
 test('an unplanned route downloads as two Chinese sheets with blank current results', async () => {
   const application = await startApplication();
   const request = (path, method, body) => jsonRequest(application.baseUrl, path, method, body);

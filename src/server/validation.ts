@@ -1,4 +1,4 @@
-import type { Point, Strategy } from '@/lib/domain';
+import { isStrategy, type Point, type Strategy } from '@/lib/domain';
 import { HttpError } from './http';
 
 export function nameOf(input: unknown): string {
@@ -7,7 +7,7 @@ export function nameOf(input: unknown): string {
 }
 
 export function strategyOf(input: unknown): Strategy {
-  if (input !== 32 && input !== 34 && input !== 36) throw new HttpError(400, '规划偏好无效');
+  if (!isStrategy(input)) throw new HttpError(400, '规划偏好无效');
   return input;
 }
 
