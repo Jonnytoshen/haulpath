@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import type { PlanningSnapshot, Point, Project, Route } from '@/lib/domain';
+import type { PlanningSnapshot, Point, Project, Route, Strategy } from '@/lib/domain';
 import { HttpError } from './http';
 
 import { nameOf, pointOf, pointsOf, strategyOf } from './validation';
@@ -16,7 +16,7 @@ class Storage {
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('busy_timeout = 5000');
     const version = this.db.pragma('user_version', { simple: true }) as number;
-    if (version > 1) throw new Error('本机数据库版本比当前应用更新，请使用匹配的应用版本');
+    if (version > 2) throw new Error('本机数据库版本比当前应用更新，请使用匹配的应用版本');
     if (version === 0) this.db.transaction(() => {
       this.db.exec(`CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS routes (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE, payload TEXT NOT NULL);
@@ -24,6 +24,10 @@ class Storage {
         CREATE TABLE IF NOT EXISTS points (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE, payload TEXT NOT NULL);
         CREATE INDEX IF NOT EXISTS points_project ON points(project_id);`);
       this.db.pragma('user_version = 1');
+    })();
+    if (version < 2) this.db.transaction(() => {
+      this.db.exec('ALTER TABLE projects ADD COLUMN last_strategy INTEGER NOT NULL DEFAULT 32');
+      this.db.pragma('user_version = 2');
     })();
     // The process-global storage instance survives route reloads; only an initial open recovers abandoned work.
     this.db.transaction(() => {
@@ -49,7 +53,7 @@ class Storage {
   createProject(input: { name?: unknown }): Project {
     const time = new Date().toISOString();
     const project = { id: randomUUID(), name: nameOf(input.name), createdAt: time, updatedAt: time };
-    this.db.prepare('INSERT INTO projects VALUES (?, ?, ?, ?)').run(project.id, project.name, time, time);
+    this.db.prepare('INSERT INTO projects (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)').run(project.id, project.name, time, time);
     return project;
   }
   updateProject(id: string, input: {name?: unknown}): Project {
@@ -72,11 +76,17 @@ class Storage {
     return JSON.parse(row.payload) as Route;
   }
   createRoute(projectId: string, input: {name?: unknown; points?: unknown; strategy?: unknown}): Route {
-    this.getProject(projectId);
-    const time = new Date().toISOString();
-    const route: Route = { id: randomUUID(), projectId, name: nameOf(input.name), points: input.points === undefined ? [] : pointsOf(input.points), strategy: input.strategy === undefined ? 32 : strategyOf(input.strategy), inputVersion: 1, snapshot: null, planning: null, createdAt: time, updatedAt: time };
-    this.db.prepare('INSERT INTO routes VALUES (?, ?, ?)').run(route.id, projectId, JSON.stringify(route));
-    return route;
+    return this.db.transaction(() => {
+      this.getProject(projectId);
+      const time = new Date().toISOString();
+      const strategy = input.strategy === undefined
+        ? (this.db.prepare('SELECT last_strategy AS strategy FROM projects WHERE id = ?').get(projectId) as {strategy: Strategy}).strategy
+        : strategyOf(input.strategy);
+      const route: Route = { id: randomUUID(), projectId, name: nameOf(input.name), points: input.points === undefined ? [] : pointsOf(input.points), strategy, inputVersion: 1, snapshot: null, planning: null, createdAt: time, updatedAt: time };
+      this.db.prepare('INSERT INTO routes VALUES (?, ?, ?)').run(route.id, projectId, JSON.stringify(route));
+      if (input.strategy !== undefined) this.rememberStrategy(projectId, strategy);
+      return route;
+    })();
   }
   updateRoute(routeId: string, projectId: string, input: {name?: unknown; points?: unknown; strategy?: unknown; expectedVersion?: unknown}): Route {
     return this.db.transaction(() => {
@@ -97,6 +107,7 @@ class Storage {
       route.strategy = strategy;
       route.updatedAt = new Date().toISOString();
       this.writeRoute(route);
+      if (input.strategy !== undefined) this.rememberStrategy(projectId, strategy);
       return route;
     })();
   }
@@ -180,6 +191,9 @@ class Storage {
   }
   private writeRoute(route: Route): void {
     this.db.prepare('UPDATE routes SET payload = ? WHERE id = ? AND project_id = ?').run(JSON.stringify(route), route.id, route.projectId);
+  }
+  private rememberStrategy(projectId: string, strategy: Strategy): void {
+    this.db.prepare('UPDATE projects SET last_strategy = ? WHERE id = ?').run(strategy, projectId);
   }
 }
 

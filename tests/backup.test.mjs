@@ -33,7 +33,7 @@ test('documented SQLite backup restores projects, library points and a complete 
       { name: '苏州客户', longitude: 120.58, latitude: 31.3, source: 'manual' },
     ] })).body;
     const library = (await request(`/api/projects/${project.id}/points`, 'POST', { points })).body;
-    const route = (await request(`/api/projects/${project.id}/routes`, 'POST', { name: '已保存方案', points: library })).body;
+    const route = (await request(`/api/projects/${project.id}/routes`, 'POST', { name: '已保存方案', points: library, strategy: 0 })).body;
     const planned = await request(`/api/routes/${route.id}/plan?projectId=${project.id}`, 'POST');
     assert.equal(planned.status, 200);
     assert.equal(planned.body.snapshot.totalDistanceMeters, 1234);
@@ -43,6 +43,7 @@ test('documented SQLite backup restores projects, library points and a complete 
     const backupUri = pathToFileURL(backupPath); backupUri.searchParams.set('immutable', '1');
     const { stdout } = await run('sqlite3', ['-noinit', '-readonly', backupUri.href, 'PRAGMA integrity_check;']);
     assert.equal(stdout.trim(), 'ok');
+    assert.equal((await request(`/api/routes/${route.id}?projectId=${project.id}`, 'PATCH', { strategy: 43 })).status, 200);
     await request('/api/projects', 'POST', { name: '备份之后的新资料' });
     assert.equal((await request('/api/projects')).body.length, 2);
     await app.stop();
@@ -55,6 +56,9 @@ test('documented SQLite backup restores projects, library points and a complete 
     assert.deepEqual(restoredProjects, [project]);
     assert.deepEqual((await request(`/api/projects/${project.id}/points`)).body, library);
     assert.deepEqual((await request(`/api/routes/${route.id}?projectId=${project.id}`)).body.snapshot, planned.body.snapshot);
+    const inherited = await request(`/api/projects/${project.id}/routes`, 'POST', { name: '恢复后继承备份时的偏好' });
+    assert.equal(inherited.status, 201);
+    assert.equal(inherited.body.strategy, 0);
     await access(join(archiveDirectory, 'test.sqlite'));
   } finally {
     await app?.stop();
