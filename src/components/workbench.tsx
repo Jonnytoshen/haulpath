@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { ArrowDown, ArrowUp, ArrowRight, Check, Download, FolderOpen, GripVertical, MapPin, Plus, Route as RouteIcon, Upload, X, AlertTriangle, Search, Menu, ChevronDown, Pencil, Trash2, ArrowLeft } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowRight, Check, Download, FolderOpen, GripVertical, MapPin, Plus, Route as RouteIcon, Upload, X, AlertTriangle, Search, Menu, ChevronDown, Pencil, Trash2, ArrowLeft, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
@@ -11,15 +11,9 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { PLANNING_NOTICE, formatKilometers, routeStatus, strategyGroups, type CoordinateSystem, type Point, type Project, type Route, type Strategy } from '@/lib/domain';
 import MapPanel, { type MapCandidate, type MapConfig } from './map-panel';
 import ImportDialog from './import-dialog';
-
-export async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
-  const response = await fetch(path, { method, cache: 'no-store', headers: body === undefined ? undefined : { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
-  if (!response.ok) {
-    const payload = await response.json().catch(() => null);
-    throw new Error(payload?.error ?? `操作失败（${response.status}），请稍后重试。`);
-  }
-  return response.status === 204 ? undefined as T : response.json();
-}
+import { request } from '@/lib/client-request';
+import { useProjectRoutes, type ProjectRouteRead } from './use-project-routes';
+export { request } from '@/lib/client-request';
 
 type Editor = { kind: 'project' | 'route'; id?: string; name: string };
 type RemovedPoint = { projectId: string; routeId: string; point: Point; index: number; beforeId?: string; afterId?: string; scope: number };
@@ -31,14 +25,17 @@ const strategyDescriptions = Object.fromEntries(strategyGroups.flatMap((group) =
 export default function Workbench() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectId, setProjectId] = useState('');
-  const [routes, setRoutes] = useState<Route[]>([]);
+  const routeCache = useProjectRoutes(projectId);
+  const { routes, routesRef, refreshing, loaded: routesLoaded, refreshError, refreshRoutes, captureRead, isReadCurrent, isSessionCurrent, beginWrite, commitRoute, removeRoute: removeCachedRoute, endWrite, planningRequests, beginPlanning, isPlanningCurrent, endPlanning } = routeCache;
+  const initialSelection = useRef(true);
   const [route, setRoute] = useState<Route | null>(null);
   const routeRef = useRef<Route | null>(null);
   const projectRef = useRef('');
   const selection = useRef(0);
   const [library, setLibrary] = useState<Point[]>([]);
   const [config, setConfig] = useState<MapConfig | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [libraryLoading, setLoading] = useState(true);
+  const loading = libraryLoading || routeCache.initialLoading;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -56,8 +53,7 @@ export default function Workbench() {
   const [navigationOpen, setNavigationOpen] = useState(false);
   const [libraryLayer, setLibraryLayer] = useState(true);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
-  const [planningRequest, setPlanningRequest] = useState<{ id: string; inputVersion: number } | null>(null);
-  const planningPending = route?.id === planningRequest?.id && route?.inputVersion === planningRequest?.inputVersion;
+  const planningPending = planningRequests.some((pending) => route?.id === pending.id && route.inputVersion === pending.inputVersion);
   const planningRunning = planningPending || route?.planning?.status === 'running';
   const project = projects.find((item) => item.id === projectId);
   const valid = !!route?.snapshot && route.snapshot.inputVersion === route.inputVersion;
@@ -70,13 +66,16 @@ export default function Workbench() {
     }
     routeRef.current = next; setRoute(next);
   }, []);
-  const applyRoute = useCallback((next: Route) => {
-    if (projectRef.current !== next.projectId || routeRef.current?.id !== next.id) return;
-    const previous = routeRef.current;
-    if (previous && (next.inputVersion < previous.inputVersion || next.updatedAt < previous.updatedAt)) return;
-    selectRoute(next);
-    setRoutes((items) => items.map((item) => item.id === next.id ? next : item));
-  }, [selectRoute]);
+  const applyRoute = useCallback((next: Route, read: ProjectRouteRead) => {
+    if (routeCache.applyRoute(next, read) && routeRef.current?.id === next.id) selectRoute(next);
+  }, [routeCache.applyRoute, selectRoute]);
+
+  useEffect(() => {
+    const current = routeRef.current;
+    if (initialSelection.current && routesLoaded) {
+      initialSelection.current = false; selectRoute(routes[0] ?? null);
+    } else if (current) selectRoute(routes.find((item) => item.id === current.id) ?? null);
+  }, [routes, routesLoaded, selectRoute]);
 
   useEffect(() => {
     let cancelled = false;
@@ -93,25 +92,15 @@ export default function Workbench() {
   useEffect(() => {
     projectRef.current = projectId;
     const epoch = ++selection.current;
-    selectRoute(null); setRoutes([]); setLibrary([]); setPointEditor(null); setImporting(false); setError(''); setNotice(''); setRouteSearch(''); setLibrarySearch(''); setTab('route'); setLibraryDelete(null);
+    initialSelection.current = true; selectRoute(null); setLibrary([]); setPointEditor(null); setImporting(false); setError(''); setNotice(''); setRouteSearch(''); setLibrarySearch(''); setTab('route'); setLibraryDelete(null);
     if (!projectId) return;
     setLoading(true);
-    Promise.all([request<Route[]>(`/api/projects/${projectId}/routes`), request<Point[]>(`/api/projects/${projectId}/points`)]).then(([nextRoutes, nextLibrary]) => {
-      if (epoch !== selection.current) return;
-      setRoutes(nextRoutes); setLibrary(nextLibrary); selectRoute(nextRoutes[0] ?? null);
+    const read = captureRead();
+    request<Point[]>(`/api/projects/${projectId}/points`).then((nextLibrary) => {
+      if (epoch !== selection.current || !isSessionCurrent(read)) return;
+      setLibrary(nextLibrary);
     }).catch((failure) => { if (epoch === selection.current) setError(errorMessage(failure)); }).finally(() => { if (epoch === selection.current) setLoading(false); });
-  }, [projectId, selectRoute]);
-
-  useEffect(() => {
-    if (!route || (!planningPending && route.planning?.status !== 'running')) return;
-    let cancelled = false;
-    const poll = async () => {
-      try { const next = await request<Route>(routePath(route)); if (!cancelled) applyRoute(next); }
-      catch { /* The planning request reports actionable failures; polling retries. */ }
-    };
-    const timer = setInterval(poll, 500);
-    return () => { cancelled = true; clearInterval(timer); };
-  }, [route?.id, route?.planning?.status, route?.planning?.taskId, planningPending, applyRoute]);
+  }, [projectId, selectRoute, captureRead, isSessionCurrent]);
 
   async function perform(action: () => Promise<void>, message?: string) {
     if (busy) return;
@@ -124,8 +113,11 @@ export default function Workbench() {
   async function saveRoute(changes: { points?: Point[]; strategy?: Strategy; name?: string }) {
     const current = routeRef.current;
     if (!current) return;
-    const next = await request<Route>(routePath(current), 'PATCH', { ...changes, expectedVersion: current.inputVersion });
-    applyRoute(next);
+    const write = beginWrite();
+    try {
+      const next = await request<Route>(routePath(current), 'PATCH', { ...changes, expectedVersion: current.inputVersion });
+      if (commitRoute(next, write) && routeRef.current?.id === next.id) selectRoute(next);
+    } finally { endWrite(write); }
   }
 
   async function saveName(event: FormEvent) {
@@ -137,10 +129,12 @@ export default function Workbench() {
         setProjects((items) => editor.id ? items.map((item) => item.id === next.id ? next : item) : [...items, next]);
         setProjectId(next.id);
       } else {
-        const next = await request<Route>(editor.id && routeRef.current ? routePath(routeRef.current) : `/api/projects/${projectId}/routes`, editor.id ? 'PATCH' : 'POST', { name: editor.name.trim() });
-        selection.current++; setLoading(false);
-        setRoutes((items) => editor.id ? items.map((item) => item.id === next.id ? next : item) : [...items, next]);
-        selectRoute(next); setTab('route'); setRouteSearch(''); setNavigationOpen(false);
+        const write = beginWrite();
+        try {
+          const next = await request<Route>(editor.id && routeRef.current ? routePath(routeRef.current) : `/api/projects/${projectId}/routes`, editor.id ? 'PATCH' : 'POST', { name: editor.name.trim() });
+          if (!commitRoute(next, write)) return;
+          selectRoute(next); setTab('route'); setRouteSearch(''); setNavigationOpen(false);
+        } finally { endWrite(write); }
       }
       setEditor(null);
     }, '已保存到本机');
@@ -153,9 +147,12 @@ export default function Workbench() {
         const remaining = projects.filter((item) => item.id !== project.id);
         setProjects(remaining); setProjectId(remaining[0]?.id ?? '');
       } else if (confirmDelete === 'route' && route) {
-        await request(routePath(route), 'DELETE');
-        const remaining = routes.filter((item) => item.id !== route.id);
-        setRoutes(remaining); selectRoute(remaining[0] ?? null);
+        const write = beginWrite();
+        try {
+          await request(routePath(route), 'DELETE');
+          if (!isSessionCurrent(write)) return;
+          removeCachedRoute(route.id, write); selectRoute(routesRef.current[0] ?? null);
+        } finally { endWrite(write); }
       }
       setConfirmDelete(null);
     }, '已删除');
@@ -247,18 +244,19 @@ export default function Workbench() {
     setError(''); setNotice('');
     const adjacent = current.points.findIndex((point, index) => index > 0 && point.longitude === current.points[index - 1].longitude && point.latitude === current.points[index - 1].latitude);
     if (adjacent > 0) { setError(`第 ${adjacent}、${adjacent + 1} 个点位坐标完全相同，请调整后规划。`); return; }
-    const optimistic = { ...current, planning: { taskId: 'pending', inputVersion: current.inputVersion, status: 'running' as const, completed: 0, total: current.points.length - 1 } };
-    setPlanningRequest({ id: current.id, inputVersion: current.inputVersion });
+    const planning = beginPlanning(current);
+    const showForCurrentRoute = () => isPlanningCurrent(planning) && routeRef.current?.id === current.id && routeRef.current.inputVersion === current.inputVersion;
     try {
       const result = await request<Route>(`${routePath(current).replace('?', '/plan?')}`, 'POST');
-      applyRoute(result);
-      if (routeRef.current?.id === current.id && routeRef.current.inputVersion === current.inputVersion) setNotice('路线方案已完整保存');
+      if (!isPlanningCurrent(planning)) return;
+      applyRoute(result, planning);
+      if (showForCurrentRoute()) setNotice('路线方案已完整保存');
     } catch (failure) {
-      if (routeRef.current?.id !== current.id || routeRef.current.inputVersion !== current.inputVersion) return;
-      setError(errorMessage(failure));
-      try { applyRoute(await request<Route>(routePath(current))); }
-      catch { applyRoute({ ...current, planning: { ...optimistic.planning, status: 'failed', error: errorMessage(failure) } }); }
-    } finally { setPlanningRequest((pending) => pending?.id === current.id && pending.inputVersion === current.inputVersion ? null : pending); }
+      if (!isPlanningCurrent(planning)) return;
+      if (showForCurrentRoute()) setError(errorMessage(failure));
+      // A network error does not prove the server task failed. Read its saved state.
+      await refreshRoutes();
+    } finally { endPlanning(planning); }
   }
 
   async function downloadExport(single = false) {
@@ -292,9 +290,9 @@ export default function Workbench() {
         {project && <section className="route-sidebar" aria-label="项目线路">
           <div className="panel-heading"><div><h2>线路</h2><span className="count">{routes.length}</span></div><Button className="text-button" disabled={busy || loading} onClick={() => setEditor({ kind: 'route', name: '' })}><Plus />新建线路</Button></div>
           <div className="nav-search"><Search aria-hidden="true" /><Input aria-label="搜索线路" placeholder="搜索线路" value={routeSearch} onChange={(event) => setRouteSearch(event.target.value)} />{routeSearch && <Button className="search-clear" aria-label="清除线路搜索" onClick={() => setRouteSearch('')}><X /></Button>}</div>
-          <div className="route-list">{visibleRoutes.map((item) => <Button key={item.id} className={`route-item ${item.id === route?.id ? 'active' : ''}`} aria-pressed={item.id === route?.id} onClick={() => { if (!busy) { selectRoute(item); setTab('route'); setError(''); setNotice(''); setNavigationOpen(false); request<Route>(routePath(item)).then(applyRoute).catch((failure) => setError(errorMessage(failure))); } }}><span className="route-item-name">{item.name}</span><span className="route-item-meta"><span>{item.points.length} 个点位</span><span className={`status status-${routeStatus(item)}`}>{routeStatus(item)}</span></span></Button>)}</div>
+          <div className="route-list">{visibleRoutes.map((item) => <Button key={item.id} className={`route-item ${item.id === route?.id ? 'active' : ''}`} aria-pressed={item.id === route?.id} onClick={() => { if (!busy) { selectRoute(item); setTab('route'); setError(''); setNotice(''); setNavigationOpen(false); const read = captureRead(); request<Route>(routePath(item)).then((next) => applyRoute(next, read)).catch((failure) => { if (isReadCurrent(read) && routeRef.current?.id === item.id) setError(errorMessage(failure)); }); } }}><span className="route-item-name">{item.name}</span><span className="route-item-meta"><span>{item.points.length} 个点位</span><span className={`status status-${routeStatus(item)}`}>{routeStatus(item)}</span></span></Button>)}</div>
           {routes.length > 0 && !visibleRoutes.length && <div className="empty compact"><Search /><p>没有匹配的线路</p><Button className="text-button" onClick={() => setRouteSearch('')}>清除筛选</Button></div>}
-          {!routes.length && <div className="empty compact"><RouteIcon /><p>还没有线路</p><small>创建线路后，按顺序添加起点、途经点和终点。</small></div>}
+          {!routes.length && routesLoaded && <div className="empty compact"><RouteIcon /><p>还没有线路</p><small>创建线路后，按顺序添加起点、途经点和终点。</small></div>}
           <div className="project-summary"><div><MapPin aria-hidden="true" /><span>项目点位库</span><strong>{library.length} <small>个点位</small></strong></div><Button className="text-button" onClick={() => { setTab('library'); setNavigationOpen(false); }}>管理点位库 <ArrowRight /></Button></div>
         </section>}
         <div className="sidebar-bottom"><span className="connection-dot" />本机工作台<span className="local-caption">项目资料自动保存在本机</span></div>
@@ -302,8 +300,9 @@ export default function Workbench() {
     </aside>
 
     <main className="workspace">
-      <header className="topbar"><div className="workspace-title"><h1>{project?.name ?? '让每一段行程心中有数'}</h1><p>{project ? '线路规划工作台' : '重途 · 行前线路与里程测算'}</p></div><div className="toolbar">{project && <><Button className="icon-button" aria-label="重命名项目" title="重命名项目" onClick={() => setEditor({ kind: 'project', id: project.id, name: project.name })}><Pencil /></Button><Button className="icon-button danger-text" aria-label="删除项目" title="删除项目" onClick={() => setConfirmDelete('project')}><Trash2 /></Button><span className="toolbar-divider" /><Button className="button" disabled={busy || loading} onClick={() => downloadExport()}><Download />导出项目</Button></>}</div></header>
+      <header className="topbar"><div className="workspace-title"><h1>{project?.name ?? '让每一段行程心中有数'}</h1><p>{project ? '线路规划工作台' : '重途 · 行前线路与里程测算'}</p></div><div className="toolbar">{project && <><Button className="icon-button" aria-label="重命名项目" title="重命名项目" onClick={() => setEditor({ kind: 'project', id: project.id, name: project.name })}><Pencil /></Button><Button className="icon-button danger-text" aria-label="删除项目" title="删除项目" onClick={() => setConfirmDelete('project')}><Trash2 /></Button><span className="toolbar-divider" /><Button className="button" aria-label="刷新线路" disabled={refreshing} onClick={() => void refreshRoutes()}><RefreshCw />{refreshing ? '正在刷新' : '刷新线路'}</Button><Button className="button" disabled={busy || loading} onClick={() => downloadExport()}><Download />导出项目</Button></>}</div></header>
       <div className="capability-notice"><AlertTriangle aria-hidden="true" /><div><strong>行前测算参考</strong><span>{PLANNING_NOTICE}</span></div><small>普通驾车测算</small></div>
+      {refreshError && <div className="message error" role="alert"><span>读取项目线路失败：{refreshError}</span><Button className="text-button" disabled={refreshing} onClick={() => void refreshRoutes()}>重试读取线路</Button></div>}
       {error && <div className="message error" role="alert"><span>{error}</span><Button aria-label="关闭错误提示" onClick={() => setError('')}><X /></Button></div>}
       {(notice || canUndo) && <div className="message success" role="status"><div className="message-copy">{notice && <span>{notice}</span>}{canUndo && <span>已移除点位 {removedPoint!.point.name}</span>}</div>{canUndo && <Button className="undo-button" disabled={busy} onClick={undoPointRemoval}>撤销移除</Button>}<Button aria-label="关闭成功提示" onClick={() => { setNotice(''); setRemovedPoint(null); }}><X /></Button></div>}
       {project && loading && <p className="message" role="status">正在加载项目线路与点位库…</p>}
