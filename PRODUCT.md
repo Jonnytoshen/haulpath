@@ -62,8 +62,8 @@ web
 
 - 中文名称为“重途”，英文名称严格写为 `HaulPath`，仓库和软件包名称为 `haulpath`。
 - 面向用户使用中文，沿用[术语表](GLOSSARY.md)：A→B→C 为“线路”，A→B 为“区间”，完整成功测算结果为“路线方案”；使用“途经点”，区分“线路名称”与“道路名称”。
-- 界面图标统一使用 Lucide Icons，不使用 emoji 图标。已有[站点图标](src/app/icon.svg)采用 Lucide Route SVG。
-- 更细的品牌语气、人格与情绪目标尚未确认。
+- 界面功能图标统一使用 Lucide Icons，不使用 emoji 图标；品牌与[站点图标](src/app/icon.svg)采用原创 H「上扬」标志，遵循[品牌标志规范](docs/brand.md)。
+- 品牌以 HaulPath 英文主字标、“重途”中文辅助字标、轻微前倾与绿色识别，表达行前规划的清晰与向前感；几何、颜色和使用边界以[品牌标志规范](docs/brand.md)为准。
 
 ## Evidence on Hand
 

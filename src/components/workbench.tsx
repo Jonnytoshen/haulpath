@@ -5,6 +5,7 @@ import { ArrowDown, ArrowUp, ArrowRight, Check, Download, FolderOpen, GripVertic
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
+import { BrandLogo } from '@/components/brand-logo';
 import { Dialog } from './app-dialog';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { PLANNING_NOTICE, formatKilometers, routeStatus, strategyLabels, type CoordinateSystem, type Point, type Project, type Route, type Strategy } from '@/lib/domain';
@@ -281,7 +282,7 @@ export default function Workbench() {
   return <div className="app-shell">
     <a className="skip-link" href="#line-editor">跳到线路编辑</a>
     <aside className={`sidebar ${navigationOpen ? 'navigation-open' : ''}`} aria-label="项目与线路导航">
-      <div className="brand-row"><a href="/" className="brand" aria-label="重途首页"><RouteIcon className="brand-icon" /><span>重途<small>HaulPath</small></span></a><Button className="navigation-toggle" aria-label={navigationOpen ? '收起项目与线路' : '展开项目与线路'} aria-expanded={navigationOpen} aria-controls="workspace-navigation" onClick={() => setNavigationOpen((open) => !open)}>{navigationOpen ? <X /> : <Menu />}</Button></div>
+      <div className="brand-row"><a href="/" className="brand" aria-label="重途首页"><BrandLogo /></a><Button className="navigation-toggle" aria-label={navigationOpen ? '收起项目与线路' : '展开项目与线路'} aria-expanded={navigationOpen} aria-controls="workspace-navigation" onClick={() => setNavigationOpen((open) => !open)}>{navigationOpen ? <X /> : <Menu />}</Button></div>
       <div className="mobile-context"><span>{project?.name ?? '我的项目'}</span><ChevronDown aria-hidden="true" /><span>{route?.name ?? '选择或创建线路'}</span></div>
       <div id="workspace-navigation" className="sidebar-content">
         <div className="sidebar-section-title"><span>我的项目</span><Button className="sidebar-add" aria-label="新建项目" title="新建项目" onClick={() => setEditor({ kind: 'project', name: '' })}><Plus /></Button></div>
@@ -305,7 +306,7 @@ export default function Workbench() {
       {error && <div className="message error" role="alert"><span>{error}</span><Button aria-label="关闭错误提示" onClick={() => setError('')}><X /></Button></div>}
       {(notice || canUndo) && <div className="message success" role="status"><div className="message-copy">{notice && <span>{notice}</span>}{canUndo && <span>已移除点位 {removedPoint!.point.name}</span>}</div>{canUndo && <Button className="undo-button" disabled={busy} onClick={undoPointRemoval}>撤销移除</Button>}<Button aria-label="关闭成功提示" onClick={() => { setNotice(''); setRemovedPoint(null); }}><X /></Button></div>}
       {project && loading && <p className="message" role="status">正在加载项目线路与点位库…</p>}
-      {!project ? <div className="welcome" id="line-editor"><span className="welcome-mark"><RouteIcon /></span><h2>从一个项目，规划下一程</h2><p>集中管理线路和点位，预览行驶方案，<br />将区间与里程导出为清晰的 Excel 表格。</p><Button className="button primary" onClick={() => setEditor({ kind: 'project', name: '' })}>创建第一个项目</Button><small>个人使用 · 本机保存 · 手动规划</small></div> : <>
+      {!project ? <div className="welcome" id="line-editor"><span className="welcome-mark"><BrandLogo variant="mark" /></span><h2>从一个项目，规划下一程</h2><p>集中管理线路和点位，预览行驶方案，<br />将区间与里程导出为清晰的 Excel 表格。</p><Button className="button primary" onClick={() => setEditor({ kind: 'project', name: '' })}>创建第一个项目</Button><small>个人使用 · 本机保存 · 手动规划</small></div> : <>
         <ol className="workflow" aria-label="线路规划流程">{[{ label: '编排点位', detail: '按实际行驶顺序' }, { label: '测算线路', detail: planningReady ? '逐段计算并汇总' : '先完成测算配置' }, { label: '核对与导出', detail: '地图与里程保持一致' }].map((step, index) => <li className={index === currentStep ? 'current' : index < currentStep ? 'complete' : ''} key={step.label} aria-current={index === currentStep ? 'step' : undefined}><span className="workflow-number">{index < currentStep ? <Check /> : index + 1}</span><div><span>{step.label}</span><small>{step.detail}</small></div>{index < 2 && <ArrowRight className="workflow-arrow" aria-hidden="true" />}</li>)}</ol>
         <div className="workbench-grid">
         <section className="editor-panel panel" aria-label="线路编辑" id="line-editor" tabIndex={-1}>

@@ -1,0 +1,295 @@
+{
+  "name": "重途 · HaulPath",
+  "selected": "A · 上扬",
+  "date": "2026-10-26",
+  "colors": {
+    "primary": "#176B55",
+    "highlight": "#16A778"
+  },
+  "geometry": "Original vector H and English lettering; rising H crossbar; English lettering leans forward 9 degrees.",
+  "refinements": "English stroke weight 9.5; Chinese auxiliary outlines scaled to 0.04 for legibility at 150px lockup width.",
+  "chineseFont": {
+    "family": "Source Han Sans SC",
+    "weight": "Medium",
+    "release": "2.005R",
+    "provenance": "font-provenance.json",
+    "license": "SOURCE-HAN-SANS-LICENSE.txt"
+  },
+  "files": [
+    {
+      "file": "haulpath-mark.svg",
+      "kind": "mark",
+      "tone": "color",
+      "format": "svg",
+      "viewBox": "0 0 100 100",
+      "sha256": "f89827c23c09c6a14dc8525c033cefd0812334fe2050d37065d222e7ccb489bd"
+    },
+    {
+      "file": "haulpath-mark-512.png",
+      "kind": "mark",
+      "tone": "color",
+      "format": "png",
+      "width": 512,
+      "height": 512,
+      "transparent": true,
+      "generatedFrom": "haulpath-mark.svg",
+      "sha256": "35f203fc331b8a0788617adc9eec00338cc6591d19dc99a2c39e47ed5122b178"
+    },
+    {
+      "file": "haulpath-mark-1024.png",
+      "kind": "mark",
+      "tone": "color",
+      "format": "png",
+      "width": 1024,
+      "height": 1024,
+      "transparent": true,
+      "generatedFrom": "haulpath-mark.svg",
+      "sha256": "2976484518889be3af30af07c08a6d25c69af7c5731e3b5b175d611368fe02c9"
+    },
+    {
+      "file": "haulpath-mark-mono.svg",
+      "kind": "mark",
+      "tone": "mono",
+      "format": "svg",
+      "viewBox": "0 0 100 100",
+      "sha256": "d5190751c3bfe9647e7ded1100b05bde86913e093450d8fe33dd40107a32328d"
+    },
+    {
+      "file": "haulpath-mark-mono-512.png",
+      "kind": "mark",
+      "tone": "mono",
+      "format": "png",
+      "width": 512,
+      "height": 512,
+      "transparent": true,
+      "generatedFrom": "haulpath-mark-mono.svg",
+      "sha256": "1f40a751d12f34918919aff4261aeacc73d8a26b4005c1812ca5cac00df35acc"
+    },
+    {
+      "file": "haulpath-mark-mono-1024.png",
+      "kind": "mark",
+      "tone": "mono",
+      "format": "png",
+      "width": 1024,
+      "height": 1024,
+      "transparent": true,
+      "generatedFrom": "haulpath-mark-mono.svg",
+      "sha256": "6e632c95eb308028755f522a259e5d0086cadd79f02ea58f7cbc5a1e2d502ea5"
+    },
+    {
+      "file": "haulpath-mark-white.svg",
+      "kind": "mark",
+      "tone": "white",
+      "format": "svg",
+      "viewBox": "0 0 100 100",
+      "sha256": "e3a8094559c29a856e7fcb0b5e8ee5094806b1f74d7ac4031b357da0a7a8c1e8"
+    },
+    {
+      "file": "haulpath-mark-white-512.png",
+      "kind": "mark",
+      "tone": "white",
+      "format": "png",
+      "width": 512,
+      "height": 512,
+      "transparent": true,
+      "generatedFrom": "haulpath-mark-white.svg",
+      "sha256": "f3732c8c4bd0253634881a3e61566245dbfb6ae8f9bce02b5adb8ce9538876a2"
+    },
+    {
+      "file": "haulpath-mark-white-1024.png",
+      "kind": "mark",
+      "tone": "white",
+      "format": "png",
+      "width": 1024,
+      "height": 1024,
+      "transparent": true,
+      "generatedFrom": "haulpath-mark-white.svg",
+      "sha256": "5498eda4cecf967e9048498bdd8e1908aded598447acbac6a5fcc2417769073a"
+    },
+    {
+      "file": "haulpath-wordmark.svg",
+      "kind": "wordmark",
+      "tone": "color",
+      "format": "svg",
+      "viewBox": "0 0 470 100",
+      "sha256": "83f5b9a6a71c2a8eed06274aca0de03b00dfd922c919a90fc36d294082dc4859"
+    },
+    {
+      "file": "haulpath-wordmark-1024.png",
+      "kind": "wordmark",
+      "tone": "color",
+      "format": "png",
+      "width": 1024,
+      "height": 218,
+      "transparent": true,
+      "generatedFrom": "haulpath-wordmark.svg",
+      "sha256": "b690f85d44e0c369e9f772c28ecdf33773cc5beba2183a48365f7470baf00f68"
+    },
+    {
+      "file": "haulpath-wordmark-2048.png",
+      "kind": "wordmark",
+      "tone": "color",
+      "format": "png",
+      "width": 2048,
+      "height": 436,
+      "transparent": true,
+      "generatedFrom": "haulpath-wordmark.svg",
+      "sha256": "39c7f00795147f73f00a17d8170e695a1a5b4789dfae56722412a4671f25e579"
+    },
+    {
+      "file": "haulpath-wordmark-mono.svg",
+      "kind": "wordmark",
+      "tone": "mono",
+      "format": "svg",
+      "viewBox": "0 0 470 100",
+      "sha256": "c5578f639854038291c40d2d3de2aeca1862883795e3c1a1b3d819920931c5f1"
+    },
+    {
+      "file": "haulpath-wordmark-mono-1024.png",
+      "kind": "wordmark",
+      "tone": "mono",
+      "format": "png",
+      "width": 1024,
+      "height": 218,
+      "transparent": true,
+      "generatedFrom": "haulpath-wordmark-mono.svg",
+      "sha256": "9ee7dd5c7bc2265d3672d29bb7df28738dfca16a47fd9521738a003fe27df878"
+    },
+    {
+      "file": "haulpath-wordmark-mono-2048.png",
+      "kind": "wordmark",
+      "tone": "mono",
+      "format": "png",
+      "width": 2048,
+      "height": 436,
+      "transparent": true,
+      "generatedFrom": "haulpath-wordmark-mono.svg",
+      "sha256": "ea74f343c86bc59bebc0f4527e9b2c176a093815c477504079e979e5c0a372a4"
+    },
+    {
+      "file": "haulpath-wordmark-white.svg",
+      "kind": "wordmark",
+      "tone": "white",
+      "format": "svg",
+      "viewBox": "0 0 470 100",
+      "sha256": "49aed8c25d7aac7d15bc9aaa8d1efbaebeab064c3aefff1803499012e1ed1d83"
+    },
+    {
+      "file": "haulpath-wordmark-white-1024.png",
+      "kind": "wordmark",
+      "tone": "white",
+      "format": "png",
+      "width": 1024,
+      "height": 218,
+      "transparent": true,
+      "generatedFrom": "haulpath-wordmark-white.svg",
+      "sha256": "612dd6cf2e213822e5c39a95295d43703569d249c845a2f45deebf052710e5cc"
+    },
+    {
+      "file": "haulpath-wordmark-white-2048.png",
+      "kind": "wordmark",
+      "tone": "white",
+      "format": "png",
+      "width": 2048,
+      "height": 436,
+      "transparent": true,
+      "generatedFrom": "haulpath-wordmark-white.svg",
+      "sha256": "b649fee1dbddc85a1afdcbccbcbaefbd4c44b1c3ef56d5f3951aba3eeccf7f1c"
+    },
+    {
+      "file": "haulpath-lockup.svg",
+      "kind": "lockup",
+      "tone": "color",
+      "format": "svg",
+      "viewBox": "0 0 470 156",
+      "sha256": "45b8f4372d4588a4470d895eb458b08e5a767e868c7560224a008c4b0fb32bcb"
+    },
+    {
+      "file": "haulpath-lockup-1024.png",
+      "kind": "lockup",
+      "tone": "color",
+      "format": "png",
+      "width": 1024,
+      "height": 340,
+      "transparent": true,
+      "generatedFrom": "haulpath-lockup.svg",
+      "sha256": "047d22e1b3c3d4e98a780fd190cca34cb8eee5da01860f01b72196cb287d17ed"
+    },
+    {
+      "file": "haulpath-lockup-2048.png",
+      "kind": "lockup",
+      "tone": "color",
+      "format": "png",
+      "width": 2048,
+      "height": 680,
+      "transparent": true,
+      "generatedFrom": "haulpath-lockup.svg",
+      "sha256": "acb93404ddd34a7f0718409c5b76a5d8950b4725adc7f0a2efabb4cc59d13c65"
+    },
+    {
+      "file": "haulpath-lockup-mono.svg",
+      "kind": "lockup",
+      "tone": "mono",
+      "format": "svg",
+      "viewBox": "0 0 470 156",
+      "sha256": "5bb2897594def5b43fae13133f81f5d731640677884153e90bb99f2a72dae2ed"
+    },
+    {
+      "file": "haulpath-lockup-mono-1024.png",
+      "kind": "lockup",
+      "tone": "mono",
+      "format": "png",
+      "width": 1024,
+      "height": 340,
+      "transparent": true,
+      "generatedFrom": "haulpath-lockup-mono.svg",
+      "sha256": "51afc3d3bb58589bd88cfd63058d27410b67ae0b088bc054af1c0fdb506d7c25"
+    },
+    {
+      "file": "haulpath-lockup-mono-2048.png",
+      "kind": "lockup",
+      "tone": "mono",
+      "format": "png",
+      "width": 2048,
+      "height": 680,
+      "transparent": true,
+      "generatedFrom": "haulpath-lockup-mono.svg",
+      "sha256": "ffa61ab86749bf0240f8af973d6b7c8a75dbd0426b411074e508a75f6a863d4b"
+    },
+    {
+      "file": "haulpath-lockup-white.svg",
+      "kind": "lockup",
+      "tone": "white",
+      "format": "svg",
+      "viewBox": "0 0 470 156",
+      "sha256": "771e0e16155f348ad2fae43abdc06cebcacf259017500668c0bb8caa36d56a4c"
+    },
+    {
+      "file": "haulpath-lockup-white-1024.png",
+      "kind": "lockup",
+      "tone": "white",
+      "format": "png",
+      "width": 1024,
+      "height": 340,
+      "transparent": true,
+      "generatedFrom": "haulpath-lockup-white.svg",
+      "sha256": "b8074dafcbf4d8826a9ef21a0e5bfac8922eb8a63824128665975bc6caae301a"
+    },
+    {
+      "file": "haulpath-lockup-white-2048.png",
+      "kind": "lockup",
+      "tone": "white",
+      "format": "png",
+      "width": 2048,
+      "height": 680,
+      "transparent": true,
+      "generatedFrom": "haulpath-lockup-white.svg",
+      "sha256": "bbeeec75aeb36fee5faea49962a3d39ab70c49f8f380d5ef35222b6dc93bc195"
+    }
+  ],
+  "appIcon": {
+    "file": "src/app/icon.svg",
+    "generatedFrom": "haulpath-mark.svg",
+    "sha256": "f89827c23c09c6a14dc8525c033cefd0812334fe2050d37065d222e7ccb489bd"
+  }
+}

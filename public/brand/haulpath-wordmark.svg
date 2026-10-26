@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="470" height="100" viewBox="0 0 470 100"><title>HaulPath</title><g transform="translate(3 -2) scale(.78 1)"><path fill="#16A778" d="M24 12H38Q40 12 39.6 14L26.4 86Q26 88 24 88H10Q8 88 8.4 86L21.6 14Q22 12 24 12Z M72 12H86Q88 12 87.6 14L74.4 86Q74 88 72 88H58Q56 88 56.4 86L69.6 14Q70 12 72 12Z M28 47L78 36L75 54L25 65Z"/></g><g transform="translate(13.6 0) skewX(-9)" fill="none" stroke="#176B55" stroke-width="9.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M122 38V85 M122 60C122 44 114 36 102 36C88 36 80 46 80 61C80 76 88 85 101 85C114 85 122 76 122 60Z"/>
+    <path d="M144 37V65C144 79 151 85 163 85C176 85 183 76 183 63V37 M183 63V85"/>
+    <path d="M205 11V74Q205 85 216 85"/>
+    <path d="M239 85V11H260C276 11 285 20 285 33C285 47 276 56 260 56H239"/>
+    <path d="M348 38V85 M348 60C348 44 340 36 328 36C314 36 306 46 306 61C306 76 314 85 327 85C340 85 348 76 348 60Z"/>
+    <path d="M375 22V73Q375 85 388 85H393 M360 38H394"/>
+    <path d="M414 11V85 M414 59C414 44 423 36 435 36C448 36 454 44 454 58V85"/>
+  </g></svg>
