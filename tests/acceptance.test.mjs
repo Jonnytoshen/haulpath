@@ -4,6 +4,7 @@ import { createServer } from 'node:http';
 import { chromium } from 'playwright';
 import ExcelJS from 'exceljs';
 import { startApplication, jsonRequest } from './helpers/application.mjs';
+import { assertOverview, openRouteFromSidebar } from './helpers/browser-navigation.mjs';
 import { replaceAmapSDK } from './helpers/amap-browser.mjs';
 
 async function amapFixture(delay = 30) {
@@ -38,6 +39,7 @@ async function createProject(page, name) {
   await page.getByLabel('项目名称', { exact: true }).fill(name);
   await page.getByRole('button', { name: '创建项目', exact: true }).click();
   await page.getByRole('heading', { name, exact: true }).waitFor();
+  await assertOverview(page);
 }
 async function createRoute(page, name) {
   await page.getByRole('region', { name: '项目线路', exact: true }).getByRole('button', { name: '新建线路', exact: true }).click();
@@ -117,7 +119,7 @@ test('a project supports 1000 imported points, 100 routes and a 20 point plan ac
     const errors = []; page.on('pageerror', (error) => errors.push(error.message));
     await page.goto(app.baseUrl);
     await createProject(page, '代表规模项目');
-    await page.getByRole('button', { name: /项目点位库 0/, exact: true }).click();
+    await page.getByRole('button', { name: '管理点位库', exact: false }).click();
     await page.getByRole('button', { name: '导入表格', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: '导入项目点位', exact: true });
     const rows = Array.from({ length: 1000 }, (_, index) => [`验收点${String(index + 1).padStart(4, '0')}`, (121 + index / 10000).toFixed(4), (31 + index / 100000).toFixed(5)].join(','));
@@ -147,9 +149,14 @@ test('a project supports 1000 imported points, 100 routes and a 20 point plan ac
     assert.equal(routes.body.length, 100); assert.equal(points.body.length, 1000);
     started = performance.now();
     await page.reload();
+    const overview = await assertOverview(page);
+    await overview.getByRole('row').nth(100).waitFor({ state: 'attached' });
+    assert.equal(await overview.getByRole('row').count(), 101);
+    metrics.overviewReadyMs = Math.round(performance.now() - started);
+    await openRouteFromSidebar(page, '20点验收线路');
     await page.getByRole('heading', { name: '20点验收线路', exact: true }).waitFor();
     await page.locator('[data-sdk-cluster="1000"]').waitFor({ state: 'attached' });
-    metrics.pageReadyMs = Math.round(performance.now() - started);
+    metrics.workbenchReadyMs = Math.round(performance.now() - started);
     assert.equal(await page.locator('.route-item').count(), 100);
     assert.equal(await page.locator('[data-sdk-marker]').count(), 20);
     const names = library.slice(0, 20).map((point) => point.name);
@@ -186,6 +193,10 @@ test('a project supports 1000 imported points, 100 routes and a 20 point plan ac
     assert.deepEqual((await request(`/api/routes/${route.id}?projectId=${project.id}`)).body.snapshot, saved.snapshot);
     page = await browserPage(browser);
     await page.goto(app.baseUrl);
+    const reopenedOverview = await assertOverview(page);
+    await reopenedOverview.getByRole('row').nth(100).waitFor({ state: 'attached' });
+    assert.equal(await reopenedOverview.getByRole('row').count(), 101);
+    await openRouteFromSidebar(page, '20点验收线路');
     await page.getByRole('heading', { name: '20点验收线路', exact: true }).waitFor();
     await page.locator('[data-sdk-cluster="1000"]').waitFor({ state: 'attached' });
     assert.equal(await page.locator('[data-sdk-polyline]').count(), 19);
