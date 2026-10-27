@@ -1,6 +1,7 @@
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
+import { crc32, deflateRawSync } from 'node:zlib';
 import ExcelJS from 'exceljs';
 import { startApplication, jsonRequest } from './helpers/application.mjs';
 
@@ -31,6 +32,216 @@ async function upload(projectId, action, file, fields = {}) {
   const content = await response.text();
   return { status: response.status, body: response.headers.get('content-type')?.includes('application/json') ? JSON.parse(content) : content };
 }
+
+const kml = (body, prefix = '') => `<?xml version="1.0" encoding="UTF-8"?><${prefix}kml xmlns${prefix ? `:${prefix.slice(0, -1)}` : ''}="http://www.opengis.net/kml/2.2">${body}</${prefix}kml>`;
+const point = (name, coordinates) => `<Placemark><name>${name}</name><Point><coordinates>${coordinates}</coordinates></Point></Placemark>`;
+
+// Build real ZIP archives without relying on the import implementation or external fixtures.
+function zip(entries) {
+  const locals = [];
+  const central = [];
+  let offset = 0;
+  for (const { name, contents, compressed = false, checksum } of entries) {
+    const nameBytes = Buffer.from(name);
+    const raw = Buffer.from(contents);
+    const body = compressed ? deflateRawSync(raw) : raw;
+    const crc = checksum ?? crc32(raw);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50); local.writeUInt16LE(20, 4); local.writeUInt16LE(0x800, 6);
+    local.writeUInt16LE(compressed ? 8 : 0, 8); local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(body.length, 18); local.writeUInt32LE(raw.length, 22); local.writeUInt16LE(nameBytes.length, 26);
+    locals.push(local, nameBytes, body);
+    const header = Buffer.alloc(46);
+    header.writeUInt32LE(0x02014b50); header.writeUInt16LE(20, 4); header.writeUInt16LE(20, 6); header.writeUInt16LE(0x800, 8);
+    header.writeUInt16LE(compressed ? 8 : 0, 10); header.writeUInt32LE(crc, 16);
+    header.writeUInt32LE(body.length, 20); header.writeUInt32LE(raw.length, 24); header.writeUInt16LE(nameBytes.length, 28);
+    header.writeUInt32LE(offset, 42); central.push(header, nameBytes);
+    offset += local.length + nameBytes.length + body.length;
+  }
+  const directory = Buffer.concat(central);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50); end.writeUInt16LE(entries.length, 8); end.writeUInt16LE(entries.length, 10);
+  end.writeUInt32LE(directory.length, 12); end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...locals, directory, end]);
+}
+
+test('KML previews only real placemark points with source labels and actionable errors', async () => {
+  const project = (await request('/api/projects', 'POST', { name: 'KML项目' })).body;
+  const file = new File([`\uFEFF${kml(`<Document><Folder><name>仓库</name><visibility>0</visibility>
+    <Placemark><name><![CDATA[上海 & 一号]]></name><MultiGeometry><Point><coordinates>121.471234567,31.231234567,20</coordinates></Point><Point><coordinates>120,30</coordinates></Point><LineString><coordinates>1,2 3,4</coordinates></LineString></MultiGeometry></Placemark>
+    ${point('', '121,31')}${point('越界', '181,90')}${point('多坐标', '121,31 122,32')}
+    <Placemark><name>面</name><Polygon><outerBoundaryIs><LinearRing><coordinates>1,2 3,4</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>
+    <NetworkLink><Link><href>https://example.invalid/data.kml</href></Link></NetworkLink>
+    <ExtendedData><Placemark><name>伪点</name><Point><coordinates>121,31</coordinates></Point></Placemark></ExtendedData>
+  </Folder></Document>`)}`], '地点.kml');
+  const requestsBefore = upstreamRequests.length;
+  const inspected = await upload(project.id, 'inspect', file);
+  assert.equal(inspected.status, 200);
+  assert.equal(inspected.body.format, 'kml');
+  assert.equal(inspected.body.documents.length, 1);
+  const documentId = inspected.body.documents[0].documentId;
+  const preview = await upload(project.id, 'preview', file, { documentId });
+  assert.equal(preview.status, 200);
+  assert.equal(preview.body.validCount, 2);
+  assert.equal(preview.body.invalidCount, 3);
+  assert.deepEqual(preview.body.entries.map((item) => item.name), ['上海 & 一号', '上海 & 一号', '', '越界', '多坐标']);
+  assert.equal(preview.body.entries[0].originalLongitude, 121.471234567);
+  assert.equal(preview.body.entries[0].originalLatitude, 31.231234567);
+  assert.match(preview.body.entries[0].sourceLabel, /仓库/);
+  assert.notEqual(preview.body.entries[0].entryId, preview.body.entries[1].entryId);
+  assert.match(preview.body.entries[2].errors.join(' '), /名称/);
+  assert.match(preview.body.entries[3].errors.join(' '), /范围/);
+  assert.ok(preview.body.entries[4].errors.length);
+  assert.ok(preview.body.ignored.some((item) => item.kind === '线' && item.count === 1));
+  assert.ok(preview.body.ignored.some((item) => item.kind === '面' && item.count === 1));
+  assert.ok(preview.body.ignored.some((item) => item.kind === '网络链接' && item.count === 1));
+  assert.equal(upstreamRequests.length, requestsBefore);
+  assert.deepEqual((await request(`/api/projects/${project.id}/points`)).body, []);
+});
+
+test('KML confirms only selected points in source order, fixes WGS84, and appends on repeat', async () => {
+  const project = (await request('/api/projects', 'POST', { name: 'KML确认项目' })).body;
+  const other = (await request('/api/projects', 'POST', { name: 'KML其他项目' })).body;
+  const file = new File([kml(`<Document>${point('同名', '121.471234567,31.231234567')}${point('同名', '120,30')}${point('', '121,31')}</Document>`)], 'points.kml');
+  const preview = await upload(project.id, 'preview', file);
+  assert.equal(preview.status, 200);
+  const [first, second, invalid] = preview.body.entries.map((entry) => entry.entryId);
+  const fields = { selectedEntries: JSON.stringify([second, first]) };
+  for (const selectedEntries of ['[]', JSON.stringify([first, first]), JSON.stringify([invalid]), '["missing"]', 'null', 'not-json']) {
+    const rejected = await upload(project.id, 'confirm', file, { selectedEntries });
+    assert.equal(rejected.status, 400, selectedEntries);
+  }
+  assert.equal((await upload(project.id, 'preview', file, { coordinateSystem: 'GCJ-02' })).status, 400);
+  assert.equal((await upload(project.id, 'confirm', file, { ...fields, coordinateSystem: 'GCJ-02' })).status, 400);
+  const conversions = [];
+  handleUpstream = (url, response) => {
+    const locations = url.searchParams.get('locations').split('|');
+    conversions.push({ system: url.searchParams.get('coordsys'), locations });
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({ status: '1', locations: locations.map(() => '121.476,31.236').join(';') }));
+  };
+  const success = await upload(project.id, 'confirm', file, fields);
+  assert.equal(success.status, 201);
+  assert.equal(success.body.importedCount, 2);
+  assert.equal(success.body.points[0].originalLongitude, 121.471234567);
+  assert.equal(success.body.points[0].coordinateSystem, 'WGS84');
+  assert.equal(success.body.points[0].source, 'import');
+  assert.deepEqual(conversions, [{ system: 'gps', locations: ['121.471235,31.231235', '120.000000,30.000000'] }]);
+  assert.notEqual(success.body.points[0].id, success.body.points[1].id);
+  assert.equal((await upload(project.id, 'confirm', file, fields)).status, 201);
+  assert.equal((await request(`/api/projects/${project.id}/points`)).body.length, 4);
+  assert.deepEqual((await request(`/api/projects/${other.id}/points`)).body, []);
+});
+
+test('KMZ requires a document choice, keeps candidates independent, and rejects damaged archives', async () => {
+  const project = (await request('/api/projects', 'POST', { name: 'KMZ项目' })).body;
+  const file = new File([zip([
+    { name: 'one/doc.kml', contents: kml(point('一', '121,31')) },
+    { name: 'two/doc.kml', contents: kml(point('二', '120,30')), compressed: true },
+    { name: 'icon.png', contents: 'unused' },
+  ])], 'map.kmz');
+  const inspected = await upload(project.id, 'inspect', file);
+  assert.equal(inspected.status, 200);
+  assert.equal(inspected.body.format, 'kmz');
+  assert.deepEqual(inspected.body.documents.map((doc) => doc.path), ['one/doc.kml', 'two/doc.kml']);
+  assert.equal((await upload(project.id, 'preview', file)).status, 400);
+  const [first, second] = inspected.body.documents;
+  const firstPreview = await upload(project.id, 'preview', file, { documentId: first.documentId });
+  const secondPreview = await upload(project.id, 'preview', file, { documentId: second.documentId });
+  assert.equal(firstPreview.body.entries[0].name, '一');
+  assert.equal(secondPreview.body.entries[0].name, '二');
+  assert.equal((await upload(project.id, 'confirm', file, { documentId: second.documentId, selectedEntries: JSON.stringify([firstPreview.body.entries[0].entryId]) })).status, 400);
+  const damaged = new File([zip([{ name: 'doc.kml', contents: kml(point('损坏', '121,31')), checksum: 1 }])], 'bad.kmz');
+  assert.equal((await upload(project.id, 'preview', damaged)).status, 400);
+  const unsafe = new File([zip([{ name: '../doc.kml', contents: kml('') }])], 'unsafe.kmz');
+  assert.equal((await upload(project.id, 'inspect', unsafe)).status, 400);
+  assert.deepEqual((await request(`/api/projects/${project.id}/points`)).body, []);
+});
+
+test('KML rejects malformed XML, unsafe XML, unsupported namespaces and non-UTF8 without partial results', async () => {
+  const project = (await request('/api/projects', 'POST', { name: '坏KML项目' })).body;
+  for (const [content, name] of [
+    [kml(point('成功', '121,31')).slice(0, -5), 'truncated.kml'],
+    ['<!DOCTYPE kml [<!ENTITY secret SYSTEM "file:///etc/passwd">]><kml xmlns="http://www.opengis.net/kml/2.2">&secret;</kml>', 'doctype.kml'],
+    ['<kml><Placemark/></kml>', 'namespace.kml'],
+    ['<kml xmlns="http://earth.google.com/kml/2.1"/>', 'old.kml'],
+    [new Uint8Array([0xff, 0xfe, 0xff]), 'encoding.kml'],
+    ['<?xml version="1.0" encoding="UTF-16"?><kml xmlns="http://www.opengis.net/kml/2.2"/>', 'declaration.kml'],
+  ]) {
+    const rejected = await upload(project.id, 'preview', new File([content], name));
+    assert.equal(rejected.status, 400, name);
+    assert.equal(typeof rejected.body.error, 'string');
+  }
+  assert.deepEqual((await request(`/api/projects/${project.id}/points`)).body, []);
+});
+
+test('KML conversion failure in a later batch leaves no partial project data', async () => {
+  const project = (await request('/api/projects', 'POST', { name: 'KML分批项目' })).body;
+  const file = new File([kml(`<Document>${Array.from({ length: 41 }, (_, index) => point(`点${index}`, '121,31')).join('')}</Document>`)], 'batch.kml');
+  const preview = await upload(project.id, 'preview', file);
+  assert.equal(preview.status, 200);
+  const fields = { selectedEntries: JSON.stringify(preview.body.entries.map((entry) => entry.entryId).reverse()) };
+  let batch = 0;
+  handleUpstream = (url, response) => {
+    const locations = url.searchParams.get('locations').split('|');
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify(++batch === 2 ? { status: '0', infocode: '10001' } : { status: '1', locations: locations.map(() => '121.5,31.2').join(';') }));
+  };
+  assert.equal((await upload(project.id, 'confirm', file, fields)).status, 502);
+  assert.deepEqual((await request(`/api/projects/${project.id}/points`)).body, []);
+  handleUpstream = (url, response) => {
+    const locations = url.searchParams.get('locations').split('|');
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({ status: '1', locations: locations.map(() => '121.5,31.2').join(';') }));
+  };
+  const success = await upload(project.id, 'confirm', file, fields);
+  assert.equal(success.status, 201);
+  assert.equal(success.body.points.length, 41);
+  assert.equal(success.body.points[0].name, '点0');
+  assert.equal(success.body.points[40].name, '点40');
+});
+
+test('KML/KMZ limits accept the boundary and reject larger inputs without writing', async () => {
+  const project = (await request('/api/projects', 'POST', { name: 'KML限制项目' })).body;
+  const prefix = '<kml xmlns="http://www.opengis.net/kml/2.2"><Document><description>';
+  const suffix = `</description>${point('边界', '121,31')}</Document></kml>`;
+  const sized = (bytes) => `${prefix}${'x'.repeat(bytes - Buffer.byteLength(prefix) - Buffer.byteLength(suffix))}${suffix}`;
+  const maxUpload = 10 * 1024 * 1024;
+  const maxExtracted = 20 * 1024 * 1024;
+  const exactUpload = await upload(project.id, 'inspect', new File([sized(maxUpload)], 'exact.kml'));
+  assert.equal(exactUpload.status, 200, JSON.stringify(exactUpload.body));
+  assert.equal((await upload(project.id, 'inspect', new File([sized(maxUpload + 1)], 'large.kml'))).status, 400);
+  const exactArchive = new File([zip([{ name: 'doc.kml', contents: sized(maxExtracted), compressed: true }])], 'exact.kmz');
+  const largeArchive = new File([zip([{ name: 'doc.kml', contents: sized(maxExtracted + 1), compressed: true }])], 'large.kmz');
+  assert.equal((await upload(project.id, 'preview', exactArchive)).body.validCount, 1);
+  assert.equal((await upload(project.id, 'preview', largeArchive)).status, 400);
+  const archiveEntries = [{ name: 'doc.kml', contents: kml(point('点', '121,31')) }, ...Array.from({ length: 1023 }, (_, index) => ({ name: `files/${index}.txt`, contents: '' }))];
+  assert.equal((await upload(project.id, 'inspect', new File([zip(archiveEntries)], 'exact-count.kmz'))).status, 200);
+  assert.equal((await upload(project.id, 'inspect', new File([zip([...archiveEntries, { name: 'extra.txt', contents: '' }])], 'large-count.kmz'))).status, 400);
+  const nested = (depth) => kml(`${'<Folder>'.repeat(depth)}${point('点', '121,31')}${'</Folder>'.repeat(depth)}`);
+  assert.equal((await upload(project.id, 'preview', new File([nested(60)], 'exact-depth.kml'))).body.validCount, 1);
+  assert.equal((await upload(project.id, 'preview', new File([nested(61)], 'large-depth.kml'))).status, 400);
+  const onePoint = point('点', '121,31');
+  assert.equal((await upload(project.id, 'preview', new File([kml(onePoint.repeat(10000))], 'exact-points.kml'))).body.validCount, 10000);
+  assert.equal((await upload(project.id, 'preview', new File([kml(onePoint.repeat(10001))], 'large-points.kml'))).status, 400);
+  assert.deepEqual((await request(`/api/projects/${project.id}/points`)).body, []);
+});
+
+test('KML preserves nested folder labels, handles track and rejects duplicate archive paths', async () => {
+  const project = (await request('/api/projects', 'POST', { name: '文件夹与轨迹项目' })).body;
+  const content = kml(`<Folder><name>真实文件夹</name><Document><name>文档名称</name>${point('地图点', '-1.21e2,+31.5,1e3')}<Placemark><name>轨迹</name><gx:Track/></Placemark></Document></Folder>`)
+    .replace('<kml ', '<kml xmlns:gx="http://www.google.com/kml/ext/2.2" ');
+  const result = await upload(project.id, 'preview', new File([content], 'folder.kml'));
+  assert.equal(result.status, 200);
+  assert.match(result.body.entries[0].sourceLabel, /真实文件夹/);
+  assert.doesNotMatch(result.body.entries[0].sourceLabel, /文档名称/);
+  assert.equal(result.body.entries[0].originalLongitude, -121);
+  assert.equal(result.body.entries[0].originalLatitude, 31.5);
+  assert.deepEqual(result.body.ignored, [{ kind: '轨迹', count: 1 }]);
+  const duplicate = zip([{ name: 'same.kml', contents: content }, { name: 'same.kml', contents: content }]);
+  assert.equal((await upload(project.id, 'inspect', new File([duplicate], 'duplicate.kmz'))).status, 400);
+  assert.deepEqual((await request(`/api/projects/${project.id}/points`)).body, []);
+});
 
 test('Excel inspection and preview preserve chosen sheet, column mapping and original error row numbers without saving', async () => {
   const project = (await request('/api/projects', 'POST', { name: 'Excel导入项目' })).body;
