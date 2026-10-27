@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import { chromium } from 'playwright';
 import ExcelJS from 'exceljs';
 import { startApplication, jsonRequest } from './helpers/application.mjs';
-import { assertOverview, openRouteFromSidebar } from './helpers/browser-navigation.mjs';
+import { assertOverview, openRouteFromSidebar, goTask } from './helpers/browser-navigation.mjs';
 import { replaceAmapSDK } from './helpers/amap-browser.mjs';
 
 async function amapFixture(delay = 30) {
@@ -83,19 +83,25 @@ test('planner imports points, plans, invalidates, successfully replans and downl
       await page.locator('.library-point').filter({ has: page.getByText(name, { exact: true }) }).getByRole('button', { name: `将 ${name} 选入当前线路`, exact: true }).click();
       await page.getByText('点位已复制到线路，之后独立维护', { exact: true }).waitFor();
     }
-    await page.getByRole('button', { name: '线路点位', exact: true }).click();
+    await page.getByRole('button', { name: '返回线路点位', exact: true }).click();
     assert.deepEqual(await page.getByLabel('有序点位', { exact: true }).locator('strong').allTextContents(), ['上海仓', '苏州客户', '南京客户']);
+    await goTask(page, '测算线路');
     await page.getByRole('button', { name: '开始规划', exact: true }).click();
     await page.getByText('路线方案已完整保存', { exact: true }).waitFor();
     assert.equal(await page.locator('[data-sdk-polyline]').count(), 2);
+    await goTask(page, '核对方案');
     assert.match(await page.getByRole('region', { name: '路线方案', exact: true }).innerText(), /2\.468/);
+    await goTask(page, '测算线路');
     await page.getByLabel('规划偏好', { exact: true }).selectOption('43');
     await page.getByText('点位或偏好已变更，请重新规划。最近成功方案已保留。', { exact: true }).waitFor();
     assert.equal(await page.locator('[data-sdk-polyline]').count(), 0);
+    await goTask(page, '核对方案');
     assert.doesNotMatch(await page.getByRole('region', { name: '路线方案', exact: true }).innerText(), /2\.468/);
+    await goTask(page, '测算线路');
     await page.getByRole('button', { name: '开始规划', exact: true }).click();
     await page.getByText('路线方案已完整保存', { exact: true }).waitFor();
     assert.equal(await page.locator('[data-sdk-polyline]').count(), 2);
+    await goTask(page, '核对方案');
     assert.match(await page.getByRole('region', { name: '路线方案', exact: true }).innerText(), /4\.690/);
     const book = await downloadedWorkbook(page, '导出当前线路');
     assert.deepEqual(book.worksheets.map((sheet) => sheet.name), ['线路总览', '区间明细']);
@@ -155,10 +161,12 @@ test('a project supports 1000 imported points, 100 routes and a 20 point plan ac
     metrics.overviewReadyMs = Math.round(performance.now() - started);
     await openRouteFromSidebar(page, '20点验收线路');
     await page.getByRole('heading', { name: '20点验收线路', exact: true }).waitFor();
+    await goTask(page, '测算线路');
     await page.locator('[data-sdk-cluster="1000"]').waitFor({ state: 'attached' });
     metrics.workbenchReadyMs = Math.round(performance.now() - started);
     assert.equal(await page.locator('.route-item').count(), 100);
     assert.equal(await page.locator('[data-sdk-marker]').count(), 20);
+    await goTask(page, '编排点位');
     const names = library.slice(0, 20).map((point) => point.name);
     const orderedPoints = page.getByLabel('有序点位', { exact: true }).locator('strong');
     assert.deepEqual(await orderedPoints.allTextContents(), names);
@@ -168,6 +176,7 @@ test('a project supports 1000 imported points, 100 routes and a 20 point plan ac
     await page.getByRole('button', { name: '下移点位 19', exact: true }).click();
     await page.getByText('点位顺序已保存', { exact: true }).waitFor();
     assert.deepEqual(await orderedPoints.allTextContents(), names);
+    await goTask(page, '测算线路');
     started = performance.now();
     await page.getByRole('button', { name: '开始规划', exact: true }).click();
     await page.getByRole('progressbar', { name: '区间规划进度', exact: true }).waitFor();
@@ -175,7 +184,10 @@ test('a project supports 1000 imported points, 100 routes and a 20 point plan ac
     metrics.plan20PointsMs = Math.round(performance.now() - started);
     assert.equal(upstream.requests.length, 19);
     assert.equal(await page.locator('[data-sdk-polyline]').count(), 19);
+    await goTask(page, '核对方案');
     assert.match(await page.getByRole('region', { name: '路线方案', exact: true }).innerText(), /23\.446/);
+    await page.getByRole('button', { name: '线路总览', exact: true }).click();
+    await assertOverview(page);
     started = performance.now();
     const book = await downloadedWorkbook(page, '导出项目');
     metrics.export100RoutesMs = Math.round(performance.now() - started);
@@ -198,6 +210,7 @@ test('a project supports 1000 imported points, 100 routes and a 20 point plan ac
     assert.equal(await reopenedOverview.getByRole('row').count(), 101);
     await openRouteFromSidebar(page, '20点验收线路');
     await page.getByRole('heading', { name: '20点验收线路', exact: true }).waitFor();
+    await goTask(page, '核对方案');
     await page.locator('[data-sdk-cluster="1000"]').waitFor({ state: 'attached' });
     assert.equal(await page.locator('[data-sdk-polyline]').count(), 19);
     assert.equal(await page.locator('.route-item').count(), 100);

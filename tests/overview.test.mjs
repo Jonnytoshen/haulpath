@@ -32,6 +32,9 @@ test('projects open in route overview and users explicitly resume or create a ro
     assert.equal(await page.getByText('未校验重卡限高、限重及货车限行', { exact: true }).count(), 1);
     await overview.getByRole('button', { name: '最近编辑线路', exact: true }).click();
     await page.getByRole('heading', { name: '最近编辑线路', exact: true }).waitFor();
+    assert.equal(await page.getByRole('button', { name: '编排点位', exact: true }).getAttribute('aria-pressed'), 'true', 'opening a route starts with its ordered inputs');
+    assert.equal(await page.getByLabel('规划偏好', { exact: true }).count(), 0, 'calculation controls belong to the calculation task');
+    assert.equal(await page.getByRole('region', { name: '路线方案', exact: true }).count(), 0, 'results belong to the review task');
     await page.getByRole('button', { name: '从点位库选择', exact: true }).click();
     await page.getByRole('region', { name: '项目线路', exact: true }).locator('.route-item').filter({ has: page.getByText('最近编辑线路', { exact: true }) }).click();
     assert.equal(await page.getByRole('region', { name: '线路编辑', exact: true }).evaluate((element) => document.activeElement === element), true, 'reopening the same route from its library restores main-content focus');
@@ -50,6 +53,7 @@ test('projects open in route overview and users explicitly resume or create a ro
     await page.getByLabel('线路名称', { exact: true }).fill('空项目新线路');
     await page.getByRole('button', { name: '创建线路', exact: true }).click();
     await page.getByRole('heading', { name: '空项目新线路', exact: true }).waitFor();
+    assert.equal(await page.getByRole('button', { name: '编排点位', exact: true }).getAttribute('aria-pressed'), 'true', 'new route drafts start by arranging points');
     assert.equal((await request(`/api/projects/${empty.id}/routes`))[0].name, '空项目新线路');
     await page.getByRole('button', { name: project.name, exact: true }).click();
     await overview.waitFor();

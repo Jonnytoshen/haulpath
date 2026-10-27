@@ -2,25 +2,23 @@
 version: 1
 slug: "src-components-workbench-tsx"
 primary_target: "src/components/workbench.tsx"
-related_targets: ["src/app/globals.css", "src/components/route-overview.tsx", "src/components/map-panel.tsx", "src/components/import-dialog.tsx"]
+related_targets: ["src/app/globals.css","src/components/project-library.tsx","src/components/route-overview.tsx","src/components/import-dialog.tsx","src/components/map-panel.tsx"]
 ---
 
-# 项目线路总览与工作台
+# 任务画布
 
-Mode: Operate。面向本机电脑上的个人线路规划者，沿用用户已确认的灰绿线路编排台和 code-led 扩展。项目总览用于核对、比较与打开线路，编辑、手动规划与点库沿用工作台。规格为 `.scratch/haulpath-route-overview/spec.md`。
+Mode: Operate。独立本机线路规划工作台，面向已确认的个人规划者；用户选择任务画布，优先围绕一条线路完成编排、测算与核对。
 
-## Direction contract
+THESIS: 项目是资料的容器，线路是工作的主角；当前任务占据主工作区。
 
-THESIS: 当前项目的线路核对台。进入项目先比较所有有序安排、结果有效性与任务进度，再打开一条继续处理。
+OWN-WORLD: 保留原创 HaulPath 品牌资产、工作深绿、灰绿导航、纸白工作面、中文系统字体与可读的等宽数字。界面以真实线路、点位和完整方案承载资料。
 
-OWN-WORLD: 延续线路编排台的纸白内容、浅灰绿导航、工作深绿动作、中文系统无衬线、细边界和小圆角；真实表格行承载资料，数字对齐，状态始终有文字。
+STORY: 项目总览 → 打开或新建线路 → 编排点位 → 手动测算 → 核对完整方案 → 导出；点位库独立维护，选入线路时进入绑定目标的选择模式。
 
-STORY: 默认查看总览 → 查找/筛选/排序/展开核对 → 按线路身份打开工作台 → 手动编辑规划 → 返回原浏览位置。项目导出始终全部线路。
+FIRST VIEWPORT: 左侧项目和项目资源导航、快速切线；主区上方父级返回和线路标题，随后三个任务入口。编排以可滚动有序点位轴占据主区，测算以设置与地图相邻，核对以完整明细与地图相邻。动作条始终在所属任务底部可达。
 
-FIRST VIEWPORT: 保留左侧项目/线路导航；主体顶部项目名、项目动作和能力说明，随后横向视图切换；查找控件下是一张占据剩余主区的七列表格，表头固定，窄屏在表内横滚，主入口始终可达。
+FORM: 用户选定任务画布；seed eac5de3f，候选第七项。现有视觉系统保持，结构替换。代码优先，无批准视觉稿。
 
-FORM: 既有“线路编排台”surface 的精确功能扩充，沿用已确认代码路径；不运行新方向 seed，不更换 palette/type/component 世界。旧方向 seed `4b92049b` 仅保留历史来源，不作为本轮新选择。
+SIGNATURE: 连续从项目点位库选点时始终显示目标线路与即时点数；返回后有序点位轴就是所选顺序。任务切换仅做180ms轻移，减少动态偏好下即时切换。总览返回恢复当前项目会话浏览条件与滚动。
 
-SIGNATURE: 从任意总览行进入线路、再返回，仍在同一搜索、筛选、排序、展开和双向滚动位置；后台完成不会把用户切回原线。
-
-FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
+FINISH: 真实浏览器覆盖桌面与窄屏，独立reviewer审查有效截图，文档同步当前任务架构，不把测试高德替身当真实联调。
