@@ -234,6 +234,15 @@ node --test --test-name-pattern='first release writes|resume preview' tests/rele
 
 高德 HTTP 与自动化地图 SDK 仅使用可控替身；生产截图的 JS 地图未配置，显示真实配置提示。示例项目明确标记为界面验收数据，未使用用户数据库。本轮未运行完整 `pnpm test`、最低 Node 版本全套、真实高德或真实 GitHub 发布；上述浏览器通过记录不替代这些检查。**未校验重卡限高、限重及货车限行。**
 
+## 2026-10-27 提醒位置调整验收
+
+日期：2026-10-27（Asia/Shanghai）。验证对象为独立 worktree `notice-top-right/haulpath` 的工作树改动，基线 `01339e1a874e12872cc8882a246bd171a23a3145`，本记录不表示基线已包含该修改。
+
+- 成功提醒及点位移除撤销入口移至工作区右上方，按正常布局留出空间，避免覆盖顶部工具栏、手机导航和底部任务按钮；长消息按工作区宽度换行。
+- Node.js `24.21.0`、pnpm `12.10.1`、系统 Chrome；`pnpm run typecheck` 和 `pnpm run build`（webpack）通过。既有浏览器用例按 `planner creates and renames|removed route points` 定向运行，**2/2 通过**，覆盖项目与线路新建、重命名、删除和点位撤销、并发冲突保护。
+- 生产入口 `next start` 使用临时 SQLite，在 1440×900、1024×768、390×844 及窄屏长点位名称状态检查提醒位置、工具栏和任务按钮交互、关闭与撤销恢复，均通过，无整页横向溢出或页面脚本错误。测量和截图保存在本机 `/private/tmp/haulpath-notice-verification/`，该临时目录不随仓库提供。
+- 本次未运行完整 `pnpm test`，没有使用用户数据库；高德三项凭证为空，不包含真实高德联调。
+
 ## 待真实凭证的人工联调
 
 配置真实三项高德凭证，重启服务后完成以下流程，并记录日期、点位与结果：

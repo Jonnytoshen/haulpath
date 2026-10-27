@@ -377,6 +377,7 @@ export default function Workbench() {
     </aside>
 
     <main className="workspace" id="workspace-content" tabIndex={-1}>
+      {(notice || showUndo) && <div className="message success" role="status"><div className="message-copy">{notice && <span>{notice}</span>}{showUndo && <span>已移除点位 {removedPoint!.point.name}</span>}</div>{showUndo && <Button className="undo-button" disabled={busy} onClick={undoPointRemoval}>撤销移除</Button>}<Button aria-label="关闭成功提示" onClick={() => { setNotice(''); setRemovedPoint(null); }}><X /></Button></div>}
       <header className="topbar">
         <div className="workspace-title">
           {project && <div className="workspace-breadcrumb">{view === 'workbench' || choosingPoints ? <Button className="text-button" onClick={showOverview}><ArrowLeft />返回线路总览</Button> : <span>项目工作区</span>}<span className="breadcrumb-divider">/</span><span>{project.name}</span></div>}
@@ -388,7 +389,6 @@ export default function Workbench() {
       <div className="capability-notice"><AlertTriangle aria-hidden="true" /><div><strong>行前测算参考</strong><span>{PLANNING_NOTICE}</span></div><small>普通驾车测算</small></div>
       {refreshError && <div className="message error" role="alert"><span>读取项目线路失败：{refreshError}</span><Button className="text-button" disabled={refreshing} onClick={() => void refreshRoutes()}>重试读取线路</Button></div>}
       {error && <div className="message error" role="alert"><span>{error}</span><Button aria-label="关闭错误提示" onClick={() => setError('')}><X /></Button></div>}
-      {(notice || showUndo) && <div className="message success" role="status"><div className="message-copy">{notice && <span>{notice}</span>}{showUndo && <span>已移除点位 {removedPoint!.point.name}</span>}</div>{showUndo && <Button className="undo-button" disabled={busy} onClick={undoPointRemoval}>撤销移除</Button>}<Button aria-label="关闭成功提示" onClick={() => { setNotice(''); setRemovedPoint(null); }}><X /></Button></div>}
       {project && loading && <p className="message" role="status">正在加载项目线路与点位库…</p>}
 
       {!project ? <div className="welcome"><BrandLogo variant="mark" /><h2>把点位连成线路，让里程有据可查。</h2><p>创建项目，整理常用地点；按实际行驶顺序编排线路，<br />手动测算后核对地图与里程，最后导出 Excel。</p><Button className="button primary" onClick={() => setEditor({ kind: 'project', name: '' })}><Plus />创建第一个项目</Button><div className="welcome-flow"><span>创建项目</span><ArrowRight /><span>编排线路</span><ArrowRight /><span>测算与导出</span></div></div>

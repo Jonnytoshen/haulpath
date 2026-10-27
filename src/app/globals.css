@@ -119,7 +119,7 @@
 .capability-notice small { margin-left: auto; font-size: 11px; white-space: nowrap; }
 .message { display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; gap: 12px; margin-top: 12px; border: 1px solid var(--border); padding: 10px 14px; border-radius: 6px; font-size: 13px; }
 .message.error { background: #fff5f3; color: #a2372e; border-color: #f1d1cc; }
-.message.success { position: fixed; right: 26px; bottom: 24px; z-index: 40; max-width: min(540px, calc(100vw - 32px)); background: #edf7f0; color: #205b3d; border-color: #bed8c7; box-shadow: 0 6px 24px #173d2620; }
+.message.success { align-self: flex-end; max-width: min(540px, 100%); margin: 0 0 12px; background: #edf7f0; color: #205b3d; border-color: #bed8c7; box-shadow: 0 6px 24px #173d2620; }
 .message-copy { display: flex; min-width: 0; flex-direction: column; gap: 3px; overflow-wrap: anywhere; }
 .message button { width: 30px; height: 30px; padding: 0; flex-shrink: 0; }
 .message .undo-button { width: auto; height: auto; min-height: 32px; padding: 4px 8px; font-size: 12px; font-weight: 600; color: var(--primary); text-decoration: underline; }
@@ -497,7 +497,6 @@ td { padding: 15px 16px; border-bottom: 1px solid #edf1ed; font-size: 12px; font
   .library-footnote { padding: 13px 16px; }
   .workspace-footer { padding-block: 18px; font-size: 11px; }
   .workspace-footer > span:last-child { display: none; }
-  .message.success { right: 14px; bottom: 14px; }
   .mapping-fields { grid-template-columns: minmax(0,1fr); gap: 0; }
   .import-steps { gap: 10px; font-size: 11px; }
   .import-step-number { width: 20px; height: 20px; font-size: 11px; }
