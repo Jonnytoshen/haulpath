@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { chromium } from 'playwright';
 import { startApplication, jsonRequest } from './helpers/application.mjs';
-import { assertOverview, openRouteFromSidebar } from './helpers/browser-navigation.mjs';
+import { assertOverview, openRouteFromSidebar, goTask } from './helpers/browser-navigation.mjs';
 
 const deferred = () => { let resolve; const promise = new Promise((done) => { resolve = done; }); return { promise, resolve }; };
 
@@ -51,6 +51,7 @@ test('a delayed planning response cannot finish or replace a newer browser task'
         const response = await pending.fetch(); oldCaptured.resolve(); await releaseOld.promise; await pending.fulfill({ response });
       });
       await page.goto(app.baseUrl); await assertOverview(page); await openRouteFromSidebar(page, route.name);
+      await goTask(page, '测算线路');
       await page.getByRole('button', { name: '开始规划', exact: true }).click(); await oldCaptured.promise;
       await page.getByLabel('规划偏好', { exact: true }).selectOption('34');
       await page.waitForFunction(() => document.getElementById('strategy')?.value === '34' && !document.getElementById('strategy')?.disabled);
@@ -97,6 +98,7 @@ test('overview keeps result validity separate from a replan that fails after par
       const previous = await request(`/api/routes/${route.id}/plan?projectId=${project.id}`, 'POST');
       assert.equal(previous.snapshot.totalDistanceMeters, 2002);
       await page.goto(app.baseUrl); await assertOverview(page); await openRouteFromSidebar(page, route.name);
+      await goTask(page, '测算线路');
       if (state === 'stale') {
         await page.getByLabel('规划偏好', { exact: true }).selectOption('34');
         await page.waitForFunction(() => document.getElementById('strategy')?.value === '34' && !document.getElementById('strategy')?.disabled);
@@ -182,6 +184,7 @@ test('planning completion invalidates an older list captured after the local POS
     const points = await createPoints(request, ['上海仓', '苏州终点']);
     const route = await request(`/api/projects/${project.id}/routes`, 'POST', { name: '规划完成后保留新结果', points });
     await page.goto(app.baseUrl); await assertOverview(page); await openRouteFromSidebar(page, route.name);
+    await goTask(page, '测算线路');
     await page.waitForLoadState('networkidle');
     await page.route(`**/api/routes/${route.id}/plan?projectId=${project.id}`, async (pending) => {
       planArrived.resolve(); await releasePlan.promise; await pending.continue();
@@ -204,6 +207,7 @@ test('planning completion invalidates an older list captured after the local POS
     releaseList.resolve();
     await page.waitForLoadState('networkidle');
     await sidebarRoute.getByText('已规划', { exact: true }).waitFor({ timeout: 3000 });
+    await goTask(page, '核对方案');
     assert.match(await page.locator('.result-summary').innerText(), /1\.001/);
     assert.ok(reads >= 2, 'planning completion invalidates the held list and obtains a fresh project read');
     assert.deepEqual(context.errors, []);

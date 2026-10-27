@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { startApplication, jsonRequest } from './helpers/application.mjs';
-import { assertOverview, openRouteFromSidebar } from './helpers/browser-navigation.mjs';
+import { assertOverview, openRouteFromSidebar, goTask } from './helpers/browser-navigation.mjs';
 
 async function openWorkbench(environment = {}) {
   const app = await startApplication({ AMAP_JS_KEY: '', AMAP_JS_SECURITY_CODE: '', AMAP_WEB_SERVICE_KEY: '', ...environment });
@@ -45,6 +45,7 @@ test('planning completion updates a route after the planner opens another route'
     await assertOverview(page);
     await openRouteFromSidebar(page, routeA.name);
     await page.getByRole('heading', { name: routeA.name, exact: true }).waitFor();
+    await goTask(page, '测算线路');
     await page.getByRole('button', { name: '开始规划', exact: true }).click();
     await started;
     await page.getByRole('region', { name: '项目线路', exact: true }).locator('.route-item').filter({ hasText: '继续编辑的线路 B' }).click();
@@ -134,6 +135,7 @@ test('delayed project refresh cannot remove a new route, revive a deleted route 
       });
       await page.getByRole('button', { name: '刷新线路', exact: true }).click(); await ready;
       if (action === 'preference') {
+        await goTask(page, '测算线路');
         await page.getByLabel('规划偏好', { exact: true }).selectOption('43');
         await page.waitForFunction(() => document.getElementById('strategy')?.value === '43' && !document.getElementById('strategy')?.disabled);
       } else if (action === 'create') {
@@ -142,14 +144,17 @@ test('delayed project refresh cannot remove a new route, revive a deleted route 
         await page.getByRole('button', { name: '创建线路', exact: true }).click();
         await page.getByRole('heading', { name: '刚创建的线路', exact: true }).waitFor();
       } else {
-        await page.getByRole('region', { name: '线路编辑', exact: true }).getByRole('button', { name: '删除', exact: true }).click();
+        await page.getByRole('button', { name: '删除', exact: true }).click();
         await page.getByRole('button', { name: '确认删除', exact: true }).click();
+        await assertOverview(page);
+        await openRouteFromSidebar(page, first.name);
         await page.getByRole('heading', { name: first.name, exact: true }).waitFor();
       }
       release(); await page.waitForLoadState('networkidle'); await page.unroute(pattern);
       const saved = (await jsonRequest(app.baseUrl, `/api/projects/${project.id}/routes`)).body;
       assert.deepEqual(await page.locator('.route-item-name').allTextContents(), saved.map((item) => item.name));
       assert.equal(saved.find((item) => item.id === first.id).strategy, 43);
+      await goTask(page, '测算线路');
       assert.equal(await page.getByLabel('规划偏好', { exact: true }).inputValue(), '43');
     }
     assert.deepEqual(context.errors, []);
@@ -228,6 +233,7 @@ test('running project refreshes stay serial, retain data on network failure and 
     await assertOverview(page);
     await openRouteFromSidebar(page, routeA.name);
     await page.getByRole('heading', { name: routeA.name, exact: true }).waitFor();
+    await goTask(page, '测算线路');
     let reads = 0, ready;
     const arrived = new Promise((resolve) => { ready = resolve; });
     const held = new Promise((resolve) => { release = resolve; });

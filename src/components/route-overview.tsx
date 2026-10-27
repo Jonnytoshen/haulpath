@@ -35,7 +35,7 @@ export default function RouteOverview({ browsing, onBrowsingChange, planningRequ
   }
   const clearConditions = () => onBrowsingChange({ ...browsing, query: '', status: 'all' });
   return <section className="route-overview panel" id="route-overview" aria-label="线路总览" tabIndex={-1}>
-    <div className="panel-heading"><h2>线路总览</h2><span className="overview-count" aria-live="polite">{visible.length} / {routes.length} 条线路</span></div>
+    <div className="panel-heading"><div><h2>线路总览</h2><span className="overview-count" aria-live="polite">{visible.length} / {routes.length} 条线路</span></div>{routes.length > 0 && <Button className="button primary" disabled={createDisabled} onClick={onCreate}><Plus />新建线路</Button>}</div>
     <div className="overview-controls">
       <label className="overview-search" htmlFor="overview-search">搜索线路与点位<div><Search aria-hidden="true" /><Input id="overview-search" aria-label="搜索总览线路与点位" placeholder="线路名称或任意点位名称" value={browsing.query} onChange={(event) => onBrowsingChange({ ...browsing, query: event.target.value })} /></div></label>
       <label htmlFor="overview-status">结果状态<NativeSelect id="overview-status" aria-label="结果状态筛选" value={browsing.status} onChange={(event) => onBrowsingChange({ ...browsing, status: event.target.value as OverviewBrowsing['status'] })}><option value="all">全部状态</option>{['已规划', '待重算', '未规划'].map((status) => <option key={status} value={status}>{status}</option>)}</NativeSelect></label>

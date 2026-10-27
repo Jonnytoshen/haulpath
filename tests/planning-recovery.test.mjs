@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { createServer } from 'node:http';
 import { chromium } from 'playwright';
 import { startApplication, jsonRequest } from './helpers/application.mjs';
-import { assertOverview, openRouteFromSidebar } from './helpers/browser-navigation.mjs';
+import { assertOverview, openRouteFromSidebar, goTask } from './helpers/browser-navigation.mjs';
 
 const run = promisify(execFile);
 
@@ -56,6 +56,7 @@ test('interrupted planning survives a production restart or online backup restor
     await assertOverview(page);
     await openRouteFromSidebar(page, route.name);
     await page.getByRole('heading', { name: route.name, exact: true }).waitFor();
+    await goTask(page, '测算线路');
     hold = true;
     await page.getByRole('button', { name: '重新规划', exact: true }).click();
     await secondLegStarted;
@@ -66,6 +67,7 @@ test('interrupted planning survives a production restart or online backup restor
     await page.reload();
     await assertOverview(page);
     await openRouteFromSidebar(page, route.name);
+    await goTask(page, '测算线路');
     const runningButton = page.getByRole('button', { name: '规划中 1/2', exact: true });
     await runningButton.waitFor();
     assert.equal(await runningButton.isDisabled(), true);
@@ -95,6 +97,7 @@ test('interrupted planning survives a production restart or online backup restor
       await page.goto(app.baseUrl);
       await assertOverview(page);
       await openRouteFromSidebar(page, route.name);
+      await goTask(page, '测算线路');
       const retry = page.getByRole('button', { name: '重新规划', exact: true });
       await retry.waitFor();
       assert.equal(await retry.isEnabled(), true);

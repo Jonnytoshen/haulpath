@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { startApplication, jsonRequest } from './helpers/application.mjs';
-import { assertOverview, openRouteFromSidebar } from './helpers/browser-navigation.mjs';
+import { assertOverview, openRouteFromSidebar, goTask } from './helpers/browser-navigation.mjs';
 
 async function openWorkbench(environment = {}) {
   const app = await startApplication({ AMAP_JS_KEY: '', AMAP_JS_SECURITY_CODE: '', AMAP_WEB_SERVICE_KEY: '', ...environment });
@@ -39,6 +39,7 @@ test('planner selects grouped preferences with descriptions, keyboard focus and 
     await page.goto(app.baseUrl);
     await createProject(page, '规划偏好项目');
     await createRoute(page, '偏好草稿');
+    await goTask(page, '测算线路');
     const select = page.getByLabel('规划偏好', { exact: true });
     assert.deepEqual(await select.locator('optgroup').evaluateAll((groups) => groups.map((group) => ({
       label: group.label, options: Array.from(group.children).map((option) => [option.value, option.textContent]),
@@ -75,6 +76,7 @@ test('planner selects grouped preferences with descriptions, keyboard focus and 
     await assertOverview(page);
     await openRouteFromSidebar(page, '偏好草稿');
     await page.getByRole('heading', { name: '偏好草稿', exact: true }).waitFor();
+    await goTask(page, '测算线路');
     assert.equal(await select.inputValue(), '44');
     assert.deepEqual(context.errors, []);
   } finally { await context.close(); }
@@ -89,8 +91,10 @@ test('new route drafts inherit project preferences after viewing old routes, rel
     await page.goto(app.baseUrl);
     await createProject(page, '偏好继承项目');
     await createRoute(page, '原有推荐线路');
+    await goTask(page, '测算线路');
     assert.equal(await page.getByLabel('规划偏好', { exact: true }).inputValue(), '32');
     await createRoute(page, '主动选择组合线路');
+    await goTask(page, '测算线路');
     await Promise.all([
       page.waitForResponse((response) => response.request().method() === 'PATCH' && response.url().includes('/api/routes/') && response.ok()),
       page.getByLabel('规划偏好', { exact: true }).selectOption('43'),
@@ -99,16 +103,20 @@ test('new route drafts inherit project preferences after viewing old routes, rel
 
     await page.getByRole('region', { name: '项目线路', exact: true }).locator('.route-item').filter({ has: page.getByText('原有推荐线路', { exact: true }) }).click();
     await page.getByRole('heading', { name: '原有推荐线路', exact: true }).waitFor();
+    await goTask(page, '测算线路');
     assert.equal(await page.getByLabel('规划偏好', { exact: true }).inputValue(), '32', 'viewing an old route must retain its own preference');
     await createRoute(page, '查看旧线后继承');
+    await goTask(page, '测算线路');
     assert.equal(await page.getByLabel('规划偏好', { exact: true }).inputValue(), '43');
 
     await page.reload();
     await assertOverview(page);
     await openRouteFromSidebar(page, '原有推荐线路');
     await page.getByRole('heading', { name: '原有推荐线路', exact: true }).waitFor();
+    await goTask(page, '测算线路');
     assert.equal(await page.getByLabel('规划偏好', { exact: true }).inputValue(), '32');
     await createRoute(page, '刷新后继承');
+    await goTask(page, '测算线路');
     assert.equal(await page.getByLabel('规划偏好', { exact: true }).inputValue(), '43');
 
     otherBrowserContext = await browser.newContext({ viewport: { width: 1600, height: 1050 } });
@@ -118,18 +126,22 @@ test('new route drafts inherit project preferences after viewing old routes, rel
     await assertOverview(otherPage);
     await openRouteFromSidebar(otherPage, '原有推荐线路');
     await otherPage.getByRole('heading', { name: '原有推荐线路', exact: true }).waitFor();
+    await goTask(otherPage, '测算线路');
     assert.equal(await otherPage.getByLabel('规划偏好', { exact: true }).inputValue(), '32');
     await createRoute(otherPage, '新浏览器上下文继承');
+    await goTask(otherPage, '测算线路');
     assert.equal(await otherPage.getByLabel('规划偏好', { exact: true }).inputValue(), '43');
 
     await createProject(otherPage, '独立偏好项目');
     await createRoute(otherPage, '独立项目初始线路');
+    await goTask(otherPage, '测算线路');
     assert.equal(await otherPage.getByLabel('规划偏好', { exact: true }).inputValue(), '32');
     await otherPage.getByRole('button', { name: '偏好继承项目', exact: true }).click();
     await assertOverview(otherPage);
     await openRouteFromSidebar(otherPage, '原有推荐线路');
     await otherPage.getByRole('heading', { name: '原有推荐线路', exact: true }).waitFor();
     await createRoute(otherPage, '切回项目后继承');
+    await goTask(otherPage, '测算线路');
     assert.equal(await otherPage.getByLabel('规划偏好', { exact: true }).inputValue(), '43');
     assert.deepEqual(context.errors, []);
   } finally { await otherBrowserContext?.close(); await context.close(); }
@@ -171,10 +183,10 @@ test('project loading blocks dependent writes and late responses cannot replace 
     assert.equal(await page.getByRole('button', { name: '导入表格', exact: true }).isDisabled(), true);
     gate.release(); gate = null;
     await page.locator('.route-item-name').filter({ hasText: '原有线路' }).waitFor();
-    await page.getByRole('button', { name: '线路点位', exact: true }).click();
+    await page.getByRole('button', { name: '线路总览', exact: true }).click();
     await createRoute(page, '新建线路');
     assert.deepEqual(await page.locator('.route-item-name').allTextContents(), ['原有线路', '新建线路']);
-    assert.match(await page.locator('.project-summary strong').innerText(), /1\s*个点位/);
+    assert.match(await page.getByRole('button', { name: '管理点位库', exact: true }).innerText(), /1/);
     assert.equal((await request(`/api/projects/${project.id}/routes`)).body.length, 2);
     assert.equal((await request(`/api/projects/${project.id}/points`)).body.length, 1);
     await page.getByRole('button', { name: '第二项目', exact: true }).click();
@@ -191,7 +203,7 @@ test('project loading blocks dependent writes and late responses cannot replace 
     const late = gate; gate = null; late.release();
     await page.waitForResponse((response) => response.url().endsWith(`/api/projects/${project.id}/points`));
     assert.deepEqual(await page.locator('.route-item-name').allTextContents(), ['第二项目线路']);
-    assert.match(await page.locator('.project-summary strong').innerText(), /2\s*个点位/);
+    assert.match(await page.getByRole('button', { name: '管理点位库', exact: true }).innerText(), /2/);
     assert.deepEqual(context.errors, []);
   } finally { gate?.release(); await context.close(); }
 });
@@ -207,15 +219,18 @@ test('planner creates and renames projects and route drafts, then reopens saved 
     await assertOverview(page);
     await openRouteFromSidebar(page, '上海仓—南京客户');
     await page.getByRole('heading', { name: '上海仓—南京客户', exact: true }).waitFor();
+    await goTask(page, '测算线路');
     await page.getByRole('heading', { name: '配置高德地图，查看真实线路', exact: true }).waitFor();
     assert.equal(await page.getByText('未校验重卡限高、限重及货车限行', { exact: true }).count(), 1);
     await page.getByRole('button', { name: '重命名', exact: true }).click();
     await page.getByLabel('线路名称', { exact: true }).fill('往返线路草稿');
     await page.getByRole('button', { name: '保存名称', exact: true }).click();
     await page.getByRole('heading', { name: '往返线路草稿', exact: true }).waitFor();
+    await page.getByRole('button', { name: '线路总览', exact: true }).click();
     await page.getByRole('button', { name: '重命名项目', exact: true }).click();
     await page.getByLabel('项目名称', { exact: true }).fill('长三角正式项目');
     await page.getByRole('button', { name: '保存名称', exact: true }).click();
+    await page.getByRole('button', { name: '长三角正式项目', exact: true }).waitFor();
     await page.getByRole('heading', { name: '长三角正式项目', exact: true }).waitFor();
     await createProject(page, '另一个项目');
     assert.equal(await page.getByRole('heading', { name: '往返线路草稿', exact: true }).count(), 0);
@@ -223,9 +238,10 @@ test('planner creates and renames projects and route drafts, then reopens saved 
     await assertOverview(page);
     await openRouteFromSidebar(page, '往返线路草稿');
     await page.getByRole('heading', { name: '往返线路草稿', exact: true }).waitFor();
-    await page.getByRole('region', { name: '线路编辑', exact: true }).getByRole('button', { name: '删除', exact: true }).click();
+    await page.getByRole('button', { name: '删除', exact: true }).click();
     await page.getByRole('button', { name: '确认删除', exact: true }).click();
-    await page.getByText('选择一条线路开始编辑', { exact: true }).waitFor();
+    const emptyOverview = await assertOverview(page);
+    await emptyOverview.getByText('还没有线路', { exact: true }).waitFor();
     await page.getByRole('button', { name: '删除项目', exact: true }).click();
     await page.getByRole('button', { name: '确认删除', exact: true }).click();
     await page.getByRole('heading', { name: '另一个项目', exact: true }).waitFor();
@@ -270,6 +286,7 @@ test('route filtering and mobile navigation support point selection through plan
     await assertOverview(page);
     await openRouteFromSidebar(page, '上海日常线路');
     await page.getByRole('heading', { name: '上海日常线路', exact: true }).waitFor();
+    await goTask(page, '测算线路');
     await page.getByRole('heading', { name: '配置高德地图，查看真实线路', exact: true }).waitFor();
     assert.equal((await request('/api/config')).body.webServiceConfigured, true, 'server-side planning remains available without a JS map key');
 
@@ -299,7 +316,9 @@ test('route filtering and mobile navigation support point selection through plan
 
     await addPoint(page, '上海起点', 121.47, 31.23);
     await page.getByText('再添加一个点位，即可开始规划。', { exact: true }).waitFor();
+    await goTask(page, '测算线路');
     assert.equal(await page.getByRole('button', { name: '开始规划', exact: true }).isDisabled(), true);
+    await goTask(page, '编排点位');
     await page.getByRole('button', { name: '从点位库选择', exact: true }).click();
     const library = page.locator('.library-panel');
     assert.ok((await library.innerText()).includes('华东回程'), 'library selection identifies its destination route');
@@ -324,14 +343,17 @@ test('route filtering and mobile navigation support point selection through plan
     const desktopViewport = { x: 0, y: 0, width: 1280, height: 720 };
     const addPointButton = page.getByRole('button', { name: '手动添加点位', exact: true });
     assert.ok(within(await addPointButton.boundingBox(), desktopViewport), 'the add-point action remains within the desktop viewport');
-    assert.ok(within(await page.getByRole('button', { name: '开始规划', exact: true }).boundingBox(), desktopViewport), 'planning remains within the desktop viewport');
     await editorScroll.evaluate((element) => { element.scrollTop = element.scrollHeight; });
-    assert.ok(await editorScroll.evaluate((element) => element.scrollTop > 0), 'the point editor has been scrolled to its bottom');
+    assert.ok(await editorScroll.evaluate((element) => element.scrollTop + element.clientHeight >= element.scrollHeight - 1), 'the full point list can be reached within its editor');
     assert.ok(within(await addPointButton.boundingBox(), desktopViewport), 'the add-point action remains visible after scrolling the point list');
+    await goTask(page, '测算线路');
+    assert.ok(within(await page.getByRole('button', { name: '开始规划', exact: true }).boundingBox(), desktopViewport), 'planning remains within the desktop viewport in its task');
     await page.setViewportSize({ width: 390, height: 844 });
     await page.getByRole('button', { name: '开始规划', exact: true }).click();
     await page.getByText('路线方案已完整保存', { exact: true }).waitFor();
     assert.deepEqual(planningRequests, [[[121.47, 31.23], [120.58, 31.3]], [[120.58, 31.3], [118.79, 32.06]]]);
+    assert.equal(await page.getByRole('button', { name: '测算线路', exact: true }).getAttribute('aria-pressed'), 'true', 'completion leaves the chosen task in place');
+    await goTask(page, '核对方案');
     assert.ok((await page.getByRole('region', { name: '路线方案', exact: true }).innerText()).includes('3.003'));
     await assertNoHorizontalOverflow('mobile planning results');
 
@@ -380,8 +402,10 @@ test('planner edits ordered points, reuses an independent project library copy, 
     await page.getByRole('button', { name: '上移点位 3', exact: true }).click();
     await page.getByText('点位顺序已保存', { exact: true }).waitFor();
     assert.deepEqual(await points.locator('strong').allTextContents(), ['上海仓', '上海返回', '南京客户']);
+    await goTask(page, '测算线路');
     await page.getByRole('button', { name: '开始规划', exact: true }).click();
     await page.getByRole('alert').getByText('第 1、2 个点位坐标完全相同，请调整后规划。', { exact: true }).waitFor();
+    await goTask(page, '编排点位');
     await page.getByRole('button', { name: '删除点位 2', exact: true }).click();
     await page.getByRole('button', { name: '从点位库选择', exact: true }).click();
     await page.getByRole('button', { name: '添加点位', exact: true }).click();
@@ -418,13 +442,14 @@ test('planner edits ordered points, reuses an independent project library copy, 
     await page.getByText('已删除点库点位，线路副本保留', { exact: true }).waitFor();
     assert.equal(libraryDeletes.length, 1);
     assert.deepEqual((await request(`/api/projects/${project.id}/points`)).body, []);
-    await page.getByRole('button', { name: '线路点位', exact: true }).click();
+    await page.getByRole('button', { name: '返回线路点位', exact: true }).click();
     assert.deepEqual(await points.locator('strong').allTextContents(), ['上海仓', '南京客户', '苏州客户']);
     await page.reload();
     await assertOverview(page);
     await openRouteFromSidebar(page, '上海往返');
     await page.getByRole('heading', { name: '上海往返', exact: true }).waitFor();
     assert.deepEqual(await points.locator('strong').allTextContents(), ['上海仓', '南京客户', '苏州客户']);
+    await goTask(page, '核对方案');
     const download = page.waitForEvent('download');
     await page.getByRole('button', { name: '导出当前线路', exact: true }).click();
     const file = await download;
@@ -468,12 +493,15 @@ test('removed route points preserve later edits, selection boundaries, and concu
     await edit.getByLabel('经度', { exact: true }).fill('121.48');
     await edit.getByRole('button', { name: '确认保存点位', exact: true }).click();
     await edit.waitFor({ state: 'hidden' });
+    await goTask(page, '测算线路');
     await page.getByLabel('规划偏好', { exact: true }).selectOption('34');
+    await goTask(page, '编排点位');
     await addPoint(page, '杭州新增点', 120.15, 30.28);
     assert.equal(await undo.isVisible(), true, 'later edits keep the removal available to undo');
     await undo.click();
     await ordered.getByText('南京客户', { exact: true }).waitFor();
     assert.deepEqual(await ordered.locator('strong').allTextContents(), ['上海仓新名称', '南京客户', '上海返回', '杭州新增点']);
+    await goTask(page, '测算线路');
     assert.equal(await page.getByLabel('规划偏好', { exact: true }).inputValue(), '34');
     const restored = (await request(routePath)).body;
     assert.deepEqual(restored.points.map((point) => point.name), ['上海仓新名称', '南京客户', '上海返回', '杭州新增点']);
@@ -483,6 +511,7 @@ test('removed route points preserve later edits, selection boundaries, and concu
     assert.equal(restored.strategy, 34);
     assert.equal(await undo.count(), 0, 'an undo is consumed once');
 
+    await goTask(page, '编排点位');
     await page.getByRole('button', { name: '删除点位 2', exact: true }).click();
     await page.getByText('已移除点位 南京客户', { exact: true }).waitFor();
     await page.getByRole('region', { name: '项目线路', exact: true }).getByRole('button').filter({ hasText: '另一条线路' }).click();
@@ -547,6 +576,7 @@ test('planning waits for configuration and offers local help without posting whe
     await assertOverview(page);
     await openRouteFromSidebar(page, '等待配置线路');
     await page.getByRole('heading', { name: '等待配置线路', exact: true }).waitFor();
+    await goTask(page, '测算线路');
     const planning = page.getByRole('button', { name: '开始规划', exact: true });
     const controls = page.locator('.planning-controls');
     await controls.getByText('正在读取测算配置…', { exact: true }).waitFor();
@@ -605,6 +635,7 @@ test('map search and clicks produce confirmed points, and planning results becom
     await page.goto(context.app.baseUrl);
     await createProject(page, '地图规划项目');
     await createRoute(page, '多点实测');
+    await goTask(page, '测算线路');
     await page.getByRole('textbox', { name: '搜索地点', exact: true }).fill('上海');
     await page.getByRole('button', { name: '上海搜索仓 上海市', exact: true }).click();
     const confirm = page.getByRole('dialog', { name: '确认地图点位', exact: true });
@@ -619,11 +650,14 @@ test('map search and clicks produce confirmed points, and planning results becom
     await confirm.getByLabel('点位名称', { exact: true }).fill('地图选点');
     await confirm.getByRole('button', { name: '确认保存点位', exact: true }).click();
     await confirm.waitFor({ state: 'hidden' });
+    await goTask(page, '编排点位');
     assert.deepEqual(await page.getByLabel('有序点位', {exact:true}).locator('strong').allTextContents(), ['上海搜索仓', '南京搜索客户', '地图选点']);
+    await goTask(page, '测算线路');
     await page.getByRole('button', { name: '开始规划', exact: true }).click();
     await page.getByRole('progressbar', { name: '区间规划进度', exact: true }).waitFor();
     await page.getByText('路线方案已完整保存', { exact: true }).waitFor();
     assert.equal(await page.locator('[data-sdk-polyline]').count(), 2);
+    await goTask(page, '核对方案');
     assert.ok((await page.getByRole('region',{name:'路线方案',exact:true}).innerText()).includes('3.003'));
     assert.equal(planningCalls, 2);
     await page.getByRole('button', {name:'重命名',exact:true}).click();
@@ -631,11 +665,14 @@ test('map search and clicks produce confirmed points, and planning results becom
     await page.getByRole('button',{name:'保存名称',exact:true}).click();
     await page.getByRole('heading',{name:'多点改名',exact:true}).waitFor();
     assert.equal(await page.locator('[data-sdk-polyline]').count(), 2);
+    await goTask(page, '测算线路');
     await page.getByLabel('规划偏好',{exact:true}).selectOption('34');
     await page.getByText('点位或偏好已变更，请重新规划。最近成功方案已保留。',{exact:true}).waitFor();
     assert.equal(await page.locator('[data-sdk-polyline]').count(), 0);
+    await goTask(page, '核对方案');
     assert.ok(!(await page.getByRole('region',{name:'路线方案',exact:true}).innerText()).includes('3.003'));
     fail = true;
+    await goTask(page, '测算线路');
     await page.getByRole('button',{name:'开始规划',exact:true}).click();
     await page.locator('.planning-error').waitFor();
     assert.equal(await page.getByRole('button',{name:'开始规划',exact:true}).isEnabled(), true);
@@ -645,6 +682,7 @@ test('map search and clicks produce confirmed points, and planning results becom
     await assertOverview(page);
     await openRouteFromSidebar(page, '多点改名');
     await page.getByRole('heading',{name:'多点改名',exact:true}).waitFor();
+    await goTask(page, '测算线路');
     assert.equal(planningCalls, callsBeforeReload);
     assert.equal(await page.locator('[data-sdk-polyline]').count(), 0);
     assert.deepEqual(context.errors, []);
@@ -702,6 +740,7 @@ test('map rejects coordinate-less search suggestions and discards late callbacks
     await page.goto(context.app.baseUrl);
     await createProject(page, '地图生命周期项目');
     await createRoute(page, '原线路');
+    await goTask(page, '测算线路');
     const search = page.getByRole('textbox', {name:'搜索地点',exact:true});
     await search.fill('无坐标');
     await page.getByRole('button',{name:'没有具体坐标的地区',exact:true}).click();
@@ -712,10 +751,12 @@ test('map rejects coordinate-less search suggestions and discards late callbacks
     // The external SDK fixture delivers this autocomplete result after 1 second.
     await page.waitForTimeout(400);
     await createRoute(page, '新线路');
+    await goTask(page, '测算线路');
     await page.waitForTimeout(1100);
     assert.equal(await page.getByRole('button',{name:'迟到地点 上海市',exact:true}).count(), 0);
     assert.equal(await search.inputValue(), '');
     assert.equal(await page.locator('[data-sdk-map="ready"]').count(), 1);
+    await page.getByRole('button', { name: '线路总览', exact: true }).click();
     await page.getByRole('button',{name:'删除项目',exact:true}).click();
     await page.getByRole('button',{name:'确认删除',exact:true}).click();
     await page.getByRole('heading',{name:'从一个项目，规划下一程',exact:true}).waitFor();
@@ -723,8 +764,129 @@ test('map rejects coordinate-less search suggestions and discards late callbacks
     await createProject(page, '重新打开地图');
     assert.equal(await page.locator('[data-sdk-map="ready"]').count(), 0, 'an empty project opens its overview before mounting a map');
     await createRoute(page, '重新打开的地图线路');
+    await goTask(page, '测算线路');
     await page.getByRole('textbox',{name:'搜索地点',exact:true}).waitFor();
     assert.equal(await page.locator('[data-sdk-map="ready"]').count(), 1);
+    assert.deepEqual(context.errors, []);
+  } finally { await context.close(); }
+});
+
+test('an empty project can prepare its point library before creating and arranging a route', { timeout: 120000 }, async () => {
+  const context = await openWorkbench();
+  const { page, app } = context;
+  const routeRequests = [];
+  page.on('request', (event) => { if (/\/api\/routes\//.test(event.url())) routeRequests.push(event.method()); });
+  try {
+    await page.goto(app.baseUrl);
+    await createProject(page, '先整理项目资料');
+    await page.getByRole('button', { name: '管理点位库', exact: true }).click();
+    const library = page.getByRole('region', { name: '项目点位库', exact: true });
+    await library.waitFor();
+    assert.equal(await page.getByRole('region', { name: '线路编辑', exact: true }).count(), 0);
+    assert.equal(await page.getByRole('region', { name: '地图预览', exact: true }).count(), 0);
+    assert.equal(await page.getByRole('region', { name: '路线方案', exact: true }).count(), 0);
+    assert.equal(await page.getByRole('button', { name: '返回线路点位', exact: true }).count(), 0);
+    await library.getByRole('button', { name: '添加点位', exact: true }).click();
+    const pointDialog = page.getByRole('dialog', { name: '添加点位', exact: true });
+    await pointDialog.getByLabel('点位名称', { exact: true }).fill('先建上海仓');
+    await pointDialog.getByLabel('经度', { exact: true }).fill('121.47');
+    await pointDialog.getByLabel('纬度', { exact: true }).fill('31.23');
+    await pointDialog.getByRole('button', { name: '确认保存点位', exact: true }).click();
+    await pointDialog.waitFor({ state: 'hidden' });
+    await library.getByRole('button', { name: '导入表格', exact: true }).click();
+    const importing = page.getByRole('dialog', { name: '导入项目点位', exact: true });
+    await importing.getByLabel('选择点位表格', { exact: true }).setInputFiles({ name: '常用点.csv', mimeType: 'text/csv', buffer: Buffer.from('名称,经度,纬度\n先建苏州客户,120.58,31.3\n') });
+    await importing.getByLabel('工作表', { exact: true }).waitFor();
+    await importing.getByRole('button', { name: '预览并校验', exact: true }).click();
+    await importing.getByText('1 行有效', { exact: true }).waitFor();
+    assert.deepEqual(await library.locator('.library-point strong').allTextContents(), ['先建上海仓'], 'import preview does not write project resources');
+    await importing.getByRole('button', { name: '确认导入 1 行', exact: true }).click();
+    await importing.waitFor({ state: 'hidden' });
+    assert.deepEqual(await library.locator('.library-point strong').allTextContents(), ['先建上海仓', '先建苏州客户']);
+    assert.equal(await library.getByRole('button', { name: /选入当前线路$/ }).count(), 0, 'management has no implicit route destination');
+    const project = (await jsonRequest(app.baseUrl, '/api/projects')).body[0];
+    assert.deepEqual((await jsonRequest(app.baseUrl, `/api/projects/${project.id}/routes`)).body, []);
+    assert.equal((await jsonRequest(app.baseUrl, `/api/projects/${project.id}/points`)).body.length, 2);
+    assert.deepEqual(routeRequests, [], 'preparing an empty project library does not select or mutate a route');
+
+    await createRoute(page, '资料整理后的第一条线路');
+    assert.equal(await page.getByRole('button', { name: '编排点位', exact: true }).getAttribute('aria-pressed'), 'true');
+    await page.getByRole('button', { name: '从点位库选择', exact: true }).click();
+    await library.getByText('资料整理后的第一条线路', { exact: true }).waitFor();
+    for (const name of ['先建上海仓', '先建苏州客户']) {
+      await library.getByRole('button', { name: `将 ${name} 选入当前线路`, exact: true }).click();
+      await page.getByText('点位已复制到线路，之后独立维护', { exact: true }).waitFor();
+    }
+    await library.getByText('已添加 2 个点位', { exact: true }).waitFor();
+    await library.getByRole('button', { name: '返回线路点位', exact: true }).click();
+    assert.deepEqual(await page.getByLabel('有序点位', { exact: true }).locator('strong').allTextContents(), ['先建上海仓', '先建苏州客户']);
+    const saved = (await jsonRequest(app.baseUrl, `/api/projects/${project.id}/routes`)).body[0];
+    assert.deepEqual(saved.points.map((point) => point.name), ['先建上海仓', '先建苏州客户']);
+    assert.equal(saved.snapshot, null);
+    assert.deepEqual(context.errors, []);
+  } finally { await context.close(); }
+});
+
+test('library selection stays bound to its route and is cleared by resource management or a project change', { timeout: 120000 }, async () => {
+  const context = await openWorkbench();
+  const { page, app } = context;
+  const request = async (path, method, body) => {
+    const result = await jsonRequest(app.baseUrl, path, method, body);
+    assert.ok(result.status < 300, JSON.stringify(result));
+    return result.body;
+  };
+  const planningPosts = [];
+  page.on('request', (event) => { if (event.method() === 'POST' && /\/api\/routes\/[^/]+\/plan\?/.test(event.url())) planningPosts.push(event.url()); });
+  try {
+    const project = await request('/api/projects', 'POST', { name: '明确选点目标的项目' });
+    const points = await request('/api/coordinates', 'POST', { points: [
+      { name: '目标上海仓', longitude: 121.47, latitude: 31.23, source: 'manual' },
+      { name: '目标苏州客户', longitude: 120.58, latitude: 31.3, source: 'manual' },
+    ] });
+    await request(`/api/projects/${project.id}/points`, 'POST', { points });
+    const routeA = await request(`/api/projects/${project.id}/routes`, 'POST', { name: '选点目标 A' });
+    const routeB = await request(`/api/projects/${project.id}/routes`, 'POST', { name: '选点目标 B' });
+    const other = await request('/api/projects', 'POST', { name: '另一个资源项目' });
+    await request(`/api/projects/${other.id}/points`, 'POST', { points: [{ ...points[0], name: '其他项目专属仓' }] });
+    await page.goto(app.baseUrl);
+    await assertOverview(page);
+    await openRouteFromSidebar(page, routeA.name);
+    await page.getByRole('button', { name: '从点位库选择', exact: true }).click();
+    const library = page.getByRole('region', { name: '项目点位库', exact: true });
+    await library.getByText(routeA.name, { exact: true }).waitFor();
+    for (const [index, name] of ['目标上海仓', '目标苏州客户'].entries()) {
+      await library.getByRole('button', { name: `将 ${name} 选入当前线路`, exact: true }).click();
+      await library.getByText(`已添加 ${index + 1} 个点位`, { exact: true }).waitFor();
+    }
+    await page.getByRole('button', { name: '管理点位库', exact: true }).click();
+    assert.equal(await library.getByRole('button', { name: /选入当前线路$/ }).count(), 0);
+    assert.equal(await page.getByRole('button', { name: '返回线路点位', exact: true }).count(), 0);
+    assert.equal(await page.getByRole('region', { name: '项目线路', exact: true }).locator('.route-item[aria-pressed="true"]').count(), 0, 'resource management has no active route');
+    await page.getByRole('button', { name: '线路工作台', exact: true }).click();
+    await page.getByRole('heading', { name: routeA.name, exact: true }).waitFor();
+    assert.deepEqual(await page.getByLabel('有序点位', { exact: true }).locator('strong').allTextContents(), ['目标上海仓', '目标苏州客户']);
+    await openRouteFromSidebar(page, routeB.name);
+    await page.getByRole('button', { name: '从点位库选择', exact: true }).click();
+    await library.getByText(routeB.name, { exact: true }).waitFor();
+    await library.getByText('已添加 0 个点位', { exact: true }).waitFor();
+    await library.getByRole('button', { name: '将 目标苏州客户 选入当前线路', exact: true }).click();
+    await library.getByText('已添加 1 个点位', { exact: true }).waitFor();
+    await page.getByRole('button', { name: other.name, exact: true }).click();
+    await assertOverview(page);
+    await page.getByRole('button', { name: '管理点位库', exact: true }).click();
+    assert.deepEqual(await library.locator('.library-point strong').allTextContents(), ['其他项目专属仓']);
+    assert.equal(await library.getByRole('button', { name: /选入当前线路$/ }).count(), 0);
+    assert.equal(await page.getByRole('button', { name: '返回线路点位', exact: true }).count(), 0, 'a project switch clears the old selection destination');
+    await page.getByRole('button', { name: project.name, exact: true }).click();
+    await assertOverview(page);
+    await page.getByRole('button', { name: '管理点位库', exact: true }).click();
+    assert.equal(await library.getByRole('button', { name: /选入当前线路$/ }).count(), 0, 'returning to the project does not revive a selection mode');
+    const savedA = await request(`/api/routes/${routeA.id}?projectId=${project.id}`);
+    const savedB = await request(`/api/routes/${routeB.id}?projectId=${project.id}`);
+    assert.deepEqual(savedA.points.map((point) => point.name), ['目标上海仓', '目标苏州客户']);
+    assert.deepEqual(savedB.points.map((point) => point.name), ['目标苏州客户']);
+    assert.deepEqual((await request(`/api/projects/${other.id}/routes`)), []);
+    assert.equal(planningPosts.length, 0);
     assert.deepEqual(context.errors, []);
   } finally { await context.close(); }
 });
