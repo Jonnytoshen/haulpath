@@ -8,6 +8,7 @@ import { importCoordinate } from './import-coordinate';
 const namespace = 'http://www.opengis.net/kml/2.2';
 const gxNamespace = 'http://www.google.com/kml/ext/2.2';
 const maxUncompressed = 20 * 1024 * 1024;
+const maxPreviewBytes = 20 * 1024 * 1024;
 const maxEntries = 1024;
 const maxDepth = 64;
 const maxPoints = 10_000;
@@ -131,6 +132,8 @@ function extractPoints(data: Buffer, document: Document, format: MapImport['form
       else if (tag.local === 'name' && parent.isFolder && parent.folder) Object.assign(next, { kind: 'folderName', folder: parent.folder, text: '' });
       else if (tag.local === 'NetworkLink') addIgnored('网络链接');
       else if (['GroundOverlay', 'ScreenOverlay', 'PhotoOverlay'].includes(tag.local)) addIgnored('其他');
+    } else if (tag.uri === gxNamespace && tag.local === 'Tour' && parent.kind === 'container') {
+      addIgnored('其他');
     } else if ((parent.kind === 'placemark' || parent.kind === 'geometry') && parent.mark) {
       if (tag.uri === namespace && parent.kind === 'placemark' && tag.local === 'name') {
         Object.assign(next, { kind: 'placemarkName', mark: parent.mark, text: '' });
@@ -173,20 +176,33 @@ function extractPoints(data: Buffer, document: Document, format: MapImport['form
   try { parser.write(content).close(); }
   catch (error) { if (error instanceof HttpError) throw error; throw badXml(); }
 
-  const entries = points.map((point, index): MapEntry => {
+  const ignoredSummary = Array.from(ignored, ([kind, count]) => ({ kind, count }));
+  // Start with the JSON array delimiters and the smallest possible fixed response fields.
+  // This permits early rejection without rejecting an exact-boundary response.
+  let entriesBytes = 2;
+  const minimumOverhead = Buffer.byteLength(JSON.stringify({ format, entries: [], validCount: 0, invalidCount: 0, ignored: ignoredSummary })) - 2;
+  const entries: MapEntry[] = [];
+  let validCount = 0;
+  for (const [index, point] of points.entries()) {
     const errors: string[] = [];
     const name = point.mark.name;
     if (!name.trim()) errors.push('名称缺失');
     const coordinates = point.coordinates?.trim();
-    const tuples = coordinates ? coordinates.split(/\s+/) : [];
-    const parts = tuples.length === 1 ? tuples[0].split(',') : [];
+    const tuples = coordinates ? coordinates.split(/\s+/, 2) : [];
+    const parts = tuples.length === 1 ? tuples[0].split(',', 4) : [];
     if (point.coordinateCount > 1 || tuples.length > 1 || (tuples.length === 1 && (parts.length < 2 || parts.length > 3 || (parts.length === 3 && (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(parts[2]) || !Number.isFinite(Number(parts[2]))))))) errors.push('Point 坐标必须为单个经度、纬度及可选高程元组');
     const originalLongitude = importCoordinate(parts[0], '经度', 180, errors);
     const originalLatitude = importCoordinate(parts[1], '纬度', 90, errors);
-    return { entryId: `${document.documentId}:p${index}`, sourceLabel: [document.path, ...folderPath(point.mark.folder), `第 ${index + 1} 项`].join(' / '), name, originalLongitude, originalLatitude, errors };
-  });
-  const validCount = entries.filter((entry) => entry.errors.length === 0).length;
-  return { format, entries, validCount, invalidCount: entries.length - validCount, ignored: Array.from(ignored, ([kind, count]) => ({ kind, count })) };
+    const entry: MapEntry = { entryId: `${document.documentId}:p${index}`, sourceLabel: [document.path, ...folderPath(point.mark.folder), `第 ${index + 1} 项`].join(' / '), name, originalLongitude, originalLatitude, errors };
+    entriesBytes += (index ? 1 : 0) + Buffer.byteLength(JSON.stringify(entry));
+    if (entriesBytes + minimumOverhead > maxPreviewBytes) throw new HttpError(400, 'KML/KMZ 预览内容不能超过 20 MiB，请缩短名称或拆分文件');
+    entries.push(entry);
+    if (!errors.length) validCount++;
+  }
+  const invalidCount = entries.length - validCount;
+  const fixedOverhead = Buffer.byteLength(JSON.stringify({ format, entries: [], validCount, invalidCount, ignored: ignoredSummary })) - 2;
+  if (entriesBytes + fixedOverhead > maxPreviewBytes) throw new HttpError(400, 'KML/KMZ 预览内容不能超过 20 MiB，请缩短名称或拆分文件');
+  return { format, entries, validCount, invalidCount, ignored: ignoredSummary };
 }
 
 export async function previewMap(map: MapImport, form: FormData): Promise<MapPreview> {
