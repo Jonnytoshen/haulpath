@@ -2,6 +2,7 @@ import { normalizeCoordinates } from '@/server/coordinates';
 import { api, HttpError } from '@/server/http';
 import { previewImport, readImport } from '@/server/import';
 import { storage } from '@/server/storage';
+import { previewMap } from '@/server/map-import';
 
 type Context = { params: Promise<{ projectId: string }> };
 export const runtime = 'nodejs';
@@ -10,8 +11,30 @@ export function POST(request: Request, context: Context) {
   return api(async () => {
     const { projectId } = await context.params;
     storage.getProject(projectId);
-    const { form, tables } = await readImport(request);
-    const preview = previewImport(form, tables);
+    const input = await readImport(request);
+    const { form } = input;
+    if ('map' in input) {
+      const preview = await previewMap(input.map, form);
+      let selectedEntries: unknown;
+      try { selectedEntries = JSON.parse(String(form.get('selectedEntries'))); }
+      catch { throw new HttpError(400, '请明确选择需要导入的有效点位'); }
+      if (!Array.isArray(selectedEntries) || !selectedEntries.length
+        || selectedEntries.some((entry) => typeof entry !== 'string' || !entry)
+        || new Set(selectedEntries).size !== selectedEntries.length) {
+        throw new HttpError(400, '请选择不重复的有效点位');
+      }
+      const selection = new Set(selectedEntries);
+      const entries = preview.entries.filter((entry) => selection.has(entry.entryId));
+      if (entries.length !== selection.size) throw new HttpError(400, '所选点位不存在，请重新预览');
+      if (entries.some((entry) => entry.errors.length)) throw new HttpError(400, '所选点位包含错误，请重新选择有效点位');
+      const normalized = await normalizeCoordinates(entries.map((entry) => ({
+        name: entry.name, longitude: entry.originalLongitude, latitude: entry.originalLatitude,
+        coordinateSystem: 'WGS84', source: 'import',
+      })));
+      const points = storage.addPoints(projectId, normalized);
+      return Response.json({ points, importedCount: points.length }, { status: 201 });
+    }
+    const preview = previewImport(form, input.tables);
     let selectedRows: unknown;
     try { selectedRows = JSON.parse(String(form.get('selectedRows'))); }
     catch { throw new HttpError(400, '请明确选择需要导入的有效行'); }

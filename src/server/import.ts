@@ -2,6 +2,8 @@ import ExcelJS from 'exceljs';
 import { parse } from 'csv-parse/sync';
 import type { CoordinateSystem } from '@/lib/domain';
 import { HttpError } from './http';
+import { importCoordinate } from './import-coordinate';
+import type { MapImport } from './map-import';
 
 interface Table {
   name: string;
@@ -16,20 +18,24 @@ interface PreviewRow {
   errors: string[];
 }
 
-export async function readImport(request: Request): Promise<{ form: FormData; tables: Table[] }> {
+export type ImportFile = { form: FormData; format: 'csv' | 'xlsx'; tables: Table[] } | { form: FormData; format: 'kml' | 'kmz'; map: MapImport };
+
+export async function readImport(request: Request): Promise<ImportFile> {
   let form: FormData;
   try { form = await request.formData(); }
   catch { throw new HttpError(400, '请使用表单上传点位文件'); }
   const file = form.get('file');
   if (!(file instanceof File) || !file.size) throw new HttpError(400, '请选择非空的点位文件');
   const extension = file.name.split('.').at(-1)?.toLowerCase();
-  if (extension !== 'csv' && extension !== 'xlsx') throw new HttpError(400, '仅支持 .xlsx 和 UTF-8 CSV 文件');
+  if (extension !== 'csv' && extension !== 'xlsx' && extension !== 'kml' && extension !== 'kmz') throw new HttpError(400, '仅支持 .xlsx、UTF-8 CSV、.kml 和 .kmz 文件');
+  if ((extension === 'kml' || extension === 'kmz') && file.size > 10 * 1024 * 1024) throw new HttpError(400, 'KML/KMZ 文件不能超过 10 MiB');
   const data = await file.arrayBuffer();
+  if (extension === 'kml' || extension === 'kmz') return { form, format: extension, map: { format: extension, name: file.name, data: Buffer.from(data) } };
   try {
     if (extension === 'csv') {
       const content = new TextDecoder('utf-8', { fatal: true }).decode(data);
       const values = parse(content, { bom: true, relax_column_count: true, skip_empty_lines: false }) as string[][];
-      return { form, tables: [tableOf('CSV', values)] };
+      return { form, format: 'csv', tables: [tableOf('CSV', values)] };
     }
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(data);
@@ -49,7 +55,7 @@ export async function readImport(request: Request): Promise<{ form: FormData; ta
       return tableOf(sheet.name, values);
     });
     if (!tables.length) throw new HttpError(400, '文件中没有可选择的工作表');
-    return { form, tables };
+    return { form, format: 'xlsx', tables };
   } catch (error) {
     if (error instanceof HttpError) throw error;
     throw new HttpError(400, extension === 'csv' ? '无法读取 CSV，请确认文件为有效的 UTF-8 CSV' : '无法读取 Excel，请确认文件为有效的 .xlsx 工作簿');
@@ -72,21 +78,6 @@ function columnOf(form: FormData, key: string, table: Table): number {
   return Number(value);
 }
 
-function coordinate(value: string | number | undefined, label: string, limit: number, errors: string[]): string | number | undefined {
-  if (value === undefined || (typeof value === 'string' && !value.trim())) {
-    errors.push(`${label}缺失`);
-    return undefined;
-  }
-  const number = typeof value === 'number' ? value
-    : /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value.trim()) ? Number(value) : NaN;
-  if (!Number.isFinite(number)) {
-    errors.push(`${label}必须为数值`);
-    return value;
-  }
-  if (Math.abs(number) > limit) errors.push(`${label}超出有效范围（-${limit} 至 ${limit}）`);
-  return number;
-}
-
 export function previewImport(form: FormData, tables: Table[]): { rows: PreviewRow[]; validCount: number; invalidCount: number; coordinateSystem: CoordinateSystem } {
   const table = tables.find((item) => item.name === form.get('sheet'));
   if (!table) throw new HttpError(400, '请选择文件中存在的工作表');
@@ -100,8 +91,8 @@ export function previewImport(form: FormData, tables: Table[]): { rows: PreviewR
     const errors: string[] = [];
     const name = String(row.values[nameColumn] ?? '');
     if (!name.trim()) errors.push('名称缺失');
-    const originalLongitude = coordinate(row.values[longitudeColumn], '经度', 180, errors);
-    const originalLatitude = coordinate(row.values[latitudeColumn], '纬度', 90, errors);
+    const originalLongitude = importCoordinate(row.values[longitudeColumn], '经度', 180, errors);
+    const originalLatitude = importCoordinate(row.values[latitudeColumn], '纬度', 90, errors);
     return { rowNumber: row.rowNumber, name, originalLongitude, originalLatitude, errors };
   });
   const validCount = rows.filter((row) => row.errors.length === 0).length;
