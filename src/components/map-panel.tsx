@@ -5,8 +5,9 @@ import type { Point, Route } from '@/lib/domain';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { MapPin, Search } from 'lucide-react';
+import { loadMapSDK, resetMapSDK, type MapConfig } from './amap-loader';
 
-export interface MapConfig { mapKey: string; securityProxyPath: string; webServiceConfigured: boolean }
+export type { MapConfig } from './amap-loader';
 export interface MapCandidate { name: string; longitude: number; latitude: number; source: 'map' | 'search'; poiId?: string }
 interface LngLat { lng?: number; lat?: number; getLng?: () => number; getLat?: () => number }
 interface MapEvent { lnglat: LngLat }
@@ -61,10 +62,7 @@ export default function MapPanel({ config, route, library, onCandidate, onLibrar
     };
     (async () => {
       try {
-        const loader = await import('@amap/amap-jsapi-loader');
-        if (cancelled) return;
-        (window as Window & { _AMapSecurityConfig?: { serviceHost: string } })._AMapSecurityConfig = { serviceHost: `${location.origin}${config.securityProxyPath}` };
-        const api = await loader.load({ key: config.mapKey, version: '2.0', plugins: ['AMap.AutoComplete', 'AMap.PlaceSearch', 'AMap.MarkerCluster'] }) as AMapSDK;
+        const api = await loadMapSDK<AMapSDK>(config, ['AMap.AutoComplete', 'AMap.PlaceSearch', 'AMap.MarkerCluster']);
         if (cancelled || !container.current) return;
         sdk.current = api;
         instance = new api.Map(container.current, { zoom: 5, center: [112.5, 33], viewMode: '2D', resizeEnable: true });
@@ -173,7 +171,7 @@ export default function MapPanel({ config, route, library, onCandidate, onLibrar
   return <div className="map-body">
     <div ref={container} className="map-canvas" role="region" aria-label="高德地图" />
     {ready && <div className="map-search"><form onSubmit={(event) => { event.preventDefault(); searchPlaces(); }}><Search aria-hidden="true" /><Input aria-label="搜索地点" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索地点，确认后加入线路" autoComplete="off" /><Button type="submit" disabled={!query.trim()}>搜索</Button></form>{(searching || candidates.length > 0 || searchError) && <div className="search-results">{searching && <p role="status">搜索中…</p>}{searchError && <p role="alert">{searchError}</p>}{candidates.map((poi, index) => <Button key={`${poi.id}-${index}`} onClick={() => choose(poi)}><strong>{poi.name}</strong><small>{poi.district} {typeof poi.address === 'string' ? poi.address : ''}</small></Button>)}<Button className="search-dismiss" onClick={() => { searchVersion.current++; setCandidates([]); setSearching(false); setSearchError(''); }}>收起搜索结果</Button></div>}</div>}
-    {!ready && <div className="map-placeholder"><span className="map-placeholder-icon"><MapPin /></span><h3>{failure ? '暂时无法加载地图' : config === null ? '正在读取地图配置' : !config.mapKey ? '配置高德地图，查看真实线路' : '正在加载高德地图'}</h3><p>{failure || (!config?.mapKey ? '也可以先编排点位，保存线路草稿；配置完成后再预览地图。' : '地图将显示编号点位与完整路线方案。')}</p>{config && !config.mapKey && <details className="map-config-help"><summary>查看地图配置说明</summary><p>在本机环境文件配置 AMAP_JS_KEY、AMAP_JS_SECURITY_CODE 和 AMAP_WEB_SERVICE_KEY，重启服务后刷新。</p></details>}{failure && <Button className="button" onClick={async () => { const module = await import('@amap/amap-jsapi-loader'); const loader = module as unknown as { reset?: () => void; default?: { reset?: () => void } }; (loader.reset ?? loader.default?.reset)?.(); setRetry((value) => value + 1); }}>重新加载地图</Button>}<span className="map-provider-note">高德地图 JS API 2.0</span></div>}
+    {!ready && <div className="map-placeholder"><span className="map-placeholder-icon"><MapPin /></span><h3>{failure ? '暂时无法加载地图' : config === null ? '正在读取地图配置' : !config.mapKey ? '配置高德地图，查看真实线路' : '正在加载高德地图'}</h3><p>{failure || (!config?.mapKey ? '也可以先编排点位，保存线路草稿；配置完成后再预览地图。' : '地图将显示编号点位与完整路线方案。')}</p>{config && !config.mapKey && <details className="map-config-help"><summary>查看地图配置说明</summary><p>在本机环境文件配置 AMAP_JS_KEY、AMAP_JS_SECURITY_CODE 和 AMAP_WEB_SERVICE_KEY，重启服务后刷新。</p></details>}{failure && <Button className="button" onClick={async () => { await resetMapSDK(); setRetry((value) => value + 1); }}>重新加载地图</Button>}<span className="map-provider-note">高德地图 JS API 2.0</span></div>}
     {config && !config.webServiceConfigured && <div className="map-service-warning">驾车测算与 WGS84 转换尚未配置，GCJ-02 点位及线路草稿可正常保存。</div>}
   </div>;
 }

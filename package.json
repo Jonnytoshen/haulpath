@@ -18,7 +18,7 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test:api": "node --test --test-concurrency=1 tests/foundation.test.mjs tests/coordinates.test.mjs tests/configuration.test.mjs tests/map-proxy.test.mjs tests/planning.test.mjs tests/planning-recovery.test.mjs tests/import.test.mjs tests/export.test.mjs tests/backup.test.mjs",
     "test": "node --test --test-concurrency=1 tests/*.test.mjs",
-    "test:browser": "node --test --test-concurrency=1 tests/workbench.test.mjs tests/resources.test.mjs tests/project-refresh.test.mjs tests/overview.test.mjs tests/overview-concurrency.test.mjs tests/acceptance.test.mjs tests/planning-recovery.test.mjs",
+    "test:browser": "node --test --test-concurrency=1 tests/workbench.test.mjs tests/resources.test.mjs tests/project-refresh.test.mjs tests/overview.test.mjs tests/overview-map.test.mjs tests/overview-concurrency.test.mjs tests/acceptance.test.mjs tests/planning-recovery.test.mjs",
     "release": "node scripts/release.mjs",
     "test:release": "node --test --test-concurrency=1 tests/release*.test.mjs",
     "release:resume": "node scripts/release-resume.mjs"
