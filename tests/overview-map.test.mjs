@@ -135,3 +135,47 @@ test('map selection, shared filters and camera restoration follow explicit brows
     assert.deepEqual(context.errors, []);
   } finally { await context.close(); }
 });
+
+test('selected map points expose only their actual roles with visible legends and named markers', { timeout: 120000 }, async () => {
+  const context = await openMapOverview();
+  const { app, page, request } = context;
+  try {
+    const project = await request('/api/projects', 'POST', { name: '地图角色核对' });
+    const points = await request('/api/coordinates', 'POST', { points: [
+      { name: '上海仓', longitude: 121.47, latitude: 31.23, source: 'manual' },
+      { name: '南京客户', longitude: 118.79, latitude: 32.06, source: 'manual' },
+      { name: '合肥客户', longitude: 117.22, latitude: 31.82, source: 'manual' },
+    ] });
+    const path = `/api/projects/${project.id}/routes`;
+    await request(path, 'POST', { name: '零点草稿' });
+    await request(path, 'POST', { name: '单点草稿', points: points.slice(0, 1) });
+    await request(path, 'POST', { name: '两点线路', points: points.slice(0, 2) });
+    await request(path, 'POST', { name: '往返线路', points: [...points, points[0]] });
+    await page.goto(app.baseUrl);
+    const overview = page.getByRole('region', { name: '线路总览', exact: true });
+    await overview.getByRole('button', { name: '地图', exact: true }).click();
+    const map = overview.getByRole('region', { name: '线路总览地图', exact: true });
+    await map.locator('[data-sdk-map="ready"]').waitFor();
+    const legend = map.getByRole('list', { name: '所选线路点位图例', exact: true });
+    const list = overview.getByRole('region', { name: '地图线路列表', exact: true });
+    assert.equal(await legend.count(), 0, 'no roles are implied before selection');
+    await list.getByRole('button', { name: '预览 零点草稿', exact: true }).click();
+    assert.equal(await legend.count(), 0, 'zero-point drafts do not invent roles');
+    assert.equal(await map.locator('[data-sdk-marker]').count(), 0);
+    await list.getByRole('button', { name: '预览 单点草稿', exact: true }).click();
+    await legend.waitFor({ timeout: 3000 });
+    assert.deepEqual(await legend.getByRole('listitem').allTextContents(), ['起点（单点草稿）']);
+    await map.getByRole('img', { name: '1. 起点（单点草稿） · 上海仓', exact: true }).waitFor();
+    assert.equal(await map.getByRole('img').getAttribute('title'), '1. 起点（单点草稿） · 上海仓');
+    await list.getByRole('button', { name: '预览 两点线路', exact: true }).click();
+    assert.deepEqual(await legend.getByRole('listitem').allTextContents(), ['起点', '终点']);
+    await map.getByRole('img', { name: '1. 起点 · 上海仓', exact: true }).waitFor();
+    await map.getByRole('img', { name: '2. 终点 · 南京客户', exact: true }).waitFor();
+    assert.equal(await map.getByRole('img').count(), 2);
+    await list.getByRole('button', { name: '预览 往返线路', exact: true }).click();
+    assert.deepEqual(await legend.getByRole('listitem').allTextContents(), ['起点', '途经点', '终点']);
+    assert.deepEqual(await map.getByRole('img').evaluateAll((elements) => elements.map((element) => element.getAttribute('aria-label'))), ['1. 起点 · 上海仓', '2. 途经点 · 南京客户', '3. 途经点 · 合肥客户', '4. 终点 · 上海仓']);
+    assert.equal(context.calls.length, 0, 'role inspection does not plan draft routes');
+    assert.deepEqual(context.errors, []);
+  } finally { await context.close(); }
+});

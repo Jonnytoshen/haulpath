@@ -335,6 +335,10 @@ td { padding: 15px 16px; border-bottom: 1px solid #edf1ed; font-size: 12px; font
 .overview-map-surface { display: flex; flex: 1; min-height: 0; flex-direction: column; }
 .overview-map-surface .map-body { min-height: 160px; }
 .overview-map-note { flex-shrink: 0; padding: 8px 16px; color: var(--secondary); background: #f7f9f7; font-size: 11px; line-height: 1.7; }
+.overview-map-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 5px; }
+.overview-map-legend li { display: flex; align-items: center; gap: 6px; }
+.overview-map-legend-swatch { width: 8px; height: 8px; flex-shrink: 0; border-radius: 50%; }
+.overview-map-legend .marker-waypoint { background: #63756b; }
 .library-view { display: flex; flex: 1; min-height: 0; margin-top: 22px; }
 .project-library { display: flex; flex: 1; min-height: 0; flex-direction: column; overflow: clip; }
 .library-heading { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; padding: 20px; border-bottom: 1px solid var(--border); }
