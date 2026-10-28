@@ -32,7 +32,7 @@ export default function ProjectLibrary({ points, loading, busy, route, query, on
       </div>
       <div className="library-toolbar">
         <Button className="button primary" disabled={busy || loading} onClick={onAdd}><Plus />添加点位</Button>
-        <Button className="button" disabled={busy || loading} onClick={onImport}><Upload />导入表格</Button>
+        <Button className="button" disabled={busy || loading} onClick={onImport}><Upload />导入点位</Button>
         <a className="text-button" href="/api/import-template" download><Download aria-hidden="true" />下载模板</a>
       </div>
     </header>
@@ -47,7 +47,7 @@ export default function ProjectLibrary({ points, loading, busy, route, query, on
       <span className="library-count" aria-live="polite">{loading ? '正在读取点位…' : search ? `${visible.length} / ${points.length} 个点位` : `${points.length} 个点位`}</span>
     </div>
 
-    {loading ? <div className="library-loading" role="status" aria-label="正在读取项目点位库">{[0, 1, 2, 3].map((row) => <div className="library-loading-row" key={row}><span /><span /><span /></div>)}</div> : points.length === 0 ? <div className="empty library-empty"><MapPin /><h3>把常用地点整理在这里</h3><p>手动添加一个点位，或导入已有的坐标表格。</p><small>{route ? '添加后选入当前线路，点位会排在线路末尾。' : '点位库与线路独立维护，修改点位库不会改变已选入线路的副本。'}</small></div> : visible.length === 0 ? <div className="empty library-empty"><Search /><h3>没有匹配的点位</h3><p>试试其他名称，或清除当前搜索。</p><Button className="button" onClick={() => onQueryChange('')}>清除点位筛选</Button></div> : <>
+    {loading ? <div className="library-loading" role="status" aria-label="正在读取项目点位库">{[0, 1, 2, 3].map((row) => <div className="library-loading-row" key={row}><span /><span /><span /></div>)}</div> : points.length === 0 ? <div className="empty library-empty"><MapPin /><h3>把常用地点整理在这里</h3><p>手动添加点位，或导入已有的坐标文件。</p><small>{route ? '添加后选入当前线路，点位会排在线路末尾。' : '点位库与线路独立维护，修改点位库不会改变已选入线路的副本。'}</small></div> : visible.length === 0 ? <div className="empty library-empty"><Search /><h3>没有匹配的点位</h3><p>试试其他名称，或清除当前搜索。</p><Button className="button" onClick={() => onQueryChange('')}>清除点位筛选</Button></div> : <>
       <div className="library-columns" aria-hidden="true"><span>点位名称</span><span>地图坐标 · GCJ-02</span><span>原始坐标系</span><span>操作</span></div>
       <div className="library-list" role="list" aria-label="项目点位资料">
         {visible.map((point) => <div className="library-point" key={point.id} role="listitem">

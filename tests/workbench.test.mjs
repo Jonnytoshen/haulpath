@@ -180,7 +180,7 @@ test('project loading blocks dependent writes and late responses cannot replace 
     assert.equal(await create.isDisabled(), true, 'new routes must wait until project routes and points are loaded');
     await page.getByRole('button', { name: '管理点位库', exact: false }).click();
     assert.equal(await page.getByRole('button', { name: '添加点位', exact: true }).isDisabled(), true);
-    assert.equal(await page.getByRole('button', { name: '导入表格', exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole('button', { name: '导入点位', exact: true }).isDisabled(), true);
     gate.release(); gate = null;
     await page.locator('.route-item-name').filter({ hasText: '原有线路' }).waitFor();
     await page.getByRole('button', { name: '线路总览', exact: true }).click();
@@ -689,6 +689,307 @@ test('map search and clicks produce confirmed points, and planning results becom
   } finally { await context.close(); await new Promise((resolve)=>upstream.close(resolve)); }
 });
 
+test('KML point import previews valid and ignored features before adding only selected points', { timeout: 120000 }, async () => {
+  const { createServer } = await import('node:http');
+  const conversionCalls = [];
+  let failConversion = true;
+  const upstream = createServer((request, response) => {
+    const url = new URL(request.url, 'http://127.0.0.1');
+    conversionCalls.push(url);
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify(failConversion ? { status: '0', info: '转换失败', infocode: '10001' } : { status: '1', locations: url.searchParams.get('locations') }));
+  });
+  await new Promise((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+  const context = await openWorkbench({ HAULPATH_TEST_MODE: '1', AMAP_WEB_SERVICE_KEY: 'test-import-key', AMAP_API_BASE_URL: `http://127.0.0.1:${upstream.address().port}` });
+  const { page, app } = context;
+  try {
+    page.setDefaultTimeout(8000);
+    await page.goto(app.baseUrl);
+    await createProject(page, '地图文件导入');
+    await page.getByRole('button', { name: '管理点位库', exact: true }).click();
+    const library = page.getByRole('region', { name: '项目点位库', exact: true });
+    await library.getByRole('button', { name: '导入点位', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: '导入项目点位', exact: true });
+    const xml = `<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><Folder><name>华东仓库</name>
+      <Placemark><name>上海仓</name><Point><coordinates>121.47,31.23,8</coordinates></Point></Placemark>
+      <Placemark><name>苏州客户</name><Point><coordinates>120.58,31.3</coordinates></Point></Placemark>
+      <Placemark><Point><coordinates>120,30</coordinates></Point></Placemark>
+      <Placemark><name>线路形状</name><LineString><coordinates>120,30 121,31</coordinates></LineString></Placemark>
+    </Folder></Document></kml>`;
+    await dialog.getByLabel('选择点位文件', { exact: true }).setInputFiles({ name: '地点.kml', mimeType: 'application/vnd.google-earth.kml+xml', buffer: Buffer.from(xml) });
+    await dialog.getByText(/WGS84/).first().waitFor();
+    await dialog.getByText(/文件夹路径仅用于预览/).waitFor();
+    assert.equal(await dialog.getByLabel('工作表', { exact: true }).count(), 0);
+    assert.equal(await dialog.getByLabel('原始坐标系', { exact: true }).count(), 0);
+    await dialog.getByRole('button', { name: '预览并校验', exact: true }).click();
+    await dialog.getByText('2 个点位有效', { exact: true }).waitFor();
+    assert.equal(await dialog.getByLabel('选择第 3 个点位', { exact: true }).isDisabled(), true);
+    assert.match(await dialog.innerText(), /华东仓库/);
+    assert.match(await dialog.innerText(), /线.*1/);
+    await dialog.getByLabel('选择第 2 个点位', { exact: true }).uncheck();
+    assert.equal(await library.locator('.library-point').count(), 0);
+    assert.equal(conversionCalls.length, 0, 'preview must not convert coordinates');
+    await dialog.getByRole('button', { name: '确认导入 1 个点位', exact: true }).click();
+    await dialog.getByRole('alert').waitFor();
+    assert.equal(await dialog.getByLabel('选择第 1 个点位', { exact: true }).isChecked(), true, 'failed conversion preserves selection');
+    assert.equal(await dialog.getByLabel('选择第 2 个点位', { exact: true }).isChecked(), false);
+    assert.equal(await library.locator('.library-point').count(), 0, 'failed conversion must not import partial points');
+    failConversion = false;
+    await dialog.getByRole('button', { name: '确认导入 1 个点位', exact: true }).click();
+    await dialog.waitFor({ state: 'hidden' });
+    assert.deepEqual(await library.locator('.library-point strong').allTextContents(), ['上海仓']);
+    assert.equal(conversionCalls.length, 2);
+    const project = (await jsonRequest(app.baseUrl, '/api/projects')).body[0];
+    const points = (await jsonRequest(app.baseUrl, `/api/projects/${project.id}/points`)).body;
+    assert.equal(points.length, 1);
+    assert.equal(points[0].coordinateSystem, 'WGS84');
+    assert.equal(points[0].originalLongitude, 121.47);
+    assert.deepEqual((await jsonRequest(app.baseUrl, `/api/projects/${project.id}/routes`)).body, []);
+    await page.reload();
+    await assertOverview(page);
+    await page.getByRole('button', { name: '管理点位库', exact: true }).click();
+    assert.deepEqual(await library.locator('.library-point strong').allTextContents(), ['上海仓']);
+    assert.deepEqual(context.errors, []);
+  } finally {
+    await context.close();
+    await new Promise((resolve) => upstream.close(resolve));
+  }
+});
+
+test('a late KML preview from a closed dialog cannot affect another project', { timeout: 120000 }, async () => {
+  const context = await openWorkbench();
+  const { page, app } = context;
+  const kml = (name) => `<kml xmlns="http://www.opengis.net/kml/2.2"><Placemark><name>${name}</name><Point><coordinates>121,31</coordinates></Point></Placemark></kml>`;
+  let releasePreview;
+  let previewStarted;
+  let previewStatus;
+  const held = new Promise((resolve) => { releasePreview = resolve; });
+  const started = new Promise((resolve) => { previewStarted = resolve; });
+  try {
+    page.setDefaultTimeout(8000);
+    const projectA = (await jsonRequest(app.baseUrl, '/api/projects', 'POST', { name: '预览原项目' })).body;
+    const projectB = (await jsonRequest(app.baseUrl, '/api/projects', 'POST', { name: '预览新项目' })).body;
+    await page.route(`**/api/projects/${projectA.id}/import/preview`, async (route) => {
+      // Hold an actual application response until the second project's preview is visible.
+      const response = await route.fetch();
+      previewStatus = response.status();
+      previewStarted();
+      await held;
+      await route.fulfill({ response });
+    });
+    await page.goto(app.baseUrl);
+    await assertOverview(page);
+    await page.getByRole('heading', { name: '预览原项目', exact: true }).waitFor();
+    await page.getByRole('button', { name: '管理点位库', exact: true }).click();
+    await page.getByRole('button', { name: '导入点位', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: '导入项目点位', exact: true });
+    await dialog.getByLabel('选择点位文件', { exact: true }).setInputFiles({ name: '原项目.kml', mimeType: 'application/vnd.google-earth.kml+xml', buffer: Buffer.from(kml('原项目点')) });
+    await dialog.getByText(/原始坐标固定为 WGS84/).waitFor();
+    await dialog.getByRole('button', { name: '预览并校验', exact: true }).click();
+    await started;
+    assert.equal(previewStatus, 200, 'the held preview must be a successful response from the application');
+    await dialog.getByRole('button', { name: '取消', exact: true }).click();
+    await dialog.waitFor({ state: 'hidden' });
+    await page.getByRole('button', { name: '预览新项目', exact: true }).click();
+    await assertOverview(page);
+    await page.getByRole('heading', { name: '预览新项目', exact: true }).waitFor();
+    await page.getByRole('button', { name: '管理点位库', exact: true }).click();
+    await page.getByRole('button', { name: '导入点位', exact: true }).click();
+    await dialog.getByLabel('选择点位文件', { exact: true }).setInputFiles({ name: '新项目.kml', mimeType: 'application/vnd.google-earth.kml+xml', buffer: Buffer.from(kml('新项目点')) });
+    await dialog.getByText(/原始坐标固定为 WGS84/).waitFor();
+    await dialog.getByRole('button', { name: '预览并校验', exact: true }).click();
+    await dialog.getByText('新项目点', { exact: true }).waitFor();
+    assert.equal(await dialog.getByLabel('选择第 1 个点位', { exact: true }).isChecked(), true);
+    const delivered = page.waitForResponse((response) => response.url().endsWith(`/api/projects/${projectA.id}/import/preview`));
+    releasePreview();
+    await delivered;
+    await page.waitForTimeout(100);
+    await dialog.getByText('新项目点', { exact: true }).waitFor();
+    assert.equal(await dialog.getByText('原项目点', { exact: true }).count(), 0);
+    assert.equal(await dialog.getByLabel('选择第 1 个点位', { exact: true }).isChecked(), true);
+    assert.equal(await dialog.getByRole('button', { name: '确认导入 1 个点位', exact: true }).isEnabled(), true);
+    assert.deepEqual((await jsonRequest(app.baseUrl, `/api/projects/${projectA.id}/points`)).body, []);
+    assert.deepEqual((await jsonRequest(app.baseUrl, `/api/projects/${projectB.id}/points`)).body, []);
+    assert.deepEqual(context.errors, []);
+  } finally {
+    releasePreview?.();
+    await context.close();
+  }
+});
+
+test('opening another file while a KML preview is pending discards the late preview', { timeout: 120000 }, async () => {
+  const context = await openWorkbench();
+  const { page, app } = context;
+  const kml = (name) => `<kml xmlns="http://www.opengis.net/kml/2.2"><Placemark><name>${name}</name><Point><coordinates>121,31</coordinates></Point></Placemark></kml>`;
+  let releasePreview;
+  let previewStarted;
+  const held = new Promise((resolve) => { releasePreview = resolve; });
+  const started = new Promise((resolve) => { previewStarted = resolve; });
+  let holdFirst = true;
+  try {
+    page.setDefaultTimeout(8000);
+    await page.goto(app.baseUrl);
+    await createProject(page, '切换导入文件项目');
+    await page.getByRole('button', { name: '管理点位库', exact: true }).click();
+    await page.getByRole('button', { name: '导入点位', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: '导入项目点位', exact: true });
+    await dialog.getByLabel('选择点位文件', { exact: true }).setInputFiles({ name: '旧文件.kml', mimeType: 'application/vnd.google-earth.kml+xml', buffer: Buffer.from(kml('旧文件点')) });
+    await dialog.getByText(/原始坐标固定为 WGS84/).waitFor();
+    await page.route('**/import/preview', async (route) => {
+      if (!holdFirst) return route.continue();
+      holdFirst = false;
+      const response = await route.fetch();
+      previewStarted();
+      await held;
+      await route.fulfill({ response });
+    });
+    await dialog.getByRole('button', { name: '预览并校验', exact: true }).click();
+    await started;
+    const chooserPromise = page.waitForEvent('filechooser');
+    await dialog.getByText('选择文件', { exact: true }).click();
+    const chooser = await chooserPromise;
+    const delivered = page.waitForResponse((response) => response.url().endsWith('/import/preview'));
+    releasePreview();
+    await delivered;
+    await page.waitForTimeout(100);
+    assert.equal(await dialog.getByText('旧文件点', { exact: true }).count(), 0, 'late preview must not replace an open file picker');
+    await chooser.setFiles({ name: '新文件.kml', mimeType: 'application/vnd.google-earth.kml+xml', buffer: Buffer.from(kml('新文件点')) });
+    await dialog.getByText('已选择：新文件.kml', { exact: true }).waitFor();
+    await dialog.getByText(/原始坐标固定为 WGS84/).waitFor();
+    await dialog.getByRole('button', { name: '预览并校验', exact: true }).click();
+    await dialog.getByText('新文件点', { exact: true }).waitFor();
+    assert.equal(await dialog.getByText('旧文件点', { exact: true }).count(), 0);
+    assert.equal(await page.locator('.library-point').count(), 0);
+    assert.deepEqual(context.errors, []);
+  } finally {
+    releasePreview?.();
+    await context.close();
+  }
+});
+
+test('KMZ document selection discards a late preview and keeps only the chosen document', { timeout: 120000 }, async () => {
+  const { crc32 } = await import('node:zlib');
+  function zip(files) {
+    const parts = [];
+    const central = [];
+    let offset = 0;
+    for (const [path, content] of files) {
+      const name = Buffer.from(path);
+      const body = Buffer.from(content);
+      const checksum = crc32(body);
+      const local = Buffer.alloc(30);
+      local.writeUInt32LE(0x04034b50); local.writeUInt16LE(20, 4); local.writeUInt16LE(0x800, 6);
+      local.writeUInt32LE(checksum, 14); local.writeUInt32LE(body.length, 18); local.writeUInt32LE(body.length, 22); local.writeUInt16LE(name.length, 26);
+      parts.push(local, name, body);
+      const entry = Buffer.alloc(46);
+      entry.writeUInt32LE(0x02014b50); entry.writeUInt16LE(20, 4); entry.writeUInt16LE(20, 6); entry.writeUInt16LE(0x800, 8);
+      entry.writeUInt32LE(checksum, 16); entry.writeUInt32LE(body.length, 20); entry.writeUInt32LE(body.length, 24); entry.writeUInt16LE(name.length, 28); entry.writeUInt32LE(offset, 42);
+      central.push(entry, name);
+      offset += local.length + name.length + body.length;
+    }
+    const directory = Buffer.concat(central);
+    const end = Buffer.alloc(22);
+    end.writeUInt32LE(0x06054b50); end.writeUInt16LE(files.length, 8); end.writeUInt16LE(files.length, 10);
+    end.writeUInt32LE(directory.length, 12); end.writeUInt32LE(offset, 16);
+    return Buffer.concat([...parts, directory, end]);
+  }
+  const kml = (name) => `<kml xmlns="http://www.opengis.net/kml/2.2"><Document><Placemark><name>${name}</name><Point><coordinates>121,31</coordinates></Point></Placemark></Document></kml>`;
+  const firstPath = `a/${'很长的路径名称'.repeat(12)}/one.kml`;
+  const context = await openWorkbench();
+  const { page, app } = context;
+  let releasePreview;
+  let previewStarted;
+  const held = new Promise((resolve) => { releasePreview = resolve; });
+  const started = new Promise((resolve) => { previewStarted = resolve; });
+  let holdFirst = true;
+  try {
+    page.setDefaultTimeout(8000);
+    await page.goto(app.baseUrl);
+    await createProject(page, '多文档地图项目');
+    await page.getByRole('button', { name: '管理点位库', exact: true }).click();
+    await page.getByRole('button', { name: '导入点位', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: '导入项目点位', exact: true });
+    await dialog.getByLabel('选择点位文件', { exact: true }).setInputFiles({ name: '地点.kmz', mimeType: 'application/vnd.google-earth.kmz', buffer: zip([[firstPath, kml('旧文档点')], ['b/two.kml', kml('当前文档点')], ['c/empty.kml', kml('')]]) });
+    const documents = dialog.getByLabel('KML 文档', { exact: true });
+    await documents.waitFor();
+    assert.equal(await dialog.getByRole('button', { name: '预览并校验', exact: true }).isDisabled(), true);
+    await documents.focus();
+    assert.equal(await documents.evaluate((element) => element === document.activeElement), true);
+    await documents.press('Tab');
+    assert.equal(await documents.evaluate((element) => element === document.activeElement), false);
+    await documents.selectOption({ label: firstPath });
+    await dialog.getByText(`当前文档：${firstPath}`, { exact: true }).waitFor();
+    await dialog.getByText('查看全部文档路径', { exact: true }).click();
+    await dialog.locator('details li').filter({ hasText: firstPath }).waitFor();
+    await page.route('**/import/preview', async (route) => {
+      if (!holdFirst) return route.continue();
+      holdFirst = false;
+      const response = await route.fetch();
+      previewStarted();
+      await held;
+      await route.fulfill({ response });
+    });
+    await dialog.getByRole('button', { name: '预览并校验', exact: true }).click();
+    await started;
+    await documents.selectOption({ label: 'b/two.kml' });
+    const delivered = page.waitForResponse((response) => response.url().endsWith('/import/preview'));
+    releasePreview();
+    await delivered;
+    await page.waitForTimeout(100);
+    assert.equal(await dialog.getByText('旧文档点', { exact: true }).count(), 0);
+    assert.equal(await dialog.getByRole('button', { name: '确认导入 1 个点位', exact: true }).count(), 0);
+    await dialog.getByRole('button', { name: '预览并校验', exact: true }).click();
+    await dialog.getByText('1 个点位有效', { exact: true }).waitFor();
+    await dialog.getByText('当前文档点', { exact: true }).waitFor();
+    assert.equal(await dialog.getByText('旧文档点', { exact: true }).count(), 0);
+    assert.equal(await dialog.getByLabel('选择第 1 个点位', { exact: true }).isChecked(), true);
+    assert.equal(await page.locator('.library-point').count(), 0);
+    await dialog.getByRole('button', { name: '返回文件选择', exact: true }).click();
+    await documents.selectOption({ label: 'c/empty.kml' });
+    await dialog.getByRole('button', { name: '预览并校验', exact: true }).click();
+    await dialog.getByText('0 个点位有效', { exact: true }).waitFor();
+    await dialog.getByText('没有可导入的有效点位，请检查下方错误或重新准备文件。', { exact: true }).waitFor();
+    assert.equal(await dialog.getByLabel('选择第 1 个点位', { exact: true }).isDisabled(), true);
+    assert.equal(await dialog.getByRole('button', { name: '确认导入 0 个点位', exact: true }).isDisabled(), true);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await dialog.getByRole('button', { name: '返回文件选择', exact: true }).scrollIntoViewIfNeeded();
+    assert.equal(await dialog.getByRole('button', { name: '返回文件选择', exact: true }).isVisible(), true);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true, 'phone layout must not overflow the page');
+    assert.deepEqual(context.errors, []);
+  } finally {
+    releasePreview?.();
+    await context.close();
+  }
+});
+
+test('a corrected file can be selected again after inspection rejects it', { timeout: 120000 }, async () => {
+  const context = await openWorkbench();
+  const { page } = context;
+  try {
+    await page.goto(context.app.baseUrl);
+    await createProject(page, '修正文件项目');
+    await page.getByRole('button', { name: '管理点位库', exact: true }).click();
+    await page.getByRole('button', { name: '导入点位', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: '导入项目点位', exact: true });
+    const input = dialog.getByLabel('选择点位文件', { exact: true });
+    await input.focus();
+    assert.equal(await input.evaluate((element) => element === document.activeElement), true);
+    const chooseFile = page.waitForEvent('filechooser');
+    await page.keyboard.press('Enter');
+    await (await chooseFile).setFiles({ name: '相同文件名.csv', mimeType: 'text/csv', buffer: Buffer.from([0xff]) });
+    await dialog.getByRole('alert').waitFor();
+    await input.setInputFiles({ name: '相同文件名.csv', mimeType: 'text/csv', buffer: Buffer.from('名称,经度,纬度\n第一次修正,121,31\n') });
+    await dialog.getByLabel('工作表', { exact: true }).waitFor();
+    await input.setInputFiles({ name: '相同文件名.csv', mimeType: 'text/csv', buffer: Buffer.from('名称,经度,纬度\n再次修正后的点,121,31\n') });
+    await dialog.getByLabel('工作表', { exact: true }).waitFor();
+    await dialog.getByRole('button', { name: '预览并校验', exact: true }).click();
+    await dialog.getByText('1 行有效', { exact: true }).waitFor();
+    await dialog.getByText('再次修正后的点', { exact: true }).waitFor();
+    assert.equal(await page.locator('.library-point').count(), 0);
+    assert.deepEqual(context.errors, []);
+  } finally { await context.close(); }
+});
+
 test('planner maps Excel columns, reviews original error rows, and confirms only selected valid points', { timeout: 120000 }, async () => {
   const context = await openWorkbench();
   const { page } = context;
@@ -697,13 +998,13 @@ test('planner maps Excel columns, reviews original error rows, and confirms only
     await createProject(page, '导入项目');
     await createRoute(page, '导入点位线路');
     await page.getByRole('button', { name: '从点位库选择', exact: true }).click();
-    await page.getByRole('button', { name: '导入表格', exact: true }).click();
+    await page.getByRole('button', { name: '导入点位', exact: true }).click();
     const { default: ExcelJS } = await import('exceljs');
     const workbook = new ExcelJS.Workbook();
     workbook.addWorksheet('说明').addRows([['说明'], ['请使用业务点位工作表']]);
     workbook.addWorksheet('业务点位').addRows([['东经', '北纬', '站点'], [121.47, 31.23, '上海导入仓'], ['bad', 32, '无效点'], [118.79, 32.06, '南京导入客户']]);
     const dialog = page.getByRole('dialog', { name: '导入项目点位', exact: true });
-    await dialog.getByLabel('选择点位表格', {exact:true}).setInputFiles({ name: '点位.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from(await workbook.xlsx.writeBuffer()) });
+    await dialog.getByLabel('选择点位文件', {exact:true}).setInputFiles({ name: '点位.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from(await workbook.xlsx.writeBuffer()) });
     await dialog.getByLabel('工作表', {exact:true}).selectOption('业务点位');
     await dialog.getByLabel('名称列', {exact:true}).selectOption('2');
     await dialog.getByLabel('经度列', {exact:true}).selectOption('0');
@@ -716,8 +1017,8 @@ test('planner maps Excel columns, reviews original error rows, and confirms only
     await dialog.getByRole('button', {name:'确认导入 1 行',exact:true}).click();
     await dialog.waitFor({state:'hidden'});
     assert.deepEqual(await page.locator('.library-point strong').allTextContents(), ['上海导入仓']);
-    await page.getByRole('button', {name:'导入表格',exact:true}).click();
-    await dialog.getByLabel('选择点位表格',{exact:true}).setInputFiles({name:'新增.csv',mimeType:'text/csv',buffer:Buffer.from('名称,经度,纬度\n苏州CSV客户,120.58,31.3\n')});
+    await page.getByRole('button', {name:'导入点位',exact:true}).click();
+    await dialog.getByLabel('选择点位文件',{exact:true}).setInputFiles({name:'新增.csv',mimeType:'text/csv',buffer:Buffer.from('名称,经度,纬度\n苏州CSV客户,120.58,31.3\n')});
     await dialog.getByRole('button',{name:'预览并校验',exact:true}).click();
     await dialog.getByText('1 行有效',{exact:true}).waitFor();
     await dialog.getByRole('button',{name:'确认导入 1 行',exact:true}).click();
@@ -793,9 +1094,9 @@ test('an empty project can prepare its point library before creating and arrangi
     await pointDialog.getByLabel('纬度', { exact: true }).fill('31.23');
     await pointDialog.getByRole('button', { name: '确认保存点位', exact: true }).click();
     await pointDialog.waitFor({ state: 'hidden' });
-    await library.getByRole('button', { name: '导入表格', exact: true }).click();
+    await library.getByRole('button', { name: '导入点位', exact: true }).click();
     const importing = page.getByRole('dialog', { name: '导入项目点位', exact: true });
-    await importing.getByLabel('选择点位表格', { exact: true }).setInputFiles({ name: '常用点.csv', mimeType: 'text/csv', buffer: Buffer.from('名称,经度,纬度\n先建苏州客户,120.58,31.3\n') });
+    await importing.getByLabel('选择点位文件', { exact: true }).setInputFiles({ name: '常用点.csv', mimeType: 'text/csv', buffer: Buffer.from('名称,经度,纬度\n先建苏州客户,120.58,31.3\n') });
     await importing.getByLabel('工作表', { exact: true }).waitFor();
     await importing.getByRole('button', { name: '预览并校验', exact: true }).click();
     await importing.getByText('1 行有效', { exact: true }).waitFor();

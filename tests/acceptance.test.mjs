@@ -13,6 +13,14 @@ async function amapFixture(delay = 30) {
     const url = new URL(request.url, 'http://127.0.0.1');
     requests.push(url);
     response.setHeader('Content-Type', 'application/json');
+    if (url.pathname === '/v3/assistant/coordinate/convert') {
+      const locations = url.searchParams.get('locations').split('|').map((location) => {
+        const [longitude, latitude] = location.split(',').map(Number);
+        return `${(longitude + 0.001).toFixed(6)},${(latitude + 0.001).toFixed(6)}`;
+      });
+      response.end(JSON.stringify({ status: '1', locations: locations.join(';') }));
+      return;
+    }
     if (url.pathname !== '/v5/direction/driving') { response.writeHead(404).end(); return; }
     await new Promise((resolve) => setTimeout(resolve, delay));
     const distance = url.searchParams.get('strategy') === '43' ? '2345' : '1234';
@@ -68,9 +76,9 @@ test('planner imports points, plans, invalidates, successfully replans and downl
     await createProject(page, '完整行前测算');
     await createRoute(page, '三站送货');
     await page.getByRole('button', { name: '从点位库选择', exact: true }).click();
-    await page.getByRole('button', { name: '导入表格', exact: true }).click();
+    await page.getByRole('button', { name: '导入点位', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: '导入项目点位', exact: true });
-    await dialog.getByLabel('选择点位表格', { exact: true }).setInputFiles({
+    await dialog.getByLabel('选择点位文件', { exact: true }).setInputFiles({
       name: '送货点.csv', mimeType: 'text/csv', buffer: Buffer.from('名称,经度,纬度\n上海仓,121.47,31.23\n苏州客户,120.58,31.3\n南京客户,118.79,32.06\n'),
     });
     await dialog.getByLabel('工作表', { exact: true }).waitFor();
@@ -126,10 +134,10 @@ test('a project supports 1000 imported points, 100 routes and a 20 point plan ac
     await page.goto(app.baseUrl);
     await createProject(page, '代表规模项目');
     await page.getByRole('button', { name: '管理点位库', exact: false }).click();
-    await page.getByRole('button', { name: '导入表格', exact: true }).click();
+    await page.getByRole('button', { name: '导入点位', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: '导入项目点位', exact: true });
     const rows = Array.from({ length: 1000 }, (_, index) => [`验收点${String(index + 1).padStart(4, '0')}`, (121 + index / 10000).toFixed(4), (31 + index / 100000).toFixed(5)].join(','));
-    await dialog.getByLabel('选择点位表格', { exact: true }).setInputFiles({ name: '千点.csv', mimeType: 'text/csv', buffer: Buffer.from(['名称,经度,纬度', ...rows].join('\n')) });
+    await dialog.getByLabel('选择点位文件', { exact: true }).setInputFiles({ name: '千点.csv', mimeType: 'text/csv', buffer: Buffer.from(['名称,经度,纬度', ...rows].join('\n')) });
     await dialog.getByLabel('工作表', { exact: true }).waitFor();
     await dialog.getByRole('button', { name: '预览并校验', exact: true }).click();
     await dialog.getByText('1000 行有效', { exact: true }).waitFor();
@@ -217,5 +225,85 @@ test('a project supports 1000 imported points, 100 routes and a 20 point plan ac
     assert.equal(upstream.requests.length, 19);
     assert.deepEqual(errors, []);
     context.diagnostic(`representative-load ${JSON.stringify(metrics)}`);
+  } finally { await browser.close(); await app.stop(); await app.cleanup(); await upstream.close(); }
+});
+
+test('a planner imports 1000 KML points, plans and exports a route, and retains data across a restart', { timeout: 180000 }, async () => {
+  const upstream = await amapFixture();
+  let app = await startApplication(upstream.environment);
+  const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHROMIUM_CHANNEL || 'chrome', headless: true });
+  try {
+    let page = await browserPage(browser);
+    const errors = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await page.goto(app.baseUrl);
+    await createProject(page, 'KML代表规模');
+    await page.getByRole('button', { name: '管理点位库', exact: false }).click();
+    await page.getByRole('button', { name: '导入点位', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: '导入项目点位', exact: true });
+    const points = Array.from({ length: 1000 }, (_, index) => {
+      const name = `KML验收点${String(index + 1).padStart(4, '0')}`;
+      const longitude = (121 + index / 10000).toFixed(6);
+      const latitude = (31 + index / 100000).toFixed(6);
+      return `<Placemark><name>${name}</name><Point><coordinates>${longitude},${latitude},0</coordinates></Point></Placemark>`;
+    });
+    const file = `<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><Folder><name>验收地点</name>${points.join('')}</Folder></Document></kml>`;
+    await dialog.getByLabel('选择点位文件', { exact: true }).setInputFiles({ name: '千点.kml', mimeType: 'application/vnd.google-earth.kml+xml', buffer: Buffer.from(file) });
+    await dialog.getByRole('button', { name: '预览并校验', exact: true }).click();
+    await dialog.getByText('1000 个点位有效', { exact: true }).waitFor();
+    assert.equal(upstream.requests.length, 0, 'preview must not convert coordinates');
+    assert.equal(await page.locator('.library-point').count(), 0, 'preview must not write points');
+    await dialog.getByRole('button', { name: '确认导入 1000 个点位', exact: true }).click();
+    await dialog.waitFor({ state: 'hidden' });
+    const request = (path, method, body) => jsonRequest(app.baseUrl, path, method, body);
+    const project = (await request('/api/projects')).body[0];
+    const savedPoints = (await request(`/api/projects/${project.id}/points`)).body;
+    assert.equal(savedPoints.length, 1000);
+    assert.equal(savedPoints[0].name, 'KML验收点0001');
+    assert.equal(savedPoints[999].name, 'KML验收点1000');
+    assert.equal(savedPoints[0].coordinateSystem, 'WGS84');
+    assert.equal(savedPoints[0].originalLongitude, 121);
+    assert.equal(savedPoints[0].longitude, 121.001);
+    assert.equal(savedPoints[0].source, 'import');
+    assert.equal(upstream.requests.filter((url) => url.pathname === '/v3/assistant/coordinate/convert').length, 25);
+    assert.deepEqual((await request(`/api/projects/${project.id}/routes`)).body, []);
+
+    await createRoute(page, 'KML验收线路');
+    await page.getByRole('button', { name: '从点位库选择', exact: true }).click();
+    for (const name of ['KML验收点0001', 'KML验收点0002']) {
+      await page.locator('.library-point').filter({ has: page.getByText(name, { exact: true }) }).getByRole('button', { name: `将 ${name} 选入当前线路`, exact: true }).click();
+    }
+    await page.getByRole('button', { name: '返回线路点位', exact: true }).click();
+    await goTask(page, '测算线路');
+    await page.getByRole('button', { name: '开始规划', exact: true }).click();
+    await page.getByText('路线方案已完整保存', { exact: true }).waitFor();
+    await goTask(page, '核对方案');
+    const book = await downloadedWorkbook(page, '导出当前线路');
+    assert.deepEqual(book.worksheets.map((sheet) => sheet.name), ['线路总览', '区间明细']);
+    assert.equal(book.getWorksheet('线路总览').getCell('G3').value, 1.234);
+    assert.equal(book.getWorksheet('区间明细').rowCount, 3);
+    assert.equal(upstream.requests.filter((url) => url.pathname === '/v5/direction/driving').length, 1);
+    const savedRoutes = (await request(`/api/projects/${project.id}/routes`)).body;
+    assert.equal(savedRoutes.length, 1);
+    assert.equal(savedRoutes[0].snapshot.totalDistanceMeters, 1234);
+
+    await page.close();
+    await app.stop();
+    app = await startApplication(upstream.environment, app.directory);
+    const reopenedPoints = (await request(`/api/projects/${project.id}/points`)).body;
+    assert.equal(reopenedPoints.length, 1000);
+    assert.deepEqual(reopenedPoints[0], savedPoints[0]);
+    assert.deepEqual(reopenedPoints[999], savedPoints[999]);
+    const reopenedRoutes = (await request(`/api/projects/${project.id}/routes`)).body;
+    assert.equal(reopenedRoutes.length, 1);
+    assert.deepEqual(reopenedRoutes[0].snapshot, savedRoutes[0].snapshot);
+    page = await browserPage(browser);
+    page.on('pageerror', (error) => errors.push(error.message));
+    await page.goto(app.baseUrl);
+    await assertOverview(page);
+    await page.getByRole('button', { name: '管理点位库', exact: false }).click();
+    await page.getByLabel('搜索点位库', { exact: true }).fill('KML验收点1000');
+    assert.deepEqual(await page.locator('.library-point strong').allTextContents(), ['KML验收点1000']);
+    assert.deepEqual(errors, []);
   } finally { await browser.close(); await app.stop(); await app.cleanup(); await upstream.close(); }
 });
