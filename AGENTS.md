@@ -8,7 +8,7 @@
 
 - 当前已有 Next.js 线路任务画布、项目线路总览与独立点位库、SQLite schema 版本 2 迁移、项目/线路/点库接口、坐标与导入、相邻区间测算及双表导出；自动化从真实应用 HTTP 和浏览器入口验收。
 - 使用 pnpm、Next.js App Router、TypeScript；同一应用提供网页与本机服务端接口，开发与生产默认监听 `127.0.0.1`。
-- 数据持久化使用 SQLite / `better-sqlite3`；Excel 读写使用 ExcelJS，CSV 解析使用 `csv-parse`。
+- 数据持久化使用 SQLite / `better-sqlite3`；Excel 读写使用 ExcelJS，CSV 解析使用 `csv-parse`，KML/KMZ 使用 XML 与 ZIP 解析。
 - 地图使用高德 JS API 2.0 与官方 `@amap/amap-jsapi-loader`；驾车测算由服务端调用高德 Web 服务 v5。
 - UI 使用 shadcn/ui 和 Tailwind CSS；功能图标统一使用 Lucide Icons（`lucide-react`），界面不使用 emoji 图标。品牌标志使用原创 HaulPath 资产，遵循[品牌标志规范](docs/brand.md)；不以品牌标志替换业务功能图标。
 
@@ -31,7 +31,7 @@
 ## 开始任务前
 
 - 阅读 [领域约定](docs/agents/domain.md)、[术语表](GLOSSARY.md) 和与任务相关的 [ADR](docs/adr/)。领域文档尚不存在时按领域约定继续，不为占位而创建。
-- 需求与工单遵循 [本地 Markdown tracker 约定](docs/agents/issue-tracker.md)；当前首版需求基线为 `.scratch/haulpath-v1/spec.md`，规划偏好扩展见 `.scratch/haulpath-planning-preferences/spec.md`，线路总览见 `.scratch/haulpath-route-overview/spec.md`，任务画布与项目资源分层见 `.scratch/haulpath-ux-restructure/spec.md`（替代旧工作台的页面结构约定，既有数据与状态规则继续生效）。产品及仓库名称以 `.scratch/haulpath-name/spec.md` 的更名规格为准，规格目录与文内引用统一使用当前名称。
+- 需求与工单遵循 [本地 Markdown tracker 约定](docs/agents/issue-tracker.md)；当前首版需求基线为 `.scratch/haulpath-v1/spec.md`，规划偏好扩展见 `.scratch/haulpath-planning-preferences/spec.md`，线路总览见 `.scratch/haulpath-route-overview/spec.md`，任务画布与项目资源分层见 `.scratch/haulpath-ux-restructure/spec.md`（替代旧工作台的页面结构约定，既有数据与状态规则继续生效），KML/KMZ 导入扩展见 `.scratch/haulpath-kml-import/spec.md`。产品及仓库名称以 `.scratch/haulpath-name/spec.md` 的更名规格为准，规格目录与文内引用统一使用当前名称。
 - `.scratch/` 被 Git 忽略，其他工作副本可能没有它；有相关 spec / issue 时先读，缺少任务必需的需求时明确指出缺口，不猜测细节。
 - 每个功能使用 `.scratch/<feature-slug>/spec.md`；实现工单分别放在 `issues/<NN>-<slug>.md`，从 `01` 编号，评论追加到文件末尾的 `## Comments`。
 - 技能要求“发布到 issue tracker”时写入上述本地文件；按编号取工单时，在对应功能目录解析。
@@ -58,7 +58,7 @@
 - 项目默认进入线路总览；返回保留当前项目会话内的浏览条件和滚动，切项目或刷新页面后重置。总览与工作台共用线路数据，结果有效性与运行/失败任务提示分开判断；迟到响应不得覆盖新写入或其他项目会话。
 - 打开或新建线路默认进入“编排点位”，通过“编排点位 / 测算线路 / 核对方案”切换任务，侧栏保留快速切线；重命名保留当前任务页，删除线路回到总览。点位库是独立项目资源，管理时不隐式选线或显示线路地图与方案；从线路选点时明确目标，支持连续选点后返回编排。项目导出位于项目层，当前线路导出位于核对页。
 - 项目导出始终包含全部项目线路，不受网页搜索、筛选和排序影响。导出固定包含“线路总览”和“区间明细”；未规划、待重算线路保留总览状态，里程及有效结果时间留空，不生成区间明细。有效结果时间按 `Asia/Shanghai` 展示。
-- 坐标系由用户声明，默认 GCJ-02；WGS84 经高德转换后再用于地图和规划，保留原始坐标与坐标系，不猜测或重复转换。导入先预览校验，经用户确认有效行后写入。
+- 手动录入和表格坐标系由用户声明，默认 GCJ-02；标准 KML/KMZ 固定 WGS84。WGS84 经高德转换后再用于地图和规划，保留原始坐标与坐标系，不猜测或重复转换。导入先预览校验，经用户确认有效项且全部转换成功后原子追加，不自动去重。KML/KMZ 只读取所选文档中的 Point，不跟随外部链接；多文档 KMZ 由用户明确选择。地图文件及预览数据的资源限制见对应规格，超限时不得返回部分结果或写入数据。
 
 ## 边界与维护
 
