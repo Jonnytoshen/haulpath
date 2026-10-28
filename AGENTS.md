@@ -17,6 +17,8 @@
 - 应用要求 Node `>=22.12.0`、pnpm `>=12.0.0`，仓库指定 pnpm `12.10.1`。依赖使用 `pnpm install --frozen-lockfile --ignore-scripts`，缓存齐全时可加 `--offline`；类型检查使用 `pnpm run typecheck`（先 `next typegen`），生产构建使用 `pnpm run build`（`next build --webpack`）。
 - `pnpm run dev` 与 `pnpm run start` 均使用真实入口；生产启动须先构建，端口可通过 `--port` 指定。更换构建器后必须重新验证，不能沿用 webpack 的通过记录。
 - `pnpm test` 串行运行全部 `tests/*.test.mjs`；`test:api` 覆盖所有公开接口与 SQLite 备份恢复，`test:browser` 覆盖工作台及完整闭环/代表规模，`test:commits` 验证提交约束，`test:release` 验证公开发布命令并纳入完整测试入口。生产中断恢复用例同时列入 API 与浏览器入口，先执行 webpack 构建；这些入口需要系统 `sqlite3` 和已安装的浏览器。默认系统 Chrome，可用 `PLAYWRIGHT_CHROMIUM_CHANNEL` 指定 channel；分类数量不可直接相加，完整测试按文件只运行一次。
+- Docker 部署按[部署指南](docs/docker.md)：`docker compose --env-file .env.docker up --detach --build --wait app` 从源码构建启动，宿主仅发布回环端口；数据卷挂载整个 `/app/data`。更换环境变量须重新创建容器，保留数据卷；备份、恢复与迁入使用 `scripts/docker-data.sh`，部署与维护保持相同环境文件和 Compose 项目名。
+- `pnpm run test:docker` 独立运行 `tests/docker/*.test.mjs`，`--matrix` 验收 amd64、arm64 核心流程，另一架构可使用受支持的模拟器；它们不纳入普通完整测试或软件发布门禁。Docker 缺失或目标架构不可用时明确失败，实际记录须区分原生、模拟及真实高德联调。
 - 运行配置见 [.env.example](.env.example) 和 [README](README.md)；默认数据库为启动目录下 `data/haulpath.sqlite`，`HAULPATH_DB_PATH` 可覆盖。环境变量统一使用 `HAULPATH_DB_PATH`、`HAULPATH_TEST_MODE`。开发、生产及备份应核对同一数据库位置，不把测试临时库当作用户数据。
 - `pnpm run prepare` 显式安装或修复 hook；独立 worktree 已启用 `extensions.worktreeConfig` 时，使用 `GIT_CONFIG="$(git rev-parse --git-path config.worktree)" pnpm run prepare`，仅修改当前 worktree 的 hook 配置。完整说明见[提交约定](docs/agents/git-commits.md)。
 - 提交校验入口为 `printf '%s\n' 'docs(git): clarify commit checks' | pnpm run commitlint`、`pnpm run commitlint --edit <消息文件>`、`pnpm run commitlint --from <base> --to HEAD`；替换实际文件/基线，`--from` 不包含起始提交。
@@ -31,7 +33,7 @@
 ## 开始任务前
 
 - 阅读 [领域约定](docs/agents/domain.md)、[术语表](GLOSSARY.md) 和与任务相关的 [ADR](docs/adr/)。领域文档尚不存在时按领域约定继续，不为占位而创建。
-- 需求与工单遵循 [本地 Markdown tracker 约定](docs/agents/issue-tracker.md)；当前首版需求基线为 `.scratch/haulpath-v1/spec.md`，规划偏好扩展见 `.scratch/haulpath-planning-preferences/spec.md`，线路总览见 `.scratch/haulpath-route-overview/spec.md`，任务画布与项目资源分层见 `.scratch/haulpath-ux-restructure/spec.md`（替代旧工作台的页面结构约定，既有数据与状态规则继续生效），KML/KMZ 导入扩展见 `.scratch/haulpath-kml-import/spec.md`。产品及仓库名称以 `.scratch/haulpath-name/spec.md` 的更名规格为准，规格目录与文内引用统一使用当前名称。
+- 需求与工单遵循 [本地 Markdown tracker 约定](docs/agents/issue-tracker.md)；当前首版需求基线为 `.scratch/haulpath-v1/spec.md`，规划偏好扩展见 `.scratch/haulpath-planning-preferences/spec.md`，线路总览见 `.scratch/haulpath-route-overview/spec.md`，任务画布与项目资源分层见 `.scratch/haulpath-ux-restructure/spec.md`（替代旧工作台的页面结构约定，既有数据与状态规则继续生效），KML/KMZ 导入扩展见 `.scratch/haulpath-kml-import/spec.md`，Docker 部署见 `.scratch/haulpath-docker-deployment/spec.md`。产品及仓库名称以 `.scratch/haulpath-name/spec.md` 的更名规格为准，规格目录与文内引用统一使用当前名称。
 - `.scratch/` 被 Git 忽略，其他工作副本可能没有它；有相关 spec / issue 时先读，缺少任务必需的需求时明确指出缺口，不猜测细节。
 - 每个功能使用 `.scratch/<feature-slug>/spec.md`；实现工单分别放在 `issues/<NN>-<slug>.md`，从 `01` 编号，评论追加到文件末尾的 `## Comments`。
 - 技能要求“发布到 issue tracker”时写入上述本地文件；按编号取工单时，在对应功能目录解析。

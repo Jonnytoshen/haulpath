@@ -39,6 +39,17 @@ pnpm run start
 
 项目资料保存在本机 SQLite，默认位置为 `data/haulpath.sqlite`。**同一数据库仅运行一个应用服务**，包括不同端口、开发与生产模式和不同工作副本；切换前先停止原服务。数据位置、备份与恢复见[运行维护](docs/operations.md)。
 
+## Docker 部署
+
+也可从源码构建 Linux `amd64` / `arm64` 镜像，宿主无需 Node.js、pnpm 或 SQLite。准备 Docker Engine 28+、Compose 2.30+ 或对应 Docker Desktop；在仓库根目录复制配置，填写自己的高德凭证后启动：
+
+```sh
+test -e .env.docker || cp .env.docker.example .env.docker
+docker compose --env-file .env.docker up --detach --build --wait app
+```
+
+默认访问 [http://127.0.0.1:3000](http://127.0.0.1:3000)，整个数据库目录保存在具名卷中。已有 Node 数据时，先按[迁入步骤](docs/docker.md#迁入原有本机资料)处理，不要提前启动目标应用。配置修改需要重新创建容器；日常重建保留数据卷，不使用 `down -v`。端口、日志、在线备份、停服恢复、升级与回退见 [Docker 部署指南](docs/docker.md)。
+
 ## 使用流程
 
 进入项目先显示“线路总览”，每条线路一行，可按线路或任意点位名称搜索、按结果状态筛选，并按名称、有效里程或结果时间排序。表格展示名称、有序点位、点位数、偏好、状态、总里程和北京时间；长点位列表默认两行，可展开核对。桌面表头固定，窄屏在表格内横向滚动。
@@ -98,6 +109,8 @@ pnpm test
 ```
 
 API 与浏览器测试会启动真实本机应用并使用临时 SQLite，下载和读取实际 Excel 文件；仅高德 HTTP 服务及地图 SDK 使用可控替身。浏览器测试默认使用已安装的 Google Chrome；可用 `PLAYWRIGHT_CHROMIUM_CHANNEL` 选择其他已安装的 Playwright 浏览器 channel。请先停止当前工作副本的开发或生产服务，再串行运行这些命令，避免多个服务共享 `.next`。
+
+Docker 验收单独使用 `pnpm run test:docker`；双架构核心验收使用 `pnpm run test:docker --matrix`。它们需要可用 Docker，使用独立项目、临时卷和假凭证，不纳入 `pnpm test` 或软件发布门禁；参数与边界见 [Docker 验收说明](docs/docker.md#开发验收与边界)。
 
 生产中断恢复用例先执行 webpack 构建，使用临时生产服务和真实浏览器验证重启及备份恢复后的手动重试，因此 `test:api` 与 `test:browser` 都需要系统 `sqlite3` 和已安装的浏览器。该用例在两个分类入口中有交叉；`pnpm test` 按文件只执行一次。
 

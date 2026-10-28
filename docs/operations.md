@@ -1,5 +1,7 @@
 # 本机运行与数据维护
 
+本文的启动与维护命令适用于本机 Node 方式。Docker 使用独立 `.env.docker` 和具名卷，宿主无需 SQLite；其启动、迁入、备份、停服恢复、升级与回退见 [Docker 部署指南](docker.md)。两种方式均须遵守单库单实例与一致备份约定。
+
 应用默认监听 `127.0.0.1`；开发使用 `pnpm run dev`，生产使用 `pnpm run build` 后 `pnpm run start`。在仓库根目录启动，默认数据库为 `data/haulpath.sqlite`。服务首次访问数据库时自动创建目录和当前 SQLite schema。
 
 **同一数据库仅运行一个应用服务**，包括不同端口、开发与生产模式、不同工作副本。切换前先停止原服务；SQLite 在线备份不属于第二个应用服务。
