@@ -1,0 +1,27 @@
+name: haulpath
+
+services:
+  app:
+    build:
+      context: .
+      target: runtime
+    image: ${HAULPATH_IMAGE:-haulpath:local}
+    pull_policy: never
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 30s
+    ports:
+      - "127.0.0.1:${HAULPATH_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: "3000"
+      HAULPATH_DB_PATH: /app/data/haulpath.sqlite
+      AMAP_WEB_SERVICE_KEY: ${AMAP_WEB_SERVICE_KEY:-}
+      AMAP_JS_KEY: ${AMAP_JS_KEY:-}
+      AMAP_JS_SECURITY_CODE: ${AMAP_JS_SECURITY_CODE:-}
+    volumes:
+      - data:/app/data
+
+volumes:
+  data:
