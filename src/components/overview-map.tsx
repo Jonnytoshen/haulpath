@@ -34,6 +34,11 @@ export function overviewRouteColor(id: string) {
   return routeColors[hash % routeColors.length];
 }
 
+function pointRole(index: number, count: number) {
+  const role = index === 0 ? 'start' : index === count - 1 ? 'end' : 'waypoint';
+  return { name: count === 1 ? '起点（单点草稿）' : { start: '起点', waypoint: '途经点', end: '终点' }[role], className: `marker-${role}` };
+}
+
 type Props = {
   config: MapConfig | null;
   routes: Route[];
@@ -104,10 +109,13 @@ export default function OverviewMap(props: Props) {
     }
     const selected = routes.find((route) => route.id === selectedId);
     selected?.points.forEach((point, index) => {
+      const role = pointRole(index, selected.points.length);
+      const label = `${index + 1}. ${role.name} · ${point.name}`;
       const content = document.createElement('span');
-      content.className = `map-marker ${index === 0 ? 'marker-start' : index === selected.points.length - 1 ? 'marker-end' : 'marker-waypoint'}`;
-      content.textContent = String(index + 1); content.title = `${index + 1}. ${point.name}`;
-      const marker = new api.Marker({ position: [point.longitude, point.latitude], content, offset: new api.Pixel(-15, -31), zIndex: 150, title: `${index + 1}. ${point.name}` });
+      content.className = `map-marker ${role.className}`;
+      content.textContent = String(index + 1); content.title = label;
+      content.setAttribute('role', 'img'); content.setAttribute('aria-label', label);
+      const marker = new api.Marker({ position: [point.longitude, point.latitude], content, offset: new api.Pixel(-15, -31), zIndex: 150, title: label });
       overlays.push(marker); selectedOverlays.push(marker);
     });
     map.add(overlays);
@@ -126,6 +134,8 @@ export default function OverviewMap(props: Props) {
   }, [ready, overlayKey, selectedId, viewRequest.version]);
 
   const validCount = routes.filter((route) => route.snapshot?.inputVersion === route.inputVersion).length;
+  const selectedPointCount = routes.find((route) => route.id === selectedId)?.points.length ?? 0;
+  const legendRoles = selectedPointCount ? [pointRole(0, selectedPointCount), ...(selectedPointCount > 2 ? [pointRole(1, selectedPointCount)] : []), ...(selectedPointCount > 1 ? [pointRole(selectedPointCount - 1, selectedPointCount)] : [])] : [];
   return <div className="overview-map-surface" role="region" aria-label="线路总览地图">
     <div className="map-body">
       <div ref={container} className="map-canvas" aria-label="高德地图" />
@@ -138,6 +148,8 @@ export default function OverviewMap(props: Props) {
         <span className="map-provider-note">高德地图 JS API 2.0</span>
       </div>}
     </div>
-    <p className="overview-map-note">{validCount ? `${validCount} 条有效方案 · 色标对应线路，颜色可能重复` : '当前匹配线路暂无有效方案，可选择线路查看当前点位。'}</p>
+    <div className="overview-map-note"><p>{validCount ? `${validCount} 条有效方案 · 色标对应线路，颜色可能重复` : '当前匹配线路暂无有效方案，可选择线路查看当前点位。'}</p>
+      {legendRoles.length > 0 && <ul className="overview-map-legend" aria-label="所选线路点位图例">{legendRoles.map((role) => <li key={role.className}><span className={`overview-map-legend-swatch ${role.className}`} aria-hidden="true" />{role.name}</li>)}</ul>}
+    </div>
   </div>;
 }
