@@ -1,6 +1,6 @@
 {
   "name": "haulpath",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "重途·HaulPath：面向个人规划者的本机工作台，按项目管理重卡业务的行前线路、点位与里程测算。",
   "packageManager": "pnpm@12.10.1",

@@ -1,3 +1,54 @@
+## 0.2.0 (2026-10-29)
+
+### Features
+
+- **import:** support KML and KMZ point files ([398d2b2](https://github.com/Jonnytoshen/haulpath/commit/398d2b2))
+- **import:** add map file import interface ([75b2b70](https://github.com/Jonnytoshen/haulpath/commit/75b2b70))
+- **map:** add route overview map preview ([3edbbea](https://github.com/Jonnytoshen/haulpath/commit/3edbbea))
+- **planning:** support all documented driving preferences ([a152bc8](https://github.com/Jonnytoshen/haulpath/commit/a152bc8))
+- **route:** add project route overview ([82a2c98](https://github.com/Jonnytoshen/haulpath/commit/82a2c98))
+- **storage:** remember project planning preferences ([dc4cff1](https://github.com/Jonnytoshen/haulpath/commit/dc4cff1))
+- **tooling:** add local Docker deployment workflows ([feab117](https://github.com/Jonnytoshen/haulpath/commit/feab117))
+- **ui:** group driving preferences with descriptions ([5f4f78e](https://github.com/Jonnytoshen/haulpath/commit/5f4f78e))
+- **ui:** organize route tasks and project resources ([01339e1](https://github.com/Jonnytoshen/haulpath/commit/01339e1))
+
+### Bug Fixes
+
+- **import:** bound map preview memory ([0b7158f](https://github.com/Jonnytoshen/haulpath/commit/0b7158f))
+- **map:** recover failed SDK loads and verify overview browsing ([8b9a6f4](https://github.com/Jonnytoshen/haulpath/commit/8b9a6f4))
+- **map:** label overview point roles ([cbbfb24](https://github.com/Jonnytoshen/haulpath/commit/cbbfb24))
+- **planning:** invalidate list reads when a task finishes ([aa417a1](https://github.com/Jonnytoshen/haulpath/commit/aa417a1))
+- **route:** refresh project routes without losing local changes ([ff00a15](https://github.com/Jonnytoshen/haulpath/commit/ff00a15))
+- **ui:** move notices to the top right ([24e4e85](https://github.com/Jonnytoshen/haulpath/commit/24e4e85))
+
+### Code Refactoring
+
+- **map:** improve route overview previews ([e7933a0](https://github.com/Jonnytoshen/haulpath/commit/e7933a0))
+
+### Documentation
+
+- **import:** document KML point import ([ffd6a0a](https://github.com/Jonnytoshen/haulpath/commit/ffd6a0a))
+- **map:** document route overview map preview ([e642757](https://github.com/Jonnytoshen/haulpath/commit/e642757))
+- **map:** record final overview map verification ([78fb7b8](https://github.com/Jonnytoshen/haulpath/commit/78fb7b8))
+- **planning:** document expanded preferences and project memory ([4a54c9c](https://github.com/Jonnytoshen/haulpath/commit/4a54c9c))
+- **planning:** record preference acceptance ([a554040](https://github.com/Jonnytoshen/haulpath/commit/a554040))
+- **route:** document project overview and acceptance ([2c6c21b](https://github.com/Jonnytoshen/haulpath/commit/2c6c21b))
+- **route:** record final overview verification ([4d40fa5](https://github.com/Jonnytoshen/haulpath/commit/4d40fa5))
+
+### Build System
+
+- **deps:** allow nx build scripts ([5f1bb7c](https://github.com/Jonnytoshen/haulpath/commit/5f1bb7c))
+
+### Tests
+
+- **planning:** verify browser preference inheritance ([0dfea7b](https://github.com/Jonnytoshen/haulpath/commit/0dfea7b))
+- **route:** cover overview concurrency and refresh recovery ([7d2b30d](https://github.com/Jonnytoshen/haulpath/commit/7d2b30d))
+
+### ❤️ Thank You
+
+- Chao
+- Jonnytoshen
+
 ## 0.1.0 (2026-10-26)
 
 ### Features
