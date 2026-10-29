@@ -1,0 +1,25 @@
+# Only application inputs enter the build context. Local credentials and data
+# stay outside every image layer, including intermediate build stages.
+**
+!Dockerfile
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!next.config.ts
+!tsconfig.json
+!postcss.config.mjs
+!src/
+!src/**
+!public/
+!public/**
+!scripts/
+!scripts/docker/
+!scripts/docker/**
+**/.env*
+**/node_modules/
+**/*.sqlite
+**/*.sqlite-*
+**/*.sqlite3
+**/*.sqlite3-*
+**/*.db
+**/*.db-*
