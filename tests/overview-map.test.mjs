@@ -22,6 +22,19 @@ async function openMapOverview() {
   return { app, page, errors, calls, request, async close() { await browser.close(); await app.stop(); await app.cleanup(); await new Promise((resolve) => upstream.close(resolve)); } };
 }
 
+async function accessibleDescription(locator) {
+  return locator.evaluate((element) => (element.getAttribute('aria-describedby') ?? '').split(/\s+/).filter(Boolean).map((id) => document.getElementById(id)?.textContent?.trim() ?? '').join(' '));
+}
+
+async function isUncovered(locator) {
+  return locator.evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    if (bounds.width <= 1 || bounds.height <= 1 || getComputedStyle(element).opacity === '0') return false;
+    const hit = document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+    return !!hit && (element.contains(hit) || hit.contains(element));
+  });
+}
+
 // Agreed seam: browser → real application HTTP → temporary SQLite; only AMap is replaced.
 test('overview map previews stored routes without opening the workbench or planning again', { timeout: 120000 }, async () => {
   const context = await openMapOverview();
@@ -176,6 +189,189 @@ test('selected map points expose only their actual roles with visible legends an
     assert.deepEqual(await legend.getByRole('listitem').allTextContents(), ['起点', '途经点', '终点']);
     assert.deepEqual(await map.getByRole('img').evaluateAll((elements) => elements.map((element) => element.getAttribute('aria-label'))), ['1. 起点 · 上海仓', '2. 途经点 · 南京客户', '3. 途经点 · 合肥客户', '4. 终点 · 上海仓']);
     assert.equal(context.calls.length, 0, 'role inspection does not plan draft routes');
+    assert.deepEqual(context.errors, []);
+  } finally { await context.close(); }
+});
+
+test('long map previews preserve detail browsing and keep selection accessible across desktop and narrow screens', { timeout: 120000 }, async () => {
+  const context = await openMapOverview();
+  const { app, page, request } = context;
+  try {
+    const project = await request('/api/projects', 'POST', { name: '地图响应式核对项目' });
+    const points = await request('/api/coordinates', 'POST', { points: Array.from({ length: 20 }, (_, index) => ({
+      name: `第${String(index + 1).padStart(2, '0')}站 · 长三角区域物流中心装卸作业区与客户交接入口`,
+      longitude: 118 + index * 0.03, latitude: 30 + index * 0.02, source: 'manual',
+    })) });
+    const route = await request(`/api/projects/${project.id}/routes`, 'POST', {
+      name: '长三角跨区域往返运输线路 · 上海仓储中心至南京客户装卸作业区及沿线交接点核对', points,
+    });
+    const planned = await request(`/api/routes/${route.id}/plan?projectId=${project.id}`, 'POST');
+    const second = await request(`/api/projects/${project.id}/routes`, 'POST', {
+      name: '返程交接点核对线路 · 长三角区域物流中心至上海仓储中心', points: points.toReversed(),
+    });
+    for (let index = 0; index < 12; index++) {
+      await request(`/api/projects/${project.id}/routes`, 'POST', { name: `待完善线路 ${index + 1}` });
+    }
+    const upstreamBaseline = context.calls.length;
+    await page.goto(app.baseUrl);
+    const overview = page.getByRole('region', { name: '线路总览', exact: true });
+    await overview.getByRole('button', { name: '地图', exact: true }).click();
+    const map = overview.getByRole('region', { name: '线路总览地图', exact: true });
+    const canvas = map.locator('[data-sdk-map="ready"]');
+    await canvas.waitFor();
+    const list = overview.getByRole('region', { name: '地图线路列表', exact: true });
+    const selected = list.getByRole('button', { name: `预览 ${route.name}`, exact: true });
+    const secondButton = list.getByRole('button', { name: `预览 ${second.name}`, exact: true });
+    const summary = overview.getByRole('region', { name: '所选线路摘要', exact: true });
+    const details = summary.getByRole('region', { name: '所选线路详细资料', exact: true });
+    const status = overview.getByRole('status');
+    await status.waitFor({ state: 'attached' });
+    const originalStatus = await status.elementHandle();
+    assert.equal(await status.getAttribute('aria-live'), 'polite');
+    assert.equal(await selected.getAttribute('aria-label'), `预览 ${route.name}`);
+    assert.match(await accessibleDescription(selected), /已规划/);
+    assert.match(await accessibleDescription(selected), /20 个点/);
+    assert.match(await accessibleDescription(selected), /23\.446 公里/);
+    assert.equal(await secondButton.getAttribute('aria-label'), `预览 ${second.name}`);
+    assert.match(await accessibleDescription(secondButton), /未规划/);
+    assert.match(await accessibleDescription(secondButton), /20 个点/);
+    assert.match(await accessibleDescription(secondButton), /暂无有效里程/);
+
+    // Both long point sequences stay expanded, so switching cannot reset the scroll merely by shrinking its content.
+    await secondButton.click();
+    await summary.getByRole('heading', { name: second.name, exact: true }).waitFor();
+    await summary.getByRole('button', { name: `展开 ${second.name} 的全部点位`, exact: true }).click();
+    assert.match(await status.innerText(), /暂无有效里程/);
+    await selected.focus();
+    await page.keyboard.press('Enter');
+    await summary.getByRole('heading', { name: route.name, exact: true }).waitFor();
+    assert.equal(await status.evaluate((element, original) => element === original, originalStatus), true, 'selection updates the same permanently mounted live region');
+    assert.ok((await status.innerText()).includes(route.name));
+    assert.match(await status.innerText(), /已规划/);
+    assert.match(await status.innerText(), /20 个点/);
+    assert.match(await status.innerText(), /23\.446 公里/);
+    const skip = list.getByRole('link', { name: '跳到所选线路摘要', exact: true });
+    assert.equal(await skip.count(), 1, 'only the selected row offers the direct summary link');
+    assert.equal(await skip.getAttribute('href'), `#${await summary.getAttribute('id')}`, 'the shortcut is a native in-page link');
+    assert.equal(await isUncovered(skip), false, 'the shortcut stays visually hidden before keyboard focus');
+    await page.keyboard.press('Tab');
+    assert.equal(await skip.evaluate((element) => element === document.activeElement), true, 'the first Tab after selecting a row reaches its summary shortcut');
+    assert.equal(await isUncovered(skip), true, 'the shortcut becomes visible on focus');
+    await page.keyboard.press('Enter');
+    assert.equal(await summary.getAttribute('tabindex'), '-1');
+    assert.equal(await summary.evaluate((element) => element === document.activeElement), true, 'the shortcut moves focus to the summary without traversing other routes');
+    await summary.getByRole('button', { name: `展开 ${route.name} 的全部点位`, exact: true }).click();
+    // Routes can become interactive before the independent project-library request finishes.
+    // Its loading message changes the available summary height, so begin reading after full project readiness.
+    await page.getByText('正在加载项目线路与点位库…', { exact: true }).waitFor({ state: 'hidden' });
+    const readingGeometry = await details.evaluate((element) => ({ clientHeight: element.clientHeight, scrollHeight: element.scrollHeight, viewport: [innerWidth, innerHeight] }));
+    const detailTop = await details.evaluate((element) => { element.scrollTop = element.scrollHeight; return element.scrollTop; });
+    assert.ok(detailTop > 0, 'expanded long point sequences have a real detail scroll range');
+    const listTop = await list.evaluate((element) => { element.scrollTop = element.scrollHeight; return element.scrollTop; });
+    assert.ok(listTop > 0);
+    await canvas.evaluate((element) => element.__sdkMap.setZoomAndCenter(12, [120, 30]));
+    const originalMap = await canvas.evaluateHandle((element) => element.__sdkMap);
+    const fitCount = await canvas.getAttribute('data-sdk-fit-count');
+    const refresh = page.getByRole('button', { name: '刷新线路', exact: true });
+    const response = page.waitForResponse((item) => item.request().method() === 'GET' && item.url() === `${app.baseUrl}/api/projects/${project.id}/routes` && item.ok());
+    await refresh.click();
+    await response;
+    await page.waitForFunction((element) => !element.disabled, await refresh.elementHandle());
+    assert.deepEqual(await details.evaluate((element) => ({ clientHeight: element.clientHeight, scrollHeight: element.scrollHeight, viewport: [innerWidth, innerHeight] })), readingGeometry, 'refreshing preserves the stable detail viewport and content dimensions');
+    assert.equal(await details.evaluate((element) => element.scrollTop), detailTop, 'refreshing the same selected route preserves its reading position');
+    assert.equal(await list.evaluate((element) => element.scrollTop), listTop, 'refreshing preserves the independent route-list position');
+    assert.equal(await canvas.getAttribute('data-sdk-center'), '[120,30]');
+    assert.equal(await canvas.getAttribute('data-sdk-zoom'), '12');
+    assert.equal(await canvas.getAttribute('data-sdk-fit-count'), fitCount, 'refreshing does not refit the map');
+    assert.equal(await canvas.evaluate((element, original) => element.__sdkMap === original, originalMap), true, 'refreshing retains the current map instance');
+    await secondButton.click();
+    await summary.getByRole('heading', { name: second.name, exact: true }).waitFor();
+    assert.equal(await summary.getByRole('button', { name: `收起 ${second.name} 的全部点位`, exact: true }).getAttribute('aria-expanded'), 'true');
+    assert.ok(await details.evaluate((element) => element.scrollHeight > element.clientHeight), 'the next route still has overflowing details');
+    assert.equal(await details.evaluate((element) => element.scrollTop), 0, 'selecting another long route starts its details at the beginning');
+    assert.equal(await canvas.evaluate((element, original) => element.__sdkMap === original, originalMap), true, 'switching preview does not replace the map');
+    assert.ok((await status.innerText()).includes(second.name));
+    assert.match(await status.innerText(), /未规划/);
+    assert.match(await status.innerText(), /20 个点/);
+    assert.match(await status.innerText(), /暂无有效里程/);
+    await originalMap.dispose();
+    await originalStatus.dispose();
+    await selected.click();
+    const open = summary.getByRole('button', { name: '打开线路', exact: true });
+    const heading = summary.getByRole('heading', { name: route.name, exact: true });
+    const routeState = summary.getByText('已规划', { exact: true });
+    const distance = summary.getByText('23.446', { exact: true });
+    const resultTime = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date(planned.snapshot.calculatedAt));
+
+    for (const viewport of [{ width: 1440, height: 900 }, { width: 1280, height: 720 }, { width: 1440, height: 650 }, { width: 390, height: 844 }]) {
+      await page.setViewportSize(viewport);
+      await canvas.waitFor();
+      await heading.waitFor();
+      const expand = summary.getByRole('button', { name: `展开 ${route.name} 的全部点位`, exact: true });
+      if (await expand.count()) await expand.click();
+      assert.equal(await summary.getByRole('button', { name: `收起 ${route.name} 的全部点位`, exact: true }).getAttribute('aria-expanded'), 'true');
+      assert.equal(await selected.getAttribute('aria-pressed'), 'true');
+      assert.match(await summary.innerText(), /23\.446/);
+      assert.ok((await details.innerText()).includes(points.map((point) => point.name).join(' → ')));
+      assert.equal(await details.getByRole('heading', { name: route.name, exact: true }).count(), 0, 'the route name stays outside scrolling details');
+      assert.equal(await details.getByText('已规划', { exact: true }).count(), 0, 'the route status stays outside scrolling details');
+      assert.equal(await details.getByText('23.446', { exact: true }).count(), 0, 'the effective mileage stays outside scrolling details');
+
+      const [mapBox, listBox, summaryBox] = await Promise.all([map.boundingBox(), list.boundingBox(), summary.boundingBox()]);
+      assert.ok(mapBox && listBox && summaryBox);
+      if (viewport.width > 900) {
+        assert.ok(mapBox.x + mapBox.width <= listBox.x + 1, 'desktop keeps route materials beside the map');
+        assert.ok(mapBox.width > listBox.width, 'the map remains the main working area');
+        const ordinaryRows = await list.getByRole('button', { name: /^预览 待完善线路 [12]$/ }).evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().height));
+        assert.equal(ordinaryRows.length, 2);
+        assert.ok(ordinaryRows.every((height) => height > 0));
+        assert.ok(await list.evaluate((element, rowHeights) => element.clientHeight + 1 >= rowHeights.reduce((sum, height) => sum + height, 0), ordinaryRows), 'even short desktops show at least two ordinary route-row heights');
+      } else {
+        assert.ok(mapBox.y + mapBox.height <= listBox.y + 1, 'narrow screens place the map before the route list');
+      }
+      assert.ok(listBox.y + listBox.height <= summaryBox.y + 1, 'the selected details follow the list without covering the map');
+
+      await list.scrollIntoViewIfNeeded();
+      const pageTop = await page.evaluate(() => window.scrollY);
+      const restoredListTop = await list.evaluate((element) => { element.scrollTop = element.scrollHeight; return element.scrollTop; });
+      assert.ok(restoredListTop > 0, 'route lists keep their own usable scroll range');
+      assert.equal(await page.evaluate(() => window.scrollY), pageTop, 'scrolling the route list does not move the page');
+
+      const timestamp = details.getByText(resultTime, { exact: true });
+      if (viewport.width > 900) {
+        await open.scrollIntoViewIfNeeded();
+        const before = await Promise.all([heading.boundingBox(), routeState.boundingBox(), distance.boundingBox(), open.boundingBox()]);
+        assert.ok(before.every(Boolean));
+        assert.ok(await details.evaluate((element) => { element.scrollTop = element.scrollHeight; return element.scrollTop > 0; }), 'desktop details remain independently scrollable');
+        assert.equal(await isUncovered(timestamp), true, 'the end of a long summary can be reached without being covered');
+        const after = await Promise.all([heading.boundingBox(), routeState.boundingBox(), distance.boundingBox(), open.boundingBox()]);
+        for (let index = 0; index < before.length; index++) {
+          assert.ok(after[index] && Math.abs(before[index].y - after[index].y) <= 1, 'name, status, mileage and opening remain stable while details scroll');
+        }
+        assert.equal(await isUncovered(heading), true, 'the selected route name stays visible while details scroll');
+        assert.equal(await isUncovered(routeState), true, 'the selected route status stays visible while details scroll');
+        assert.equal(await isUncovered(distance), true, 'the selected route mileage stays visible while details scroll');
+        assert.equal(await isUncovered(open), true, 'opening remains reachable while details scroll');
+      } else {
+        await timestamp.scrollIntoViewIfNeeded();
+        assert.equal(await isUncovered(timestamp), true, 'the end of the naturally flowing mobile summary can be brought into view');
+        await open.scrollIntoViewIfNeeded();
+        assert.equal(await isUncovered(open), true, 'opening can be reached after scrolling through mobile details');
+      }
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'long route and point names do not make the page overflow horizontally');
+      await canvas.evaluate((element) => element.__sdkMap.setZoomAndCenter(11, [119, 29]));
+      await open.click();
+      await page.getByRole('region', { name: '线路编辑', exact: true }).waitFor();
+      assert.equal(await page.getByRole('button', { name: '编排点位', exact: true }).getAttribute('aria-pressed'), 'true');
+      await page.getByRole('button', { name: '返回线路总览', exact: true }).click();
+      await canvas.waitFor();
+      await heading.waitFor();
+      assert.equal(await selected.getAttribute('aria-pressed'), 'true', 'returning from editing restores the selected map preview');
+      assert.equal(await list.evaluate((element) => element.scrollTop), restoredListTop, 'returning restores the route-list position');
+      assert.equal(await canvas.getAttribute('data-sdk-center'), '[119,29]', 'returning restores the map center');
+      assert.equal(await canvas.getAttribute('data-sdk-zoom'), '11', 'returning restores the map zoom');
+    }
+    assert.equal(context.calls.length, upstreamBaseline, 'responsive previewing and opening never plan again');
     assert.deepEqual(context.errors, []);
   } finally { await context.close(); }
 });

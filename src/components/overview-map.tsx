@@ -136,10 +136,10 @@ export default function OverviewMap(props: Props) {
   const validCount = routes.filter((route) => route.snapshot?.inputVersion === route.inputVersion).length;
   const selectedPointCount = routes.find((route) => route.id === selectedId)?.points.length ?? 0;
   const legendRoles = selectedPointCount ? [pointRole(0, selectedPointCount), ...(selectedPointCount > 2 ? [pointRole(1, selectedPointCount)] : []), ...(selectedPointCount > 1 ? [pointRole(selectedPointCount - 1, selectedPointCount)] : [])] : [];
-  return <div className="overview-map-surface" role="region" aria-label="线路总览地图">
+  return <div className="overview-map-surface" role="region" aria-label="线路总览地图" aria-busy={!!config?.mapKey && !ready && !failure}>
     <div className="map-body">
       <div ref={container} className="map-canvas" aria-label="高德地图" />
-      {!ready && <div className="map-placeholder">
+      {!ready && <div className="map-placeholder" role="status">
         <span className="map-placeholder-icon"><MapPin /></span>
         <h3>{failure ? '暂时无法加载地图' : config === null ? '正在读取地图配置' : !config.mapKey ? '配置高德地图，查看真实线路' : '正在加载高德地图'}</h3>
         <p>{failure || (!config?.mapKey ? '仍可在列表中预览线路资料，或打开线路继续编排。' : '将显示当前匹配线路的有效方案与所选点位。')}</p>
