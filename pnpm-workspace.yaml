@@ -1,2 +1,2 @@
 allowBuilds:
-  nx: set this to true or false
+  nx: true
