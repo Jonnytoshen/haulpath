@@ -179,3 +179,87 @@ test('selected map points expose only their actual roles with visible legends an
     assert.deepEqual(context.errors, []);
   } finally { await context.close(); }
 });
+
+test('long map previews keep route selection, details and opening usable across desktop and narrow screens', { timeout: 120000 }, async () => {
+  const context = await openMapOverview();
+  const { app, page, request } = context;
+  try {
+    const project = await request('/api/projects', 'POST', { name: '地图响应式核对项目' });
+    const points = await request('/api/coordinates', 'POST', { points: Array.from({ length: 20 }, (_, index) => ({
+      name: `第${String(index + 1).padStart(2, '0')}站 · 长三角区域物流中心装卸作业区与客户交接入口`,
+      longitude: 118 + index * 0.03, latitude: 30 + index * 0.02, source: 'manual',
+    })) });
+    const route = await request(`/api/projects/${project.id}/routes`, 'POST', {
+      name: '长三角跨区域往返运输线路 · 上海仓储中心至南京客户装卸作业区及沿线交接点核对', points,
+    });
+    const planned = await request(`/api/routes/${route.id}/plan?projectId=${project.id}`, 'POST');
+    for (let index = 0; index < 12; index++) {
+      await request(`/api/projects/${project.id}/routes`, 'POST', { name: `待完善线路 ${index + 1}` });
+    }
+    const upstreamBaseline = context.calls.length;
+    await page.goto(app.baseUrl);
+    const overview = page.getByRole('region', { name: '线路总览', exact: true });
+    await overview.getByRole('button', { name: '地图', exact: true }).click();
+    const map = overview.getByRole('region', { name: '线路总览地图', exact: true });
+    const list = overview.getByRole('region', { name: '地图线路列表', exact: true });
+    const selected = list.getByRole('button', { name: `预览 ${route.name}`, exact: true });
+    await selected.click();
+    const summary = overview.getByRole('region', { name: '所选线路摘要', exact: true });
+    const open = summary.getByRole('button', { name: '打开线路', exact: true });
+    const resultTime = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date(planned.snapshot.calculatedAt));
+
+    for (const viewport of [{ width: 1440, height: 900 }, { width: 1440, height: 650 }, { width: 390, height: 844 }]) {
+      await page.setViewportSize(viewport);
+      await map.locator('[data-sdk-map="ready"]').waitFor();
+      await summary.getByRole('heading', { name: route.name, exact: true }).waitFor();
+      const expand = summary.getByRole('button', { name: `展开 ${route.name} 的全部点位`, exact: true });
+      if (await expand.count()) await expand.click();
+      assert.equal(await summary.getByRole('button', { name: `收起 ${route.name} 的全部点位`, exact: true }).getAttribute('aria-expanded'), 'true');
+      assert.equal(await selected.getAttribute('aria-pressed'), 'true');
+      assert.match(await summary.innerText(), /23\.446/);
+      assert.ok((await summary.innerText()).includes(points.map((point) => point.name).join(' → ')));
+
+      const [mapBox, listBox, summaryBox] = await Promise.all([map.boundingBox(), list.boundingBox(), summary.boundingBox()]);
+      assert.ok(mapBox && listBox && summaryBox);
+      if (viewport.width > 900) {
+        assert.ok(mapBox.x + mapBox.width <= listBox.x + 1, 'desktop keeps route materials beside the map');
+        assert.ok(mapBox.width > listBox.width, 'the map remains the main working area');
+      } else {
+        assert.ok(mapBox.y + mapBox.height <= listBox.y + 1, 'narrow screens place the map before the route list');
+      }
+      assert.ok(listBox.y + listBox.height <= summaryBox.y + 1, 'the selected details follow the list without covering the map');
+
+      await list.scrollIntoViewIfNeeded();
+      const pageTop = await page.evaluate(() => window.scrollY);
+      const listTop = await list.evaluate((element) => { element.scrollTop = element.scrollHeight; return element.scrollTop; });
+      assert.ok(listTop > 0, 'route lists keep their own usable scroll range');
+      assert.equal(await page.evaluate(() => window.scrollY), pageTop, 'scrolling the route list does not move the page');
+
+      await open.scrollIntoViewIfNeeded();
+      const actionBefore = await open.boundingBox();
+      const timestamp = summary.getByText(resultTime, { exact: true });
+      await timestamp.scrollIntoViewIfNeeded();
+      assert.ok(await timestamp.evaluate((element) => {
+        const bounds = element.getBoundingClientRect();
+        const hit = document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+        return !!hit && (element.contains(hit) || hit.contains(element));
+      }), 'the end of a long summary can be brought into view without being covered');
+      if (viewport.width > 900) {
+        assert.ok(await summary.evaluate((element) => Array.from(element.querySelectorAll('*')).some((child) => child.scrollTop > 0 && child.scrollHeight > child.clientHeight)), 'desktop details scroll inside their own area');
+        const actionAfter = await open.boundingBox();
+        assert.ok(actionBefore && actionAfter && Math.abs(actionBefore.y - actionAfter.y) <= 1, 'opening stays available while the details scroll');
+      }
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'long route and point names do not make the page overflow horizontally');
+      await open.scrollIntoViewIfNeeded();
+      await open.click();
+      await page.getByRole('region', { name: '线路编辑', exact: true }).waitFor();
+      assert.equal(await page.getByRole('button', { name: '编排点位', exact: true }).getAttribute('aria-pressed'), 'true');
+      await page.getByRole('button', { name: '返回线路总览', exact: true }).click();
+      await map.locator('[data-sdk-map="ready"]').waitFor();
+      await summary.getByRole('heading', { name: route.name, exact: true }).waitFor();
+      assert.equal(await selected.getAttribute('aria-pressed'), 'true', 'returning from editing restores the selected map preview');
+    }
+    assert.equal(context.calls.length, upstreamBaseline, 'responsive previewing and opening never plan again');
+    assert.deepEqual(context.errors, []);
+  } finally { await context.close(); }
+});
