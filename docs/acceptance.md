@@ -2,7 +2,7 @@
 
 本文按阶段归档已有验证，不表示当前 HEAD 已通过全部历史检查。所有日期均使用 Asia/Shanghai；测试数量只属于对应代码基线和命令，分类入口及不同阶段的数量不能相加。
 
-截至 2026-10-26，最近一次有记录的完整串行回归为[规划偏好验收](#2026-10-26-规划偏好验收)测试基线 `d6b192d0a74ad0de35de3955d8fec97c311d6a7a` 的 **100/100**。该结果只属于对应源码与测试，不替代后续改动或实际发布的门禁；发布仍须按[发布指南](releasing.md#预览与质量门禁)运行质量门禁。
+截至 2026-10-29，最近一次有记录的完整串行回归为 [Docker PR 集成复验](#合入最新-main-后的-pr-集成复验)基线 `13e846f2e784423588dc2c78bc625c1d1c18f44d` 的 **144/144**。该结果只属于对应源码与测试，不替代后续改动或实际发布的门禁；发布仍须按[发布指南](releasing.md#预览与质量门禁)运行质量门禁。
 
 | 日期 | 阶段 / 代码依据 | 已记录的验证范围 |
 | --- | --- | --- |
@@ -17,6 +17,8 @@
 | 2026-10-27 | [线路任务画布](#2026-10-27-线路任务画布验收)，基线 `4d40fa5` 上的 `codex/ux-restructure` 工作树改动 | 类型、webpack 构建、浏览器 31/31、四宽度生产界面检查 |
 | 2026-10-28 | [KML/KMZ 点位导入](#2026-10-28-kmlkmz-点位导入验收)，应用及测试 `f68318b` | 类型、webpack 构建、API 49/49、浏览器 37/37、代表规模和双轴审查 |
 | 2026-10-28 | [线路总览地图预览](#2026-10-28-线路总览地图预览验收)，最终应用及测试 `8ff5fed` | 角色文字修复、类型、webpack 构建、浏览器 47/47、100×20 有效方案及实际双表、第二组布局确认与双轴复核 |
+| 2026-10-29 | [Docker 部署](#2026-10-29-docker-部署验收)，本机回归 `942a461`、容器集成 `6a55587` | 类型、webpack 构建、完整串行 134/134；隔离 VM 原生 Docker 17/17、amd64 模拟核心 2/2；Desktop 17 个场景经首轮与专项复验覆盖，双轴审查无未解决问题 |
+| 2026-10-29 | [Docker PR 集成复验](#合入最新-main-后的-pr-集成复验)，合入地图预览后的 `13e846f` | 类型、webpack 构建、完整串行 144/144；Desktop 原生首轮 15/17，两个构建超时场景定向复验 2/2，17 个不同场景最终均有通过证据 |
 | 2026-10-29 | [线路总览地图模块重构](#2026-10-29-线路总览地图模块重构验收)，应用及测试 `d3bbde7` | 类型、webpack 构建、浏览器 48/48、四种视口与配置降级截图、独立视觉及代码复核 |
 | 2026-10-29 | [线路总览地图精修](#2026-10-29-线路总览地图精修验收)，应用及测试 `14e450f` | 类型、webpack 构建、浏览器 48/48、五种视口及键盘/长内容截图、三项 P2 关闭与独立复核 |
 
@@ -294,6 +296,70 @@ node --test --test-name-pattern='first release writes|resume preview' tests/rele
 
 本次仍未运行完整 `pnpm test`、API 全套或最低 Node `22.12.0` 完整套件，未进行真实高德凭证、网络或真实 GitHub 发布联调。高德 HTTP / SDK 替身不证明真实地图、搜索、帧率或重卡通行能力。**未校验重卡限高、限重及货车限行**。
 
+## 2026-10-29 Docker 部署验收
+
+日期：2026-10-29（Asia/Shanghai）。实现位于独立集成分支 `codex/docker-deployment`，任务起点为 `ffd6a0a0db988f47c0876fe3e72ffbc1ca1d254e`。本次新增可选 Docker 构建、Compose、数据维护与独立验收入口；应用构建配置仅按 `HAULPATH_BUILD_STANDALONE=1` 条件开启 standalone，没有新增业务 API、数据库表或 schema 版本。
+
+### 环境与源码边界
+
+- 本机验证使用 macOS arm64、Node.js `24.21.0`、pnpm `12.10.1`、项目 Playwright 和系统 Google Chrome。
+- 隔离 VM 验证使用本次测试独立的 Lima `2.2.1` VZ 虚拟机：Alpine `3.23.4`、Linux `6.18.22` arm64；Docker Engine `29.5.2`、客户端 `29.9.2`、Compose `5.6.1`、Buildx `0.38.1`。`linux/arm64` 原生执行，`linux/amd64` 通过 Rosetta 模拟，未使用原生 amd64 主机。
+- 应用镜像使用 Node 24 Debian bookworm slim，固定多架构清单摘要 `sha256:be8204d4bd327363357f532187b752ff62759c31bedf98e9e18fc08c9cbd605c`；两种目标均在目标架构中冻结安装依赖并运行 webpack 构建，没有复制宿主原生依赖。
+- 本机检查开始于 `942a4617433be1139f788420362886d52e5d44e2`，期间仅集入文档提交 `46415f2`。相关应用构建配置来自 `4772ed0`，本机业务测试集合未因后续 Docker 测试与文档修改而改变。本条仍按实际运行基线记录，不宣称后续 HEAD 重新运行了完整本机套件。
+- 容器测试使用独立项目名、临时环境文件、数据卷、随机回环端口和假凭证。仅高德 HTTP 与浏览器 SDK 使用替身；HTTP 替身位于应用容器 loopback，保持现有测试模式与上游地址限制，没有操作用户数据库或真实部署卷。
+
+### 本机完整回归
+
+- `pnpm run typecheck`：通过，执行 `next typegen` 和 `tsc --noEmit`。
+- `pnpm run build`：通过，Next.js `16.4.2` 使用既有 webpack 入口，未设置 Docker standalone 构建开关。
+- `pnpm test`：完整串行 **134/134，0 失败、0 取消、0 跳过**，约 348.2 秒。覆盖真实应用 HTTP、SQLite、浏览器、实际工作簿、提交约束和发布命令；没有把有交叉的 API / 浏览器分类套件数量相加。
+- 完整套件包含 **1,000 个点库点位、100 条线路、20 点规划**及重启后的资料核对，也包含浏览器导入 **1,000 个 WGS84 KML 点位**、测算、真实双表 Excel 下载和服务重启后的核对。生产中断与运行中在线备份恢复均验证保留输入、区间进度及旧完整方案，启动后不自动算路，只有手动重试才完成。
+- 原始日志保存在本机 `/private/tmp/haulpath-docker-typecheck.log`、`/private/tmp/haulpath-docker-build.log` 和 `/private/tmp/haulpath-docker-full-regression.log`；这些临时证据不随仓库提供。
+
+### 容器专项与双架构
+
+`288a4333aa484064a82060ddfa6d4f472d144f66` 的专项记录包括：
+
+- 双架构核心矩阵：`linux/amd64` Rosetta 模拟 **2/2**，约 27.2 秒；`linux/arm64` 原生 **2/2**，约 21.9 秒。两者均实际构建并运行，核对镜像架构、非 root 用户、新卷 SQLite 读写、回环发布、缺高德配置时的点库与线路草稿、固定双表导出、favicon 和静态资源。
+- 核心应用流程经公开 HTTP 创建点库、线路与成功方案，同一镜像更换运行配置后重新创建容器，核对服务端私密配置未进入浏览器响应、同源代理、项目偏好记忆及重建持久化。
+- 原生浏览器完整闭环与强制中断后手动重试复验通过，约 21.4 秒；页面实际加载 SDK 替身并核对两条区间折线，下载后读取双表和数值里程。生命周期专项约 55.6 秒，覆盖异常退出自动重启、显式停止保持停止及数据库不可用时不健康。
+- 真实构建上下文隔离专项通过，约 22.8 秒；使用可识别的假配置、数据库、备份和生成产物验证隔离，没有读取真实环境文件。手动升级与回退专项约 26.2 秒，覆盖构建失败时旧服务继续可用、保留旧标签及先停旧再启新；新旧标签使用同一已构建镜像，只证明部署选择与资料保留，不代表跨 schema 升级或回退已验证。
+- 早期 amd64 QEMU `10.2.3` 构建在 Next SWC 加载时发生 signal 11 / exit 139；普通 amd64 Node 可执行，SWC 短进程仍能复现。隔离测试 VM 改用宿主已安装的 Rosetta 后，先验证 SWC 自然退出，再完成双架构构建与核心运行；没有修改生产 Dockerfile、关闭校验或更换构建器规避。此记录为 Rosetta 通过，不将 QEMU 失败记为通过。
+
+### 维护命令集成后的容器复验
+
+以下两次验证基于维护命令集成提交 `6a555879cc3c0a76faa7f11e5311b0cfe962fda1`，在上述隔离 VM 中执行：
+
+- `pnpm run test:docker`：`linux/arm64` 原生完整容器套件 **17/17，0 失败、0 取消、0 跳过**，约 229.2 秒。包括浏览器导入、规划、实际下载及中断后手动重试，配置与上下文隔离、运行时换配置、卷持久化、健康与重启策略、在线备份和停服恢复、WAL 迁入、手动升级与旧标签回退。
+- 数据维护流程通过公开 HTTP 建立项目、点库、偏好和完整路线方案，备份运行中的规划后恢复，验证保留旧方案与进度且必须手动重试。另覆盖同名备份拒绝、缺源库不创建空库、输入预检失败不停止服务、空或损坏备份不改旧资料、卷占用保护、主库与 sidecar 整体归档、恢复后保持停止及可复用的启动提示；迁入保留源目录、纳入 WAL 并拒绝已有资料的目标。
+- `pnpm run test:docker --platform linux/amd64 --core`：Rosetta 模拟核心 **2/2，0 失败、0 取消、0 跳过**，约 61.2 秒。实际 amd64 镜像完成规划、导出、配置更换与重建持久化，无凭证的新卷仍由非 root 用户正常读写。此核心复验和前述原生完整套件分别记数，不相加为覆盖总量。
+- 原始日志为 `/private/tmp/haulpath-docker-final-native.log` 和 `/private/tmp/haulpath-docker-final-amd64.log`。这些结果属于隔离 VM，不代表其他 Docker 环境已验证。
+
+### 最终双轴审查
+
+独立 Standards / Spec 审查均以 `git diff ffd6a0a0db988f47c0876fe3e72ffbc1ca1d254e...6a555879cc3c0a76faa7f11e5311b0cfe962fda1` 为范围。Standards 发现硬规范违反 **0**、可信 Fowler smell **0**；Spec 的缺失、错误实现和越界行为中，可行动问题 **0**。审查记录位于本地 `.scratch/haulpath-docker-deployment/reviews/final.md`，该目录受 Git 忽略，其他工作副本可能没有。
+
+### Docker Desktop 复验
+
+用户随后安装 Docker Desktop `4.97.0 (244584)`，Engine / 客户端 `29.9.2`、Compose `5.6.1`、Linux arm64。在源码 `6a555879cc3c0a76faa7f11e5311b0cfe962fda1` 上单独运行原生验收，不以隔离 VM 结果替代 Desktop 验证：
+
+- `pnpm run test:docker` 首轮 **16/17，1 失败、0 取消、0 跳过**，约 1,499.5 秒。唯一失败为首个浏览器用例在创建应用前，下载官方基础镜像 `FROM` 层达到 900 秒构建超时，尚未进入应用断言；首轮不能记为全部通过。
+- 将隔离 VM 已缓存的同一固定摘要官方基础层导入 Desktop 后，其余 16 个场景通过；涉及应用的场景均在 Desktop 真实构建和运行，包括核心流程、7 个维护场景、构建上下文隔离、生命周期、静态资源与手动升级回退。转移保留官方原压缩 blobs 并核对内容摘要，未修改 Dockerfile、用户代理配置或测试校验；这只是缓存准备，不能单独视为应用验收。
+- 仅针对首轮未进入应用的浏览器用例复验：**1/1，0 失败、0 取消、0 跳过**，约 20.7 秒。真实页面完成导入、测算、双表下载、规划中断及手动重试。Desktop 的 **17 个不同场景最终均获得通过证据**，该结论来自首轮 16 项通过与浏览器专项复验，不是单次完整套件 17/17；网络下载等待也不作为应用冷启动性能。
+- 首轮日志为 `/private/tmp/haulpath-docker-desktop-native.log`，浏览器专项复验为 `/private/tmp/haulpath-docker-desktop-browser-retry.log`，基础层转移证据为 `/private/tmp/haulpath-docker-cache-transfer.md`。这些结果与隔离 VM、历史专项各自记录，不相加测试数量。本轮临时隔离 VM 已停止，验收结束时 Desktop 没有本轮运行中的测试容器。
+
+### 合入最新 main 后的 PR 集成复验
+
+PR #10 准备期间，将线路总览地图预览已进入的最新 `main` 合入 Docker 集成分支。复验源码为合并提交 `13e846f2e784423588dc2c78bc625c1d1c18f44d`，两个父提交分别为 Docker 分支的 `eaed32967242e81b30ced267e8eddaab5a54a75d` 和 `main` 的 `78fb7b8e0d3c1c9a1a765e39f07b0d99934d8cdd`。解决 `package.json` 和 `docs/acceptance.md` 冲突时，保留地图浏览器验收与独立 `test:docker` 入口，以及两个功能已有的验收记录；以上旧基线结果仍按原阶段保留。
+
+- `pnpm run typecheck` 和 `pnpm run build`（webpack）通过，原始日志为 `/private/tmp/haulpath-docker-main-merge-typecheck.log` 和 `/private/tmp/haulpath-docker-main-merge-build.log`。
+- `pnpm test` 完整串行 **144/144，0 失败、0 取消、0 跳过**，约 382.7 秒。包含新增总览地图与既有业务、存储、导出、提交及发布命令回归；100 条线路各 20 点的总览地图验收确认切换预览不新增高德请求或写请求，项目导出保留 100 行线路和 1,900 行区间明细。原始日志为 `/private/tmp/haulpath-docker-pr-host.log`。
+- Docker Desktop Engine `29.9.2`、Compose `5.6.1`、Linux arm64 原生执行 `pnpm run test:docker`，首轮 **15/17，2 失败、0 取消、0 跳过**，约 2,810.1 秒。浏览器与核心流程两个场景均在 `docker compose build app` 达到 900 秒超时而被终止，未进入应用断言；其余 15 个场景通过。原始日志为 `/private/tmp/haulpath-docker-pr-container.log`。
+- 针对两个未完成场景执行 `node --test --test-concurrency=1 tests/docker/browser.test.mjs tests/docker/core.test.mjs`，**2/2，0 失败、0 取消、0 跳过**，约 50.2 秒；浏览器场景约 34.3 秒，核心流程约 15.3 秒。日志为 `/private/tmp/haulpath-docker-pr-targeted.log`。因此源码 `13e846f` 的 17 个不同容器场景最终均有通过证据，来自首轮 15 项与定向复验 2 项，不是单次完整套件 17/17。
+- 本次没有重跑 `linux/amd64`，前述 Rosetta 核心结果仍只属于 `6a55587`；不同源码、环境与复验阶段不相加测试数量，也不把构建等待作为应用运行性能。
+
+本轮未执行最低 Node `22.12.0` 的完整套件、真实高德凭证或真实 GitHub 发布，也未验证跨 schema 的应用升级和回退。Docker 替身验收不证明真实地图、搜索或重卡通行能力。**未校验重卡限高、限重及货车限行**。
+
 ## 2026-10-29 线路总览地图模块重构验收
 
 日期：2026-10-29（Asia/Shanghai）。应用及测试源码为 `d3bbde741729fca49643795e1a6e02f8f261298e`；在独立 worktree 的 `codex/overview-map-craft` 实施，保留主工作区已有修改。
@@ -333,6 +399,12 @@ node --test --test-name-pattern='first release writes|resume preview' tests/rele
 本轮沿用macOS arm64、Node.js 24.21.0、pnpm 12.10.1、Playwright 1.62.1与系统Chrome。浏览器经过真实HTTP和临时SQLite，仅高德边界替换；截图替身不绘制真实底图和投影。键盘/读屏修复的证据限DOM、焦点与浏览器操作，未执行VoiceOver实际发声测试。**真实高德联调未执行，未校验重卡限高、限重及货车限行。** 未运行完整`pnpm test`、API分类全套或最低Node完整套件。
 
 本地截图、检测输出与独立复核摘要保存在工作区`.impeccable/review/`，不纳入版本控制。
+
+### 同步 Docker main 基线后的地图精修复验
+
+收尾时，`main` 合入 Docker 部署提交 `feab117c2666086ac1807388c69c877c64580e2e`。在地图分支 `5dac8785a678abac93ce71ce20934b753e86a81c` 与该提交的集成工作树上重新执行类型检查、webpack 构建及 `pnpm run test:browser`，**48/48，0失败、0取消、0跳过**。唯一冲突为本验收文档；独立复核确认 Docker 与地图的章节、表格行及历史链接均完整保留。25个继承文件与main父提交逐个相同，地图UI源码及样式没有因集成而改变，沿用上述截图与视觉复核的适用范围。
+
+本次没有重跑Docker专用套件、完整`pnpm test`或最低Node套件。Docker的历史144/144及容器验证仍只归属各自记录的原基线，不作为本次地图精修的通过数量；真实高德与VoiceOver实际发声仍未验证。
 
 ## 待真实凭证的人工联调
 
