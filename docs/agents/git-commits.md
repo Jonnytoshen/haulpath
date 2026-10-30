@@ -163,6 +163,8 @@ pnpm run test:commits
 
 [发布工作流](../releasing.md)使用 `chore: release v<版本>`，例如 `chore: release v0.1.1-beta.0`；不新增 `release` scope，不豁免提交规则，沿用用户身份、hook 和签名策略。实际发布串行校验提交历史、类型、webpack 构建及完整测试，通过后才写入发布提交与 tag；不依赖可绕过的 pre-push hook，也不关闭签名解决失败。首发校验包含根提交的全部历史，后续校验最近正式 tag 之后到待发布 HEAD。
 
+根 `haulpath` 是唯一产品版本和发布对象，私有的 `@haulpath/web` 与 `@haulpath/domain` 不设置独立版本。根产品在 Nx 中对两个子包配置隐式依赖，因此只改任一子包的提交也参与根版本与日志分析；不按工作区目录改写领域 scope，也不为子包单独生成 tag。架构取舍见 [ADR 0004](../adr/0004-workspace-and-single-product.md)。
+
 Nx 的提交分析不以 scope 筛选软件包，现有领域 scope 无需改名。基础映射为 `feat` → minor、`fix` / `perf` → patch，其余允许类型 → none；零主版本调整使 0.x 的普通 feat、fix、perf 都递增 patch，破坏性变更递增 minor，1.x 起破坏性变更递增 major。任何允许类型的破坏性变更均须满足本文的页脚与迁移说明要求。维护提交默认不单独发版，但进入下次日志；原提交与 revert 采用 Nx 原生版本和日志配对语义，不承诺按净代码差异决定版本。
 
 发布工作流与最低 Node 入口的实际验证见[发布验收记录](../acceptance.md#2026-10-25-发布工作流验收)。最低 Node 未运行完整套件，真实 GitHub 发布未执行；提交工具的历史通过记录不能替代发布验证。

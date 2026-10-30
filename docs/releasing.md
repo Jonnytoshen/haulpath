@@ -1,6 +1,6 @@
 # 软件发布
 
-重途通过本机 `pnpm` 入口调用 Nx Release，维护软件版本、`CHANGELOG.md`、发布提交和 `v` 前缀 tag，再推送到 GitHub 并创建 Release。软件包保持私有，始终跳过 npm / registry 发布；本流程不生成安装包、不部署应用，也不接入自动发布 CI。
+重途通过本机 `pnpm` 入口调用 Nx Release，维护软件版本、`CHANGELOG.md`、发布提交和 `v` 前缀 tag，再推送到 GitHub 并创建 Release。根 `package.json` 的 `haulpath` 是唯一版本来源与发布对象，`apps/web` 和 `packages/domain` 均私有且无独立版本。沿用根日志与 `v{version}` tag，始终跳过 npm / registry 发布；本流程不生成安装包、不部署应用，也不接入自动发布 CI。
 
 本文描述已实现的发布工作流；本机与隔离远端的历史验收见[验收记录](acceptance.md#2026-10-25-发布工作流验收)。真实 GitHub 发布与真实高德联调未执行。
 
@@ -49,6 +49,8 @@ pnpm run release --first-release
 
 ## 自动版本与手动覆盖
 
+根产品在 Nx 中显式配置对 `@haulpath/web` 和 `@haulpath/domain` 的隐式依赖，应用另以 `workspace:*` 消费领域源码。仅修改任一子包的 feat、fix 或破坏性变更也参与根产品版本及日志分析，子包不独立生成版本、日志或 tag，取舍见 [ADR 0004](adr/0004-workspace-and-single-product.md)。
+
 后续发布从最近正式 tag 分析累计 Conventional Commits；`route`、`planning` 等 scope 表示领域范围，不作为 Nx 项目筛选条件。软件版本是应用发行的 SemVer，独立于 SQLite 结构迁移版本和测算输入版本；发版不修改业务数据，也不使路线方案因软件版本号变化而失效。
 
 | 提交变化 | 0.x 阶段 | 1.x 起 |
@@ -94,6 +96,8 @@ pnpm run release --channel stable
 3. `pnpm run build`，保留现有 `next build --webpack`。
 4. `pnpm test`，串行执行全部测试文件，包含发布测试；不叠加重复运行分类入口。
 
+这些根入口经 Nx 调度，覆盖应用和领域包；只有领域类型检查可使用无产物缓存，应用检查、webpack 构建与测试均实际执行。它们共用 `apps/web/.next` 与类型产物，独立进程之间也必须串行，不与当前工作副本的开发或生产服务并行。Docker 验收仍使用独立入口，不加入软件发布门禁。
+
 全部通过后再次确认仍在 main、HEAD 和工作区未变，才由 Nx 写入精确版本及日志、创建发布提交和 tag。任何检查失败或输入变化都在发布写入前停止。门禁不放入 Nx 会在预览中执行的前置版本命令，也不依赖 pre-push hook；通过检查后直接执行，不增加第二次交互确认。
 
 发布提交使用合规标题 `chore: release v<版本>`，不新增 `release` scope。只原子推送 `main` 和本次 tag，不推送其他 tag、不强推或覆盖历史。推送成功后通过 GitHub API 为该已存在 tag 创建已发布 Release，避免 GitHub 为其他提交隐式建立 tag。
@@ -125,7 +129,7 @@ pnpm run release:resume <目标tag>
 
 ## 验证记录边界
 
-`pnpm run test:release` 从公开命令贯穿真实 Nx、临时 Git 仓库、hook、文件及隔离 bare remote；仅 GitHub API 与夹具质量命令使用可控替身。夹具不会递归调用真实完整测试，也不会向真实仓库发布。
+`pnpm run test:release` 从公开命令贯穿真实 Nx、临时 Git 仓库、hook、文件及隔离 bare remote；仅 GitHub API 与夹具质量命令使用可控替身。夹具呈现真实多包工作区并清理外层 Nx 任务、工作区与缓存上下文，在隔离仓库中验证；不会递归调用真实完整测试，也不会向真实仓库发布。
 
 2026-10-25 的发布工作流验收覆盖 Node `24.21.0` 完整回归，以及最低 Node `22.12.0` 的安装、项目发现、首发预览与入口烟测；详细源码、命令、结果与复测边界统一见[发布验收记录](acceptance.md#2026-10-25-发布工作流验收)。这些是对应源码的历史结果，不能代表当前 HEAD 已通过；正式发布仍须执行上述完整质量门禁。
 

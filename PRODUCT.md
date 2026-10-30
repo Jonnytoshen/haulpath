@@ -88,9 +88,9 @@ web
 
 ## Brand Commitments
 
-- 中文名称为“重途”，英文名称严格写为 `HaulPath`，仓库和软件包名称为 `haulpath`。
+- 中文名称为“重途”，英文名称严格写为 `HaulPath`，仓库和根产品包名称为 `haulpath`。
 - 面向用户使用中文，沿用[术语表](GLOSSARY.md)：A→B→C 为“线路”，A→B 为“区间”，完整成功测算结果为“路线方案”；使用“途经点”，区分“线路名称”与“道路名称”。
-- 界面功能图标统一使用 Lucide Icons，不使用 emoji 图标；品牌与[站点图标](src/app/icon.svg)采用原创 H「上扬」标志，遵循[品牌标志规范](docs/brand.md)。
+- 界面功能图标统一使用 Lucide Icons，不使用 emoji 图标；品牌与[站点图标](apps/web/src/app/icon.svg)采用原创 H「上扬」标志，遵循[品牌标志规范](docs/brand.md)。
 - 品牌以 HaulPath 英文主字标、“重途”中文辅助字标、轻微前倾与绿色识别，表达行前规划的清晰与向前感；几何、颜色和使用边界以[品牌标志规范](docs/brand.md)为准。
 
 ## Evidence on Hand
@@ -98,7 +98,8 @@ web
 - [README](README.md)记录产品定位、当前流程、技术栈、启动方式与配置边界；[运行维护](docs/operations.md)记录本机数据管理。
 - [术语表](GLOSSARY.md)、[ADR 0001](docs/adr/0001-driving-v2-estimation-scope.md)及[ADR 0002](docs/adr/0002-segment-planning-and-result-snapshots.md)分别约束领域语言、普通驾车测算范围和完整结果快照。
 - 本地已确认需求基线为 `.scratch/haulpath-v1/spec.md`，规划偏好扩展为 `.scratch/haulpath-planning-preferences/spec.md`，更名规格为 `.scratch/haulpath-name/spec.md`，线路总览规格为 `.scratch/haulpath-route-overview/spec.md`，地图预览增量为 `.scratch/haulpath-route-overview-map/spec.md`，任务画布与项目资源分层为 `.scratch/haulpath-ux-restructure/spec.md`。地图预览扩展总览的地图展示范围，任务画布规格替代旧工作台的页面结构约定；既有领域、数据、状态和导出规则继续生效；`.scratch/` 不入 Git，其他工作副本可能没有这些文件。
-- 当前已有[工作台实现](src/components/workbench.tsx)和[浏览器完整流程验收](tests/acceptance.test.mjs)。[验收记录](docs/acceptance.md)涵盖真实应用、临时 SQLite、下载工作簿、代表规模及备份恢复；其中高德 HTTP 与地图 SDK 使用可控替身。
+- 工程采用单应用与领域源码包，仍由同一服务提供网页和接口；业务上下文与产品范围保持不变，取舍见 [ADR 0004](docs/adr/0004-workspace-and-single-product.md)。
+- 当前已有[工作台实现](apps/web/src/components/workbench.tsx)和[浏览器完整流程验收](tests/acceptance.test.mjs)。[验收记录](docs/acceptance.md)涵盖真实应用、临时 SQLite、下载工作簿、代表规模及备份恢复；其中高德 HTTP 与地图 SDK 使用可控替身。
 - 现有记录中真实高德凭证联调尚未执行。模拟验收不能作为真实地图、搜索或重卡可通行的证明；未记录的客户、口碑、业务收益和性能承诺不能编造。
 
 ## Product Principles

@@ -18,7 +18,7 @@
 
 ## 资产与尺寸
 
-正式资产存放在 `public/brand/`，SVG 是矢量母版。三种构成各提供默认彩色、`-mono` 单色与 `-white` 反白版本：
+正式资产存放在 [`apps/web/public/brand/`](../apps/web/public/brand/)，SVG 是矢量母版。浏览器资源 URL 仍为 `/brand/<文件名>`，不包含工作区目录。三种构成各提供默认彩色、`-mono` 单色与 `-white` 反白版本：
 
 | 构成 | 彩色 SVG 文件名 | viewBox | 透明 PNG 尺寸 |
 | --- | --- | --- | --- |
@@ -28,13 +28,13 @@
 
 单色和反白 SVG 在扩展名前添加后缀，例如 `haulpath-lockup-mono.svg`、`haulpath-mark-white.svg`。PNG 使用 SVG 基名加导出尺寸，例如 `haulpath-mark-512.png`、`haulpath-lockup-mono-2048.png`；字标与组合标志的尺寸数字表示宽度。
 
-所有正式 SVG 字形均转为路径，不包含运行时文字、远程字体或设备字体依赖。PNG 从对应 SVG 导出，保留透明背景；`public/brand/manifest.json` 记录每张 PNG 对应的 SVG 与 SHA-256。`src/app/icon.svg` 是 `haulpath-mark.svg` 的生成副本，必须逐字一致；更新母版时同步生成，避免 favicon 与应用图形分叉。
+所有正式 SVG 字形均转为路径，不包含运行时文字、远程字体或设备字体依赖。PNG 从对应 SVG 导出，保留透明背景；[`apps/web/public/brand/manifest.json`](../apps/web/public/brand/manifest.json) 记录每张 PNG 对应的 SVG 与 SHA-256。[`apps/web/src/app/icon.svg`](../apps/web/src/app/icon.svg) 是 `haulpath-mark.svg` 的生成副本，必须逐字一致；更新母版时同步生成，避免 favicon 与应用图形分叉。
 
 组合标志外围至少保留其大写 H 字高四分之一的空白，其他元素和裁切边界不得进入。组合标志最小展示宽度为 150 像素；纯英文主字标建议至少 120 像素宽；独立图形最低 16 像素，常规界面使用 24 像素以上。
 
 ## 应用接入
 
-`BrandLogo` 组件使用 `variant="lockup"` 或 `variant="mark"` 选择组合标志与独立图形，直接引用正式 SVG。任务画布侧栏组合标志常规声明宽度为 166 像素，随容器小幅收缩；手机固定为 150 像素，均遵守最小展示宽度。欢迎页独立图形为 58 × 58 像素。favicon 使用同源的 `src/app/icon.svg` 文件约定。
+[`BrandLogo`](../apps/web/src/components/brand-logo.tsx) 组件使用 `variant="lockup"` 或 `variant="mark"` 选择组合标志与独立图形，直接引用正式 SVG。任务画布侧栏组合标志常规声明宽度为 166 像素，随容器小幅收缩；手机固定为 150 像素，均遵守最小展示宽度。欢迎页独立图形为 58 × 58 像素。favicon 使用同源的 [`apps/web/src/app/icon.svg`](../apps/web/src/app/icon.svg) 文件约定。
 
 侧栏首页链接保留中文可访问名称，标志图形避免重复朗读；欢迎页图形作为装饰呈现。线路空态、规划按钮等功能图标继续使用 Lucide，不以品牌标志替换功能图标。
 
@@ -44,7 +44,7 @@
 
 中文辅助字标固定使用 Source Han Sans SC Medium（思源黑体简体中文 Medium）`2.005R`，来源为 Adobe 的[思源黑体官方仓库](https://github.com/adobe-fonts/source-han-sans)。字体文件为 [SourceHanSansSC-Medium.otf](https://raw.githubusercontent.com/adobe-fonts/source-han-sans/2.005R/OTF/SimplifiedChinese/SourceHanSansSC-Medium.otf)，许可为该版本随附的 [SIL Open Font License 1.1](https://github.com/adobe-fonts/source-han-sans/blob/2.005R/LICENSE.txt)。
 
-源字体 SHA-256：`1df61d31687d04fd2f928a3bb6ca6cd61f0e988cc267cf317f32406edbb49f70`。随资产保存 `public/brand/SOURCE-HAN-SANS-LICENSE.txt` 与 `public/brand/font-provenance.json`，记录版本、原始文件、来源和校验值；浏览器只展示转为路径的中文字形，不加载整套字体文件。
+源字体 SHA-256：`1df61d31687d04fd2f928a3bb6ca6cd61f0e988cc267cf317f32406edbb49f70`。随资产保存 [`apps/web/public/brand/SOURCE-HAN-SANS-LICENSE.txt`](../apps/web/public/brand/SOURCE-HAN-SANS-LICENSE.txt) 与 [`apps/web/public/brand/font-provenance.json`](../apps/web/public/brand/font-provenance.json)，记录版本、原始文件、来源和校验值；浏览器只展示转为路径的中文字形，不加载整套字体文件。
 
 ## 验收记录
 

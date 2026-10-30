@@ -37,7 +37,9 @@ docker compose --env-file .env.docker up --detach --build --wait app
 docker compose --env-file .env.docker ps
 ```
 
-打开 [http://127.0.0.1:3000](http://127.0.0.1:3000)，自定义端口时使用实际值。首次构建需要下载基础镜像与锁定依赖；应用使用固定 pnpm 和 webpack 构建，运行容器为非 root 用户，并附带 SQLite 维护工具。
+打开 [http://127.0.0.1:3000](http://127.0.0.1:3000)，自定义端口时使用实际值。首次构建需要下载基础镜像与锁定依赖；镜像从整个 pnpm 工作区源码构建，先安装根与两个子包的清单及单一锁文件，再经根 Nx 入口执行 webpack 构建。领域 TypeScript 源码随应用转译，standalone 追踪覆盖工作区，运行入口位于镜像内 `apps/web/server.js`，静态及品牌资源随应用复制。运行容器为非 root 用户，并附带 SQLite 维护工具。
+
+此目录迁移保持 Compose 项目、`app` 服务、`data` 卷及 `/app/data/haulpath.sqlite` 不变；已有部署继续使用下述原命令和同一数据卷。构建上下文排除根及嵌套应用/包中的环境文件、数据库与 sidecar、宿主依赖和生成产物；真实配置仅在运行时注入。
 
 高德凭证在运行时注入，构建时不需要提供。未配置凭证也应正常启动并通过健康检查，可管理项目、GCJ-02 点位、线路草稿和导出；地图、规划和 WGS84 转换按现有规则提示缺少配置。真实地图仍需按高德控制台要求配置访问来源与服务权限。
 

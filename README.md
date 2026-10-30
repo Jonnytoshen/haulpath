@@ -17,14 +17,14 @@ pnpm install --frozen-lockfile --ignore-scripts
 test -e .env.local || cp .env.example .env.local
 ```
 
-在 `.env.local` 填写自己的高德凭证：
+环境文件保留在仓库根目录，无需移入 `apps/web`。在根 `.env.local` 填写自己的高德凭证：
 
 | 变量 | 用途 |
 | --- | --- |
 | `AMAP_WEB_SERVICE_KEY` | 服务端驾车规划、WGS84 坐标转换 |
 | `AMAP_JS_KEY` | 高德 JS API 2.0 地图、地点搜索；浏览器可见 |
 | `AMAP_JS_SECURITY_CODE` | 与 JS Key 配套的安全密钥，服务端通过受控代理使用 |
-| `HAULPATH_DB_PATH` | SQLite 路径，默认 `./data/haulpath.sqlite`；相对路径以启动目录为准 |
+| `HAULPATH_DB_PATH` | SQLite 路径，默认 `./data/haulpath.sqlite`；相对路径以仓库根目录为准 |
 
 Web 服务 Key 与 JS 安全密钥不发送到浏览器。请按高德控制台要求配置对应服务权限与本机访问来源。无凭证时仍可管理项目、线路草稿、GCJ-02 点位及导出；地图、规划和 WGS84 转换会提示缺少相应配置。
 
@@ -36,6 +36,8 @@ pnpm run start
 ```
 
 打开 [http://127.0.0.1:3000](http://127.0.0.1:3000)。应用默认只监听本机 `127.0.0.1`。端口占用时可以使用 `pnpm run start --port 3001`。环境变量修改后需重启服务；`build` 使用 `next build --webpack`。
+
+根入口保留 Next.js 的环境优先级：显式进程环境 → `.env.$NODE_ENV.local` → `.env.local` → `.env.$NODE_ENV` → `.env`，并保留文件中的变量展开；`NODE_ENV=test` 时不读取 `.env.local`。开发默认使用 `development`，构建、类型生成和生产启动默认使用 `production`。
 
 项目资料保存在本机 SQLite，默认位置为 `data/haulpath.sqlite`。**同一数据库仅运行一个应用服务**，包括不同端口、开发与生产模式和不同工作副本；切换前先停止原服务。数据位置、备份与恢复见[运行维护](docs/operations.md)。
 
@@ -93,6 +95,18 @@ docker compose --env-file .env.docker up --detach --build --wait app
 
 ## 开发与验证
 
+仓库使用 pnpm workspace 和 Nx，只有一个 Next.js 应用和一个内部领域包；它们共同组成重途产品：
+
+| 位置 | 职责 |
+| --- | --- |
+| [`apps/web`](apps/web/) | `@haulpath/web`，页面、同源 HTTP API、SQLite、规划、地图、导入导出和静态资源 |
+| [`packages/domain`](packages/domain/) | `@haulpath/domain`，平台无关的领域类型、规划偏好目录、路线方案状态和里程格式化规则 |
+| 仓库根目录 | 唯一锁文件、产品版本、发布日志、任务入口及集成测试 |
+
+应用以 `workspace:*` 依赖领域包，通过包名直接消费 TypeScript 源码，由 Next.js 转译；领域包无需预构建或额外监听。两个子包均私有且无独立版本，领域仍是一个业务上下文。架构取舍见 [ADR 0004](docs/adr/0004-workspace-and-single-product.md)。
+
+在根目录安装与执行下述命令，Nx 会调度实际应用任务及领域检查。应用配置位于 `apps/web`；使用 shadcn 组件生成工具时以该目录的 [`components.json`](apps/web/components.json) 为配置，组件、CSS 与应用内部别名均相对此应用目录。
+
 项目使用 Next.js App Router、TypeScript、SQLite / better-sqlite3、ExcelJS；界面采用 shadcn/ui、Tailwind CSS 和 Lucide Icons。开发时使用以下入口，默认同样只监听本机；端口可通过 `--port 3001` 指定：
 
 ```sh
@@ -108,11 +122,15 @@ pnpm run test:api
 pnpm run test:browser
 pnpm run test:commits
 pnpm run test:release
+# 只排查工作区入口、环境、数据库定位与缓存回归：
+pnpm run test:workspace
 # 一次串行运行全部测试文件（分类入口存在交叉）：
 pnpm test
 ```
 
-API 与浏览器测试会启动真实本机应用并使用临时 SQLite，下载和读取实际 Excel 文件；仅高德 HTTP 服务及地图 SDK 使用可控替身。浏览器测试默认使用已安装的 Google Chrome；可用 `PLAYWRIGHT_CHROMIUM_CHANNEL` 选择其他已安装的 Playwright 浏览器 channel。请先停止当前工作副本的开发或生产服务，再串行运行这些命令，避免多个服务共享 `.next`。
+API 与浏览器测试会启动真实本机应用并使用临时 SQLite，下载和读取实际 Excel 文件；仅高德 HTTP 服务及地图 SDK 使用可控替身。浏览器测试默认使用已安装的 Google Chrome；可用 `PLAYWRIGHT_CHROMIUM_CHANNEL` 选择其他已安装的 Playwright 浏览器 channel。请先停止当前工作副本的开发或生产服务，再串行运行这些命令，避免争用 `apps/web/.next`、类型生成及其他应用产物。
+
+应用类型检查先运行 `next typegen`，检查和 webpack 构建均依赖领域包类型检查。只有无产物的领域类型检查使用本机缓存，输入包含源码、包清单、类型配置、锁文件和 Node 版本；应用检查、构建和全部测试每次实际执行。同一次 Nx 调度中，共享应用产物的任务禁止并行；独立命令进程仍须由执行者串行安排。
 
 Docker 验收单独使用 `pnpm run test:docker`；双架构核心验收使用 `pnpm run test:docker --matrix`。它们需要可用 Docker，使用独立项目、临时卷和假凭证，不纳入 `pnpm test` 或软件发布门禁；参数与边界见 [Docker 验收说明](docs/docker.md#开发验收与边界)。
 
@@ -126,4 +144,4 @@ Docker 验收单独使用 `pnpm run test:docker`；双架构核心验收使用 `
 
 使用本机 Nx Release 工作流；先以 `pnpm run release --first-release --dry-run` 预览首个 `0.1.0` 正式基线。后续支持自动版本、位置参数 `patch` / `minor` / `major` / `X.Y.Z`、`--channel stable|alpha|beta|rc` 及 `--dry-run`；API 失败后使用 `pnpm run release:resume <目标tag>` 补建。完整门禁、认证、候选规则和精确恢复步骤见[发布指南](docs/releasing.md)。
 
-发布仅维护源码版本、日志、Git tag 与 GitHub Release，始终跳过 npm 发布，不生成安装包或自动部署。历史验证基线与真实服务联调边界见[验收记录](docs/acceptance.md)。
+根 `haulpath` 是唯一版本与发布对象；Nx 中对两个子包的隐式依赖确保仅修改应用或领域包的提交也参与产品版本和日志分析，沿用现有领域 scope。发布仅维护源码版本、日志、Git tag 与 GitHub Release，始终跳过 npm 发布，不生成安装包或自动部署。历史验证基线与真实服务联调边界见[验收记录](docs/acceptance.md)。
