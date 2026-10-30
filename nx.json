@@ -16,77 +16,77 @@
         "feat": {
           "semverBump": "minor",
           "changelog": {
-            "title": "Features",
+            "title": "🚀 Features",
             "hidden": false
           }
         },
         "fix": {
           "semverBump": "patch",
           "changelog": {
-            "title": "Bug Fixes",
+            "title": "🐛 Bug Fixes",
             "hidden": false
           }
         },
         "perf": {
           "semverBump": "patch",
           "changelog": {
-            "title": "Performance Improvements",
+            "title": "⚡ Performance Improvements",
             "hidden": false
           }
         },
         "refactor": {
           "semverBump": "none",
           "changelog": {
-            "title": "Code Refactoring",
+            "title": "♻️ Code Refactoring",
             "hidden": false
           }
         },
         "docs": {
           "semverBump": "none",
           "changelog": {
-            "title": "Documentation",
+            "title": "📚 Documentation",
             "hidden": false
           }
         },
         "build": {
           "semverBump": "none",
           "changelog": {
-            "title": "Build System",
+            "title": "📦 Build System",
             "hidden": false
           }
         },
         "ci": {
           "semverBump": "none",
           "changelog": {
-            "title": "Continuous Integration",
+            "title": "🔧 Continuous Integration",
             "hidden": false
           }
         },
         "test": {
           "semverBump": "none",
           "changelog": {
-            "title": "Tests",
+            "title": "🧪 Tests",
             "hidden": false
           }
         },
         "chore": {
           "semverBump": "none",
           "changelog": {
-            "title": "Chores",
+            "title": "🧹 Chores",
             "hidden": false
           }
         },
         "style": {
           "semverBump": "none",
           "changelog": {
-            "title": "Styles",
+            "title": "🎨 Styles",
             "hidden": false
           }
         },
         "revert": {
           "semverBump": "none",
           "changelog": {
-            "title": "Reverts",
+            "title": "⏪ Reverts",
             "hidden": false
           }
         }

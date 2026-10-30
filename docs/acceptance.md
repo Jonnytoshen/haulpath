@@ -448,6 +448,12 @@ Docker 最终验收基线为 `c8d564e12ab976dd5badb2abbbc16d3922c7e5ce`；相较
 
 `pnpm run test:release` 经根 Nx 入口实际运行，39/39 通过，失败、取消、跳过均为 0，约 40 秒。只读作者查询及查不到账号时保留姓名的原生行为已写入发布说明；本次未更改应用和 Docker 运行源码，也未将此前完整应用或容器验收表述为新基线。证据位于本地 tracker 的 `evidence/changelog-authors/`。
 
+## 2026-10-30 Conventional Commits 分类标题图标
+
+基于 `ca37df1c9b41fca1b51379727175dc74285b5c9e` 在独立 worktree 为 11 个允许类型的 `changelog.title` 增加图标前缀，例如 `🚀 Features`、`🐛 Bug Fixes`、`📚 Documentation`。配置比对确认英文名称、分类顺序、隐藏设置、SemVer 映射和其他发布选项不变，继续使用 Nx 原生渲染器及作者用户名映射。
+
+既有公开预览回归先确认无图标标题不满足要求，再验证全部 11 个图标标题生成。根 `pnpm run test:release` 实际执行，39/39 通过，失败、取消、跳过均为 0，约 40 秒；包含作者 `@用户名`、原生破坏性说明及目标 tag 原文恢复回归。历史 CHANGELOG 不重写，Git 提交标题规则不变。未更改应用或 Docker 运行源码，本次未重跑其完整套件，也未实际发布；证据位于本地 tracker 的 `evidence/changelog-icons/`。
+
 ## 待真实凭证的人工联调
 
 配置真实三项高德凭证，重启服务后完成以下流程，并记录日期、点位与结果：

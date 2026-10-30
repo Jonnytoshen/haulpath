@@ -199,11 +199,11 @@ test('preview rejects a target tag already present outside main history', (t) =>
   f.commit('fix(route): restore input'); const r = f.cli('--dry-run');
   assert.notEqual(r.status, 0); assert.match(r.stderr, /already exists/);
 });
-test('the English changelog includes every allowed type and keeps migration paragraphs', (t) => {
+test('the changelog prefixes every allowed conventional commit heading with an icon', (t) => {
   const f = fixture(t); f.git('tag', 'v0.1.0');
   for (const type of ['feat', 'fix', 'perf', 'refactor', 'docs', 'build', 'ci', 'test', 'chore', 'style', 'revert']) f.commit(`${type}: describe ${type} changes`);
   const r = f.cli('--dry-run'); assert.equal(r.status, 0, r.stdout + r.stderr);
-  for (const heading of ['Features', 'Bug Fixes', 'Performance Improvements', 'Code Refactoring', 'Documentation', 'Build System', 'Continuous Integration', 'Tests', 'Chores', 'Styles', 'Reverts']) assert.ok(r.stdout.includes(`### ${heading}`), heading);
+  for (const heading of ['🚀 Features', '🐛 Bug Fixes', '⚡ Performance Improvements', '♻️ Code Refactoring', '📚 Documentation', '📦 Build System', '🔧 Continuous Integration', '🧪 Tests', '🧹 Chores', '🎨 Styles', '⏪ Reverts']) assert.ok(r.stdout.includes(`### ${heading}`), heading);
 });
 test('Nx native revert pairing omits reverted entries while retaining its version decision', (t) => {
   const f = fixture(t); f.git('tag', 'v0.1.0'); f.commit('feat(route): add temporary route template');
