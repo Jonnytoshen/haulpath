@@ -6,7 +6,7 @@ import { runProcess } from './process.mjs';
 const require = createRequire(import.meta.url);
 const [command, ...args] = process.argv.slice(2);
 const applicationCommands = ['dev', 'start', 'build', 'typecheck'];
-const rootCommands = ['test', 'test:api', 'test:browser', 'test:commits', 'test:release', 'release', 'release:resume'];
+const rootCommands = ['test', 'test:api', 'test:browser', 'test:commits', 'test:release', 'test:workspace', 'release', 'release:resume'];
 if (![...applicationCommands, ...rootCommands].includes(command)) throw new Error(`Unknown workspace command: ${command}`);
 const target = `${applicationCommands.includes(command) ? '@haulpath/web' : 'haulpath'}:${command.replaceAll(':', '-')}`;
 const originalEnvironment = callerEnvironment();
