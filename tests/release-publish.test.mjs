@@ -4,6 +4,7 @@ import { mkdtempSync, cpSync, symlinkSync, writeFileSync, readFileSync, rmSync, 
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { copyReleaseWorkspace, releaseFixtureEnvironment } from './helpers/release-workspace.mjs';
 const root = resolve(import.meta.dirname, '..');
 function fixture(t) {
   const base = mkdtempSync(join(tmpdir(), 'haulpath-publish-'));
@@ -11,10 +12,11 @@ function fixture(t) {
   const dir = join(base, 'repo'); mkdirSync(dir);
   for (const file of ['scripts', 'nx.json', 'commitlint.config.mjs', '.husky', 'pnpm-lock.yaml']) cpSync(join(root, file), join(dir, file), { recursive: true });
   symlinkSync(join(root, 'node_modules'), join(dir, 'node_modules'));
+  copyReleaseWorkspace(root, dir);
   const pkg = JSON.parse(readFileSync(join(root, 'package.json')));
+  pkg.version = '0.1.0';
   for (const gate of ['typecheck', 'build', 'test']) pkg.scripts[gate] = `node gate.cjs ${gate}`;
   writeFileSync(join(dir, 'package.json'), JSON.stringify(pkg, null, 2) + '\n');
-  writeFileSync(join(dir, 'pnpm-workspace.yaml'), 'verifyDepsBeforeRun: false\n');
   writeFileSync(join(dir, '.gitignore'), 'node_modules/\n.nx/\n');
   writeFileSync(join(dir, 'gate.cjs'), `const fs = require('node:fs'); fs.mkdirSync('.nx',{recursive:true}); fs.appendFileSync('.nx/gates',process.argv[2]+'\\n'); if(process.env.FAIL_GATE===process.argv[2])process.exit(1); if(process.env.DIRTY_GATE===process.argv[2])fs.writeFileSync('unexpected.txt','changed');`);
   const git = (...args) => { const r = spawnSync('git', args, { cwd: dir, encoding: 'utf8' }); assert.equal(r.status, 0, r.stderr); return r.stdout.trim(); };
@@ -26,7 +28,7 @@ function fixture(t) {
   git('config', `url.${join(base, 'remote.git')}.insteadOf`, 'https://github.com/example/haulpath.git');
   const preload = join(base, 'api.mjs');
   writeFileSync(preload, `import fs from 'node:fs'; globalThis.fetch=async(url,options={})=>{ fs.appendFileSync(${JSON.stringify(join(base,'requests'))},JSON.stringify({url,method:options.method??'GET',body:options.body&&JSON.parse(options.body)})+'\\n'); const fail=process.env.API_FAIL; let status=200, data={permissions:{push:true}}; if(url.endsWith('/releases/latest')){status=process.env.API_LATEST?200:404;data={tag_name:process.env.API_LATEST};} else if(url.includes('/releases/tags/')){status=process.env.API_EXISTING?200:404;data={body:'Manually edited release notes',html_url:'https://github.com/example/haulpath/releases/tag/v0.1.0'};} else if(options.method==='POST'){status=fail?503:201;data={html_url:'https://github.com/example/haulpath/releases/tag/'+JSON.parse(options.body).tag_name};} return new Response(JSON.stringify(data),{status}); };`);
-  const cli = (args, env = {}, script = 'scripts/release.mjs') => spawnSync(process.execPath, ['--import', preload, script, ...args], { cwd: dir, encoding: 'utf8', env: { ...process.env, NX_DAEMON:'false', NX_ISOLATE_PLUGINS:'false', GITHUB_TOKEN:'fixture-secret-token', GH_TOKEN:'', ...env } });
+  const cli = (args, env = {}, script = 'scripts/release.mjs') => spawnSync(process.execPath, ['--import', preload, script, ...args], { cwd: dir, encoding: 'utf8', timeout: 60000, env: releaseFixtureEnvironment({ GITHUB_TOKEN:'fixture-secret-token', GH_TOKEN:'', ...env }) });
   return { dir, base, git, commit, cli };
 }
 test('failed quality gate stops before release writes and preserves the frozen input', (t) => {

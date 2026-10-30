@@ -4,6 +4,7 @@ import { mkdtempSync, cpSync, symlinkSync, writeFileSync, readFileSync, rmSync, 
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { copyReleaseWorkspace, releaseFixtureEnvironment } from './helpers/release-workspace.mjs';
 const root = resolve(import.meta.dirname, '..');
 function fixture(t, version = '0.1.0') {
   const dir = mkdtempSync(join(tmpdir(), 'haulpath-release-'));
@@ -11,6 +12,7 @@ function fixture(t, version = '0.1.0') {
   cpSync(join(root, 'scripts'), join(dir, 'scripts'), { recursive: true });
   if (existsSync(join(root, 'nx.json'))) cpSync(join(root, 'nx.json'), join(dir, 'nx.json'));
   symlinkSync(join(root, 'node_modules'), join(dir, 'node_modules'));
+  copyReleaseWorkspace(root, dir);
   const pkg = JSON.parse(readFileSync(join(root, 'package.json')));
   pkg.version = version;
   writeFileSync(join(dir, 'package.json'), JSON.stringify(pkg, null, 2) + '\n');
@@ -25,7 +27,7 @@ function fixture(t, version = '0.1.0') {
   const commit = (message) => { writeFileSync(join(dir, 'change.txt'), String(++change)); git('add', '.'); git('commit', '--allow-empty', '-m', message); };
   commit('feat(route): preserve point order');
   const cli = (...args) => spawnSync(process.execPath, ['scripts/release.mjs', ...args], {
-    cwd: dir, encoding: 'utf8', env: { ...process.env, NX_DAEMON: 'false', NX_ISOLATE_PLUGINS: 'false', GITHUB_TOKEN: '', GH_TOKEN: '' },
+    cwd: dir, encoding: 'utf8', timeout: 60000, env: releaseFixtureEnvironment({ GITHUB_TOKEN: '', GH_TOKEN: '' }),
   });
   return { dir, git, commit, cli };
 }
