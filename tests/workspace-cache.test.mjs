@@ -9,6 +9,11 @@ import { callerEnvironment } from '../scripts/workspace-environment.mjs';
 const root = resolve(import.meta.dirname, '..');
 const cacheReport = /read the output from the cache|\[(?:local|remote) cache\]/i;
 
+function testEnvironment(overrides = {}) {
+  const environment = Object.fromEntries(Object.entries(callerEnvironment()).filter(([key]) => !key.startsWith('NX_') && !key.startsWith('HAULPATH_') && !key.startsWith('AMAP_') && key !== 'NODE_TEST_CONTEXT'));
+  return Object.assign(environment, { NX_DAEMON: 'false', NX_ISOLATE_PLUGINS: 'false', NX_TUI: 'false', NX_NO_CLOUD: 'true', FORCE_COLOR: '0' }, overrides);
+}
+
 // Keep the CLI, project graph and compiler real. This fixture needs no app
 // process, user environment files, database, or separate dependency installation.
 function workspace(t) {
@@ -19,8 +24,7 @@ function workspace(t) {
   cpSync(join(root, 'packages/domain'), join(directory, 'packages/domain'), { recursive: true, filter: (source) => !source.includes('/node_modules') });
   cpSync(join(root, 'apps/web/package.json'), join(directory, 'apps/web/package.json'), { recursive: true });
   symlinkSync(join(root, 'node_modules'), join(directory, 'node_modules'), 'dir');
-  const environment = Object.fromEntries(Object.entries(callerEnvironment()).filter(([key]) => !key.startsWith('NX_') && !key.startsWith('HAULPATH_') && !key.startsWith('AMAP_') && key !== 'NODE_TEST_CONTEXT'));
-  Object.assign(environment, { NX_DAEMON: 'false', NX_ISOLATE_PLUGINS: 'false', NX_TUI: 'false', NX_NO_CLOUD: 'true', NX_LOAD_DOT_ENV_FILES: 'false', FORCE_COLOR: '0' });
+  const environment = testEnvironment({ NX_LOAD_DOT_ENV_FILES: 'false' });
   function check({ cached = false, success = true } = {}) {
     const result = spawnSync('pnpm', ['exec', 'nx', 'run', '@haulpath/domain:typecheck', '--output-style=static'], { cwd: directory, env: environment, encoding: 'utf8', timeout: 60000 });
     assert.ifError(result.error);
@@ -71,8 +75,7 @@ test('the public commit-test command executes again with identical tracked input
   // cache miss. The existing test suite and public task command remain real.
   const suite = join(directory, 'tests/commits.test.mjs');
   writeFileSync(suite, readFileSync(suite, 'utf8') + `\n(await import('node:fs')).appendFileSync(${JSON.stringify(marker)}, 'executed\\n');\n`);
-  const environment = Object.fromEntries(Object.entries(callerEnvironment()).filter(([key]) => !key.startsWith('NX_') && !key.startsWith('HAULPATH_') && !key.startsWith('AMAP_') && key !== 'NODE_TEST_CONTEXT'));
-  Object.assign(environment, { NX_DAEMON: 'false', NX_ISOLATE_PLUGINS: 'false', NX_TUI: 'false', NX_NO_CLOUD: 'true', FORCE_COLOR: '0', NODE_OPTIONS: '--test-name-pattern=the.*public.*command.*accepts' });
+  const environment = testEnvironment({ NODE_OPTIONS: '--test-name-pattern=the.*public.*command.*accepts' });
   for (let invocation = 1; invocation <= 2; invocation++) {
     const result = spawnSync('pnpm', ['run', 'test:commits'], { cwd: directory, env: environment, encoding: 'utf8', timeout: 60000 });
     assert.ifError(result.error);
