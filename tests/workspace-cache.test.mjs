@@ -19,10 +19,11 @@ function testEnvironment(overrides = {}) {
 function workspace(t) {
   const directory = mkdtempSync(join(tmpdir(), 'haulpath-workspace-cache-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
-  for (const file of ['.gitignore', 'package.json', 'nx.json', 'pnpm-lock.yaml', 'tsconfig.base.json']) cpSync(join(root, file), join(directory, file));
+  for (const file of ['.gitignore', 'package.json', 'nx.json', 'pnpm-lock.yaml', 'tsconfig.base.json', 'eslint.config.mjs', 'eslint.shared.mjs']) cpSync(join(root, file), join(directory, file));
   writeFileSync(join(directory, 'pnpm-workspace.yaml'), readFileSync(join(root, 'pnpm-workspace.yaml'), 'utf8') + '\nverifyDepsBeforeRun: false\n');
   cpSync(join(root, 'packages/domain'), join(directory, 'packages/domain'), { recursive: true, filter: (source) => !source.includes('/node_modules') });
   cpSync(join(root, 'apps/web/package.json'), join(directory, 'apps/web/package.json'), { recursive: true });
+  cpSync(join(root, 'apps/web/eslint.config.mjs'), join(directory, 'apps/web/eslint.config.mjs'));
   symlinkSync(join(root, 'node_modules'), join(directory, 'node_modules'), 'dir');
   const environment = testEnvironment({ NX_LOAD_DOT_ENV_FILES: 'false' });
   function check({ cached = false, success = true } = {}) {

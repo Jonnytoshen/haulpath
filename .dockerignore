@@ -6,8 +6,11 @@
 !pnpm-lock.yaml
 !pnpm-workspace.yaml
 !nx.json
+!eslint.config.mjs
+!eslint.shared.mjs
 !tsconfig.base.json
 !apps/web/package.json
+!apps/web/eslint.config.mjs
 !apps/web/next.config.ts
 !apps/web/next-env.d.ts
 !apps/web/tsconfig.json
@@ -15,6 +18,7 @@
 !apps/web/src/**
 !apps/web/public/**
 !packages/domain/package.json
+!packages/domain/eslint.config.mjs
 !packages/domain/tsconfig.json
 !packages/domain/src/**
 !scripts/workspace.mjs
