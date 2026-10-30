@@ -5,6 +5,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 FROM base AS dependencies
 RUN npm install --global pnpm@12.10.1
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/web/package.json ./apps/web/package.json
+COPY packages/domain/package.json ./packages/domain/package.json
 RUN pnpm install --frozen-lockfile --ignore-scripts
 
 FROM dependencies AS build
@@ -16,13 +18,13 @@ ENV NODE_ENV=production HOSTNAME=0.0.0.0 PORT=3000 HAULPATH_DB_PATH=/app/data/ha
 RUN apt-get update \
     && apt-get install --no-install-recommends --yes sqlite3 ca-certificates \
     && rm -rf /var/lib/apt/lists/*
-COPY --from=build --chown=node:node /app/.next/standalone ./
-COPY --from=build --chown=node:node /app/.next/static ./.next/static
-COPY --from=build --chown=node:node /app/public ./public
+COPY --from=build --chown=node:node /app/apps/web/.next/standalone ./
+COPY --from=build --chown=node:node /app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=build --chown=node:node /app/apps/web/public ./apps/web/public
 COPY --chown=node:node scripts/docker ./scripts/docker
-RUN mkdir -p /app/data /app/.next/cache \
-    && chown node:node /app/data /app/.next/cache
+RUN mkdir -p /app/data /app/apps/web/.next/cache \
+    && chown node:node /app/data /app/apps/web/.next/cache
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=3 CMD ["node", "scripts/docker/healthcheck.mjs"]
-CMD ["node", "server.js"]
+CMD ["node", "apps/web/server.js"]
