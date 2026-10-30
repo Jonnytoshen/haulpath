@@ -8,13 +8,15 @@ import { tmpdir } from 'node:os';
 import { createServer } from 'node:http';
 import { chromium } from 'playwright';
 import { startApplication, jsonRequest } from './helpers/application.mjs';
+import { prepareNextCommand } from '../scripts/next-command.mjs';
 import { assertOverview, openRouteFromSidebar, goTask } from './helpers/browser-navigation.mjs';
 
 const run = promisify(execFile);
 
 test('interrupted planning survives a production restart or online backup restore as a retryable failure', { timeout: 150000 }, async () => {
   // A production process is killed directly: dev launches a worker which SIGKILL would leave alive.
-  await run(process.execPath, ['node_modules/next/dist/bin/next', 'build', '--webpack'], { env: { ...process.env, NEXT_TELEMETRY_DISABLED: '1' }, maxBuffer: 5_000_000 });
+  const build = prepareNextCommand('build');
+  await run(build.file, build.args, { cwd: build.cwd, env: { ...build.env, NEXT_TELEMETRY_DISABLED: '1' }, maxBuffer: 5_000_000 });
   const directory = await mkdtemp(join(tmpdir(), 'haulpath-planning-recovery-'));
   const dataDirectory = join(directory, 'data');
   const backupPath = join(directory, 'running.sqlite');

@@ -1,0 +1,35 @@
+{
+  "name": "@haulpath/domain",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  },
+  "nx": {
+    "includedScripts": [],
+    "targets": {
+      "typecheck": {
+        "executor": "nx:run-commands",
+        "cache": true,
+        "inputs": [
+          "{projectRoot}/src/**/*",
+          "{projectRoot}/package.json",
+          "{projectRoot}/tsconfig.json",
+          "{workspaceRoot}/tsconfig.base.json",
+          "{workspaceRoot}/pnpm-lock.yaml",
+          {
+            "runtime": "node --version"
+          }
+        ],
+        "outputs": [],
+        "options": {
+          "command": "tsc --project tsconfig.json",
+          "cwd": "{projectRoot}"
+        }
+      }
+    }
+  }
+}

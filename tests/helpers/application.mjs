@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
 import { createServer } from 'node:net';
+import { prepareNextCommand } from '../../scripts/next-command.mjs';
+import { callerEnvironment } from '../../scripts/workspace-environment.mjs';
 
 export async function startApplication(extraEnvironment = {}, existingDirectory, { mode = 'dev' } = {}) {
   const directory = existingDirectory ?? await mkdtemp(join(tmpdir(), 'haulpath-test-'));
@@ -16,15 +18,17 @@ export async function startApplication(extraEnvironment = {}, existingDirectory,
     });
   });
   const baseUrl = `http://127.0.0.1:${port}`;
-  const server = spawn(process.execPath, ['node_modules/next/dist/bin/next', mode, '--hostname', '127.0.0.1', '--port', String(port)], {
-    env: { ...process.env, NEXT_TELEMETRY_DISABLED: '1', HAULPATH_DB_PATH: join(directory, 'test.sqlite'), ...extraEnvironment },
+  const command = prepareNextCommand(mode, ['--port', String(port)], { ...callerEnvironment(), NEXT_TELEMETRY_DISABLED: '1', HAULPATH_DB_PATH: join(directory, 'test.sqlite'), ...extraEnvironment });
+  const server = spawn(command.file, command.args, {
+    cwd: command.cwd,
+    env: command.env,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let output = '';
   server.stdout.on('data', (chunk) => { output += chunk; });
   server.stderr.on('data', (chunk) => { output += chunk; });
   async function stop(signal = 'SIGTERM') {
-    if (server.exitCode === null) {
+    if (server.exitCode === null && server.signalCode === null) {
       server.kill(signal);
       await new Promise((resolve) => server.once('exit', resolve));
     }

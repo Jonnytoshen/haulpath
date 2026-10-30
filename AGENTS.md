@@ -7,27 +7,30 @@
 ## 当前状态与技术栈
 
 - 当前已有 Next.js 线路任务画布、项目线路总览表格与地图预览、独立点位库、SQLite schema 版本 2 迁移、项目/线路/点库接口、坐标与导入、相邻区间测算及双表导出；自动化从真实应用 HTTP 和浏览器入口验收。
-- 使用 pnpm、Next.js App Router、TypeScript；同一应用提供网页与本机服务端接口，开发与生产默认监听 `127.0.0.1`。
+- 使用 pnpm workspace、Nx、Next.js App Router、TypeScript；`apps/web`（`@haulpath/web`）仍由同一应用提供网页与本机服务端接口，开发与生产默认监听 `127.0.0.1`。
+- `packages/domain`（`@haulpath/domain`）只包含平台无关领域类型与规则，应用通过 `workspace:*` 直接消费 TypeScript 源码；不预构建，不拆分额外服务或业务上下文。两个子包私有且无独立版本，根 `haulpath` 是唯一产品版本与发布对象，取舍见 [ADR 0004](docs/adr/0004-workspace-and-single-product.md)。
 - 数据持久化使用 SQLite / `better-sqlite3`；Excel 读写使用 ExcelJS，CSV 解析使用 `csv-parse`，KML/KMZ 使用 XML 与 ZIP 解析。
 - 地图使用高德 JS API 2.0 与官方 `@amap/amap-jsapi-loader`；驾车测算由服务端调用高德 Web 服务 v5。
 - UI 使用 shadcn/ui 和 Tailwind CSS；功能图标统一使用 Lucide Icons（`lucide-react`），界面不使用 emoji 图标。品牌标志使用原创 HaulPath 资产，遵循[品牌标志规范](docs/brand.md)；不以品牌标志替换业务功能图标。
 
 ## 命令与验证
 
-- 应用要求 Node `>=22.12.0`、pnpm `>=12.0.0`，仓库指定 pnpm `12.10.1`。依赖使用 `pnpm install --frozen-lockfile --ignore-scripts`，缓存齐全时可加 `--offline`；类型检查使用 `pnpm run typecheck`（先 `next typegen`），生产构建使用 `pnpm run build`（`next build --webpack`）。
+- 应用要求 Node `>=22.12.0`、pnpm `>=12.0.0`，仓库指定 pnpm `12.10.1`。依赖使用 `pnpm install --frozen-lockfile --ignore-scripts`，缓存齐全时可加 `--offline`；类型检查使用 `pnpm run typecheck`（先 `next typegen`），生产构建使用 `pnpm run build`（`next build --webpack`）。命令从仓库根目录经 Nx 调度，应用检查和构建先检查领域包；仅无产物的领域类型检查可缓存，应用检查、构建及所有测试不缓存。同次调度禁止共享应用产物的任务并行；独立命令仍须串行，避免争用 `apps/web/.next` 和类型产物。
 - `pnpm run dev` 与 `pnpm run start` 均使用真实入口；生产启动须先构建，端口可通过 `--port` 指定。更换构建器后必须重新验证，不能沿用 webpack 的通过记录。
 - `pnpm test` 串行运行全部 `tests/*.test.mjs`；`test:api` 覆盖所有公开接口与 SQLite 备份恢复，`test:browser` 覆盖工作台及完整闭环/代表规模，`test:commits` 验证提交约束，`test:release` 验证公开发布命令并纳入完整测试入口。生产中断恢复用例同时列入 API 与浏览器入口，先执行 webpack 构建；这些入口需要系统 `sqlite3` 和已安装的浏览器。默认系统 Chrome，可用 `PLAYWRIGHT_CHROMIUM_CHANNEL` 指定 channel；分类数量不可直接相加，完整测试按文件只运行一次。
 - Docker 部署按[部署指南](docs/docker.md)：`docker compose --env-file .env.docker up --detach --build --wait app` 从源码构建启动，宿主仅发布回环端口；数据卷挂载整个 `/app/data`。更换环境变量须重新创建容器，保留数据卷；备份、恢复与迁入使用 `scripts/docker-data.sh`，部署与维护保持相同环境文件和 Compose 项目名。
 - `pnpm run test:docker` 独立运行 `tests/docker/*.test.mjs`，`--matrix` 验收 amd64、arm64 核心流程，另一架构可使用受支持的模拟器；它们不纳入普通完整测试或软件发布门禁。Docker 缺失或目标架构不可用时明确失败，实际记录须区分原生、模拟及真实高德联调。
-- 运行配置见 [.env.example](.env.example) 和 [README](README.md)；默认数据库为启动目录下 `data/haulpath.sqlite`，`HAULPATH_DB_PATH` 可覆盖。环境变量统一使用 `HAULPATH_DB_PATH`、`HAULPATH_TEST_MODE`。开发、生产及备份应核对同一数据库位置，不把测试临时库当作用户数据。
+- 运行配置见 [.env.example](.env.example) 和 [README](README.md)；根 `.env*` 保持原 Next.js 优先级和变量展开，显式进程环境优先，无需移入应用目录；默认数据库为仓库根目录下 `data/haulpath.sqlite`，`HAULPATH_DB_PATH` 的相对值也按仓库根目录解析，绝对值保持原意。迁移不移动用户配置或资料。环境变量统一使用 `HAULPATH_DB_PATH`、`HAULPATH_TEST_MODE`。开发、生产及备份应核对同一数据库位置，不把测试临时库当作用户数据。
 - `pnpm run prepare` 显式安装或修复 hook；独立 worktree 已启用 `extensions.worktreeConfig` 时，使用 `GIT_CONFIG="$(git rev-parse --git-path config.worktree)" pnpm run prepare`，仅修改当前 worktree 的 hook 配置。完整说明见[提交约定](docs/agents/git-commits.md)。
 - 提交校验入口为 `printf '%s\n' 'docs(git): clarify commit checks' | pnpm run commitlint`、`pnpm run commitlint --edit <消息文件>`、`pnpm run commitlint --from <base> --to HEAD`；替换实际文件/基线，`--from` 不包含起始提交。
 - 备份与恢复按[运行维护](docs/operations.md)：在线使用 SQLite `.backup`，恢复先停服务并整体隔离旧数据库与 sidecar。代表负载与实际验证记录见[验收记录](docs/acceptance.md)；缺少真实高德凭证时不得声称真实地图联调通过。
 - 实现验收优先走浏览器完整用户流程，经过真实应用接口、SQLite 和实际下载的工作簿；仅在高德服务边界使用可控替身。
+- `pnpm run test:workspace` 定向验证工作区根入口、环境优先级、数据库定位与缓存；这些用例已纳入 `pnpm test`，完整验收不重复叠加分类入口。
+- 应用配置、shadcn `components.json`、`public` 与源码位于 `apps/web`；组件生成须使用应用目录配置。写应用代码前阅读 `apps/web/node_modules/next/dist/docs/` 中与任务相关的安装版本指南，保留根和应用内 Next.js 自动生成的代理规则。
 - 浏览器自动化建议使用 Playwright。模拟高德响应与真实密钥联调分别验证；模拟测试不能证明真实地图可用。
 - 纯文档改动核对链接、术语和 ADR 一致性，无需创建应用环境或测试框架。
-- 软件发布按[发布指南](docs/releasing.md)与 [ADR 0003](docs/adr/0003-prerelease-version-consistency.md)：从干净 main 执行，首发显式 `--first-release`；支持位置参数 `patch` / `minor` / `major` / `X.Y.Z`、`--channel` 与 `--dry-run`，恢复使用 `release:resume <目标tag>`。完整门禁通过后才写版本和日志，只推送 main 与本次 tag，始终跳过 npm 发布，不关闭 hook 或用户签名。
-- 候选转正保持同一基版；累计下限提高时先生成新候选。API 恢复从目标 tag 读取原始日志，只补 Release，不重做版本和 Git 操作，不覆盖人工说明或让旧版本抢占 Latest。API token 优先 `GITHUB_TOKEN`、其次 `GH_TOKEN`，与 Git 推送认证分开检查，禁止输出凭证。
+- 软件发布按[发布指南](docs/releasing.md)与 [ADR 0005](docs/adr/0005-native-release.md)：根 `release` 直接 `nx release --skip-publish`，不经过 workspace 脚本。维护者先在干净 main 显式完成提交历史校验、类型、webpack 构建与完整测试，再预览并发布；入口不自动执行这些检查。首发、SemVer 与 `--preid` 按 Nx 原生规则，删除旧 `--channel` / `release:resume` 协议，始终跳过 registry 发布。
+- Nx 原生生成根日志、发布提交/tag、推送与 GitHub Release；保留 `commit-msg` hook 及用户签名。Nx 24 推送使用 `--follow-tags --no-verify --atomic`，会跳过 pre-push，可能推送其他可达 annotated tags；失败后先核对本地/远端状态，不盲目重跑或假定原生更新会保护人工说明。API 认证使用 `GITHUB_TOKEN` / `GH_TOKEN` 或已认证的 `gh`，与 Git 推送认证分别配置，禁止输出凭证。
 - 实际验证按日期、源码与覆盖范围记录在[验收记录](docs/acceptance.md)，历史结果不能代表当前 HEAD 已通过。最低 Node 未运行完整套件，真实 GitHub 与真实高德联调未执行；发布验证边界见[发布指南](docs/releasing.md#验证记录边界)。
 
 ## 开始任务前
@@ -35,6 +38,7 @@
 - 阅读 [领域约定](docs/agents/domain.md)、[术语表](GLOSSARY.md) 和与任务相关的 [ADR](docs/adr/)。领域文档尚不存在时按领域约定继续，不为占位而创建。
 - 需求与工单遵循 [本地 Markdown tracker 约定](docs/agents/issue-tracker.md)；当前首版需求基线为 `.scratch/haulpath-v1/spec.md`，规划偏好扩展见 `.scratch/haulpath-planning-preferences/spec.md`，线路总览见 `.scratch/haulpath-route-overview/spec.md`，任务画布与项目资源分层见 `.scratch/haulpath-ux-restructure/spec.md`（替代旧工作台的页面结构约定，既有数据与状态规则继续生效），KML/KMZ 导入扩展见 `.scratch/haulpath-kml-import/spec.md`，Docker 部署见 `.scratch/haulpath-docker-deployment/spec.md`。产品及仓库名称以 `.scratch/haulpath-name/spec.md` 的更名规格为准，规格目录与文内引用统一使用当前名称。
 - `.scratch/` 被 Git 忽略，其他工作副本可能没有它；有相关 spec / issue 时先读，缺少任务必需的需求时明确指出缺口，不猜测细节。
+- 工作区迁移需求基线为 `.scratch/haulpath-monorepo/spec.md`；根命令、环境文件、数据库位置、单一产品版本及 Docker 卷身份保持兼容。
 - 线路总览地图预览的需求基线为 `.scratch/haulpath-route-overview-map/spec.md`，已实现项目内表格/地图切换；它扩展总览的地图展示范围，既有领域、结果有效性与导出规则继续生效。实际覆盖及限制以验收记录为准。
 - 每个功能使用 `.scratch/<feature-slug>/spec.md`；实现工单分别放在 `issues/<NN>-<slug>.md`，从 `01` 编号，评论追加到文件末尾的 `## Comments`。
 - 技能要求“发布到 issue tracker”时写入上述本地文件；按编号取工单时，在对应功能目录解析。

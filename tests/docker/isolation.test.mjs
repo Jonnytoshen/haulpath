@@ -14,9 +14,14 @@ test('the build stage excludes local configuration, databases, backups and gener
   const directory = await mkdtemp(join(tmpdir(), 'haulpath-test-context-'));
   const image = `haulpath-test-context-${process.pid}-${randomUUID().slice(0, 8)}:test`;
   const sentinels = [
-    '.env.local', 'src/.env.build-sentinel', 'src/local.sqlite', 'src/local.sqlite-wal',
-    'data/haulpath.sqlite', 'backups/context-sentinel', 'node_modules/context-sentinel',
-    '.next/context-sentinel', '.scratch/context-sentinel', 'tests/context-sentinel',
+    ...['', 'apps/web/', 'packages/domain/'].flatMap((prefix) => [
+      '.env.local', 'src/.env.build-sentinel', 'src/local.sqlite', 'src/local.sqlite-wal',
+      'src/local.sqlite-shm', 'src/local.sqlite3', 'src/local.sqlite3-journal',
+      'src/local.db', 'src/local.db-wal', 'node_modules/context-sentinel',
+      '.next/context-sentinel', 'dist/context-sentinel',
+    ].map((relative) => `${prefix}${relative}`)),
+    'data/haulpath.sqlite', 'backups/context-sentinel',
+    '.scratch/context-sentinel', 'tests/context-sentinel',
   ];
   try {
     const files = (await run('git', ['ls-files', '-z'], { cwd: root })).stdout.split('\0').filter(Boolean);
