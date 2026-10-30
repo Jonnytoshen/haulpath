@@ -40,6 +40,22 @@ test('first release previews 0.1.0 and history without writing files or refs', (
   assert.match(r.stdout, /Preview/); assert.equal(f.git('status', '--porcelain'), '');
   assert.equal(f.git('show-ref', '--head'), before);
 });
+test('native changelog preserves multiline migration guidance and stops before unrelated Markdown sections', (t) => {
+  const f = fixture(t, '1.0.0');
+  f.git('tag', 'v1.0.0');
+  f.commit('refactor(storage): replace snapshot layout\n\nBREAKING CHANGE: replace snapshots\n\nBack up existing project data before upgrading.\n\n- Run the snapshot migration.\n- Reopen the saved projects.\n\n## Related issues\n\nReviewer-only details must stay out of release notes.');
+  const before = f.git('show-ref', '--head');
+  const r = f.cli('--dry-run');
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /Preview: 2\.0\.0 \(v2\.0\.0\)/);
+  assert.match(r.stdout, /Breaking Changes/);
+  assert.match(r.stdout, /Back up existing project data before upgrading/);
+  assert.match(r.stdout, /- Run the snapshot migration\./);
+  assert.match(r.stdout, /- Reopen the saved projects\./);
+  assert.doesNotMatch(r.stdout, /Related issues|Reviewer-only details/);
+  assert.equal(f.git('show-ref', '--head'), before);
+  assert.equal(f.git('status', '--porcelain'), '');
+});
 function assertReadOnlyProductPreview(f, before) {
   assert.equal(f.git('show-ref', '--head'), before);
   assert.equal(f.git('status', '--porcelain'), '');
@@ -146,7 +162,7 @@ test('candidate channels start at zero, advance without changes, and cannot regr
 });
 test('new candidate changes increase the number while cumulative breaking changes do not repeatedly raise its core', (t) => {
   const f = fixture(t); f.git('tag', 'v0.1.0');
-  f.commit('docs(storage): migrate snapshots\n\nBREAKING CHANGE: replace snapshots\n\n## Migration\n\nRun migration before opening existing files.');
+  f.commit('docs(storage): migrate snapshots\n\nBREAKING CHANGE: replace snapshots\n\nRun migration before opening existing files.');
   let r = f.cli('--channel=beta', '--dry-run'); assert.equal(r.status, 0, r.stdout + r.stderr); assert.match(r.stdout, /Preview: 0\.2\.0-beta\.0/);
   f.git('tag', 'v0.2.0-beta.0'); f.commit('fix(map): restore markers');
   r = f.cli('--channel=beta', '--dry-run'); assert.equal(r.status, 0, r.stdout + r.stderr); assert.match(r.stdout, /Preview: 0\.2\.0-beta\.1/);

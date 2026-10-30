@@ -63,7 +63,7 @@ test('preflight rejects missing API credentials and remote tag conflicts before 
 });
 test('API failure preserves the published tag and resume uses immutable migration notes after main advances', (t) => {
   const f=fixture(t);
-  f.commit('docs(storage): migrate snapshots\n\nBREAKING CHANGE: replace snapshot layout\n\n## Migration\n\n## 9.9.9\n\nKeep this entire migration paragraph.');
+  f.commit('docs(storage): migrate snapshots\n\nBREAKING CHANGE: replace snapshot layout\n\nKeep this entire migration paragraph.\n\n- Back up existing projects.\n- Run the snapshot migration.');
   const failed=f.cli(['--first-release'],{API_FAIL:'1'});
   assert.notEqual(failed.status,0); assert.match(failed.stderr,/release:resume v0.1.0/);
   const before=f.git('show-ref');
@@ -72,7 +72,29 @@ test('API failure preserves the published tag and resume uses immutable migratio
   f.commit('fix(route): advance main after publication'); const current=f.git('show-ref');
   const r=f.cli(['v0.1.0'],{},'scripts/release-resume.mjs');
   assert.equal(r.status,0,r.stdout+r.stderr); assert.equal(f.git('show-ref'),current); assert.notEqual(before,current);
-  assert.equal(posts()[1].body.body,original); assert.match(original,/## Migration[\s\S]*Keep this entire migration paragraph/);
+  assert.equal(posts()[1].body.body,original);
+  assert.match(original,/Keep this entire migration paragraph/);
+  assert.match(original,/- Back up existing projects\./);
+  assert.match(original,/- Run the snapshot migration\./);
+});
+test('resume preserves historical migration headings from the committed target log', (t) => {
+  const f = fixture(t);
+  const notes = '## 0.1.0 (2026-10-20)\n\n### Breaking Changes\n\n- **storage:** replace snapshot layout\n  Keep this historical migration explanation.\n  ## Migration\n  ## 9.9.9\n  Back up existing projects before migrating.';
+  writeFileSync(join(f.dir, 'CHANGELOG.md'), `${notes}\n\n## 0.0.9 (2026-10-19)\n\nAn older release must stay outside the restored notes.\n`);
+  f.commit('docs: retain historical release notes');
+  f.git('tag', '-a', 'v0.1.0', '-m', 'Release v0.1.0');
+  f.git('push', 'origin', 'refs/heads/main:refs/heads/main', 'refs/tags/v0.1.0:refs/tags/v0.1.0');
+  writeFileSync(join(f.dir, 'CHANGELOG.md'), 'Current worktree notes must not replace the target tag.\n');
+  f.commit('docs: advance worktree release notes');
+  const before = f.git('show-ref');
+  const r = f.cli(['v0.1.0'], {}, 'scripts/release-resume.mjs');
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.equal(f.git('show-ref'), before);
+  assert.equal(f.git('status', '--porcelain'), '');
+  const requests = readFileSync(join(f.base, 'requests'), 'utf8').trim().split('\n').map(JSON.parse);
+  const published = requests.find((request) => request.method === 'POST').body;
+  assert.equal(published.body, notes);
+  assert.doesNotMatch(published.body, /An older release|Current worktree notes/);
 });
 test('resume keeps existing manual notes and an older stable release cannot claim Latest', (t) => {
   const f=fixture(t); assert.equal(f.cli(['--first-release']).status,0);

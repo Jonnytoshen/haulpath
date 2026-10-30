@@ -31,6 +31,7 @@
 - 纯文档改动核对链接、术语和 ADR 一致性，无需创建应用环境或测试框架。
 - 软件发布按[发布指南](docs/releasing.md)与 [ADR 0003](docs/adr/0003-prerelease-version-consistency.md)：从干净 main 执行，首发显式 `--first-release`；支持位置参数 `patch` / `minor` / `major` / `X.Y.Z`、`--channel` 与 `--dry-run`，恢复使用 `release:resume <目标tag>`。完整门禁通过后才写版本和日志，只推送 main 与本次 tag，始终跳过 npm 发布，不关闭 hook 或用户签名。
 - 候选转正保持同一基版；累计下限提高时先生成新候选。API 恢复从目标 tag 读取原始日志，只补 Release，不重做版本和 Git 操作，不覆盖人工说明或让旧版本抢占 Latest。API token 优先 `GITHUB_TOKEN`、其次 `GH_TOKEN`，与 Git 推送认证分开检查，禁止输出凭证。
+- 变更日志采用 Nx 默认渲染器；`BREAKING CHANGE:` 的完整迁移说明使用普通段落或列表，写在 Markdown 标题或水平分隔线之前，遵循原生提取边界。历史 tag 的日志恢复仍按原文读取。
 - 实际验证按日期、源码与覆盖范围记录在[验收记录](docs/acceptance.md)，历史结果不能代表当前 HEAD 已通过。最低 Node 未运行完整套件，真实 GitHub 与真实高德联调未执行；发布验证边界见[发布指南](docs/releasing.md#验证记录边界)。
 
 ## 开始任务前

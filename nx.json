@@ -100,7 +100,6 @@
     "changelog": {
       "workspaceChangelog": {
         "createRelease": false,
-        "renderer": "{workspaceRoot}/scripts/release/changelog-renderer.cjs",
         "renderOptions": {
           "applyUsernameToAuthors": false
         }

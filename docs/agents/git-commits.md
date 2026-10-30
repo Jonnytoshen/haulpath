@@ -92,6 +92,8 @@ BREAKING CHANGE: replace the snapshot format
 导入旧格式快照后执行格式转换，再使用新版本保存；转换前保留备份。
 ```
 
+变更日志使用 Nx 默认渲染器。迁移说明使用普通段落或列表；Nx 会在 Markdown 标题或水平分隔线处停止提取破坏性说明，因此应在这些边界之前写完完整迁移步骤。
+
 `BREAKING-CHANGE:` 别名、标记大小写或冒号不符、标题 `!`、只有标记或摘要、没有迁移说明的消息均失败。注释或 `Refs:`、`Fixes #...`、签名等元数据不能充当实际说明。
 
 撤销仍采用 `revert(scope): summary` 或 `revert: summary`。正文必须单独一行写 `This reverts commit <40 位十六进制完整 SHA>.`，保留英文句点，并另写非空撤销原因。下列 SHA 仅为格式示例，实际操作应替换为正确目标：
