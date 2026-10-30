@@ -440,6 +440,14 @@ Docker 最终验收基线为 `c8d564e12ab976dd5badb2abbbc16d3922c7e5ce`；相较
 
 `pnpm run test:release` 经根 Nx 入口实际执行，38/38 通过，失败、取消、跳过均为 0，约 38 秒；覆盖真实 Nx、隔离 Git/bare remote 与受控 GitHub API、候选转正、hook 和签名。未实际发布，也未修改应用或 Docker 运行源码；前述应用及容器结果保持各自原验收基线，本次不将未重跑的完整套件标作当前通过。证据位于本地 monorepo tracker 的 `evidence/native-changelog/`。
 
+## 2026-10-30 Thank You 作者用户名
+
+基于 `1db85a14e50cf9cdbf2d3998ed114c58a9bffe78` 在独立 worktree 启用 Nx 原生 `applyUsernameToAuthors`，继续使用默认渲染器。公开发布回归先证明关闭选项时只显示姓名，启用后检查预览、生成文件、目标 tag 和 Release 请求正文均包含 `姓名 @用户名`，覆盖普通邮箱查询和 GitHub noreply 作者直接解析。
+
+作者用例保留真实 Nx、Git 与 atomic push，以 fixture 专用 SSH 传输把逻辑 GitHub 远端连接到临时 bare 仓库，并清除可覆盖该通道的继承 SSH 环境变量；hook 和签名由发布分类中的独立用例验证。仅作者 HTTP 查询和 Release API 使用受控响应，未知请求拒绝，`gh` 回退在夹具中禁止访问网络。预览只查询作者信息，不写文件、refs 或发送发布 API 请求。全部身份为测试数据，未查询真实作者信息或执行真实发布。
+
+`pnpm run test:release` 经根 Nx 入口实际运行，39/39 通过，失败、取消、跳过均为 0，约 40 秒。只读作者查询及查不到账号时保留姓名的原生行为已写入发布说明；本次未更改应用和 Docker 运行源码，也未将此前完整应用或容器验收表述为新基线。证据位于本地 tracker 的 `evidence/changelog-authors/`。
+
 ## 待真实凭证的人工联调
 
 配置真实三项高德凭证，重启服务后完成以下流程，并记录日期、点位与结果：

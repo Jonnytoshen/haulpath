@@ -2,11 +2,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, cpSync, symlinkSync, writeFileSync, readFileSync, rmSync, mkdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { delimiter, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { copyReleaseWorkspace, releaseFixtureEnvironment } from './helpers/release-workspace.mjs';
 const root = resolve(import.meta.dirname, '..');
-function fixture(t) {
+function fixture(t, { githubAuthors = false } = {}) {
   const base = mkdtempSync(join(tmpdir(), 'haulpath-publish-'));
   t.after(() => rmSync(base, { recursive: true, force: true }));
   const dir = join(base, 'repo'); mkdirSync(dir);
@@ -24,11 +24,41 @@ function fixture(t) {
   let n = 0;
   const commit = (message) => { writeFileSync(join(dir, 'change.txt'), String(++n)); git('add', '.'); git('commit', '-m', message); };
   commit('feat(route): preserve point order');
-  git('init', '--bare', join(base, 'remote.git')); git('remote', 'add', 'origin', 'https://github.com/example/haulpath.git');
-  git('config', `url.${join(base, 'remote.git')}.insteadOf`, 'https://github.com/example/haulpath.git');
+  git('init', '--bare', join(base, 'remote.git'));
+  if (githubAuthors) {
+    git('remote', 'add', 'origin', 'git@github.com:example/haulpath.git');
+    const ssh = join(base, 'ssh.cjs');
+    writeFileSync(ssh, `const { spawnSync } = require('node:child_process');
+const operation = new Map([["git-upload-pack 'example/haulpath.git'", 'upload-pack'], ["git-receive-pack 'example/haulpath.git'", 'receive-pack']]).get(process.argv.at(-1));
+if (process.argv.at(-2) !== 'git@github.com' || !operation) process.exit(64);
+const result = spawnSync('git', [operation, ${JSON.stringify(join(base, 'remote.git'))}], { stdio: 'inherit' });
+process.exit(result.status ?? 1);
+`);
+    const quote = (value) => `'${value.replaceAll("'", "'\\''")}'`;
+    git('config', 'core.sshCommand', `${quote(process.execPath)} ${quote(ssh)}`);
+    git('config', 'ssh.variant', 'ssh');
+    writeFileSync(join(base, 'gh'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+  } else {
+    git('remote', 'add', 'origin', 'https://github.com/example/haulpath.git');
+    git('config', `url.${join(base, 'remote.git')}.insteadOf`, 'https://github.com/example/haulpath.git');
+  }
   const preload = join(base, 'api.mjs');
-  writeFileSync(preload, `import fs from 'node:fs'; globalThis.fetch=async(url,options={})=>{ fs.appendFileSync(${JSON.stringify(join(base,'requests'))},JSON.stringify({url,method:options.method??'GET',body:options.body&&JSON.parse(options.body)})+'\\n'); const fail=process.env.API_FAIL; let status=200, data={permissions:{push:true}}; if(url.endsWith('/releases/latest')){status=process.env.API_LATEST?200:404;data={tag_name:process.env.API_LATEST};} else if(url.includes('/releases/tags/')){status=process.env.API_EXISTING?200:404;data={body:'Manually edited release notes',html_url:'https://github.com/example/haulpath/releases/tag/v0.1.0'};} else if(options.method==='POST'){status=fail?503:201;data={html_url:'https://github.com/example/haulpath/releases/tag/'+JSON.parse(options.body).tag_name};} return new Response(JSON.stringify(data),{status}); };`);
-  const cli = (args, env = {}, script = 'scripts/release.mjs') => spawnSync(process.execPath, ['--import', preload, script, ...args], { cwd: dir, encoding: 'utf8', timeout: 60000, env: releaseFixtureEnvironment({ GITHUB_TOKEN:'fixture-secret-token', GH_TOKEN:'', ...env }) });
+  writeFileSync(preload, `import fs from 'node:fs'; globalThis.fetch=async(url,options={})=>{
+if (url.startsWith('https://ungh.cc/')) {
+  if (url !== 'https://ungh.cc/users/find/release@example.invalid') throw new Error('Unexpected author lookup');
+  fs.appendFileSync(${JSON.stringify(join(base, 'author-requests'))}, url+'\\n');
+  return new Response(JSON.stringify({user:{username:'release-test'}}), {status:200});
+}
+if (!url.startsWith('https://api.github.com/repos/example/haulpath')) throw new Error('Unexpected external request');
+fs.appendFileSync(${JSON.stringify(join(base,'requests'))},JSON.stringify({url,method:options.method??'GET',body:options.body&&JSON.parse(options.body)})+'\\n'); const fail=process.env.API_FAIL; let status=200, data={permissions:{push:true}}; if(url.endsWith('/releases/latest')){status=process.env.API_LATEST?200:404;data={tag_name:process.env.API_LATEST};} else if(url.includes('/releases/tags/')){status=process.env.API_EXISTING?200:404;data={body:'Manually edited release notes',html_url:'https://github.com/example/haulpath/releases/tag/v0.1.0'};} else if(options.method==='POST'){status=fail?503:201;data={html_url:'https://github.com/example/haulpath/releases/tag/'+JSON.parse(options.body).tag_name};} return new Response(JSON.stringify(data),{status}); };`);
+  const authorEnvironment = githubAuthors ? {
+    ...Object.fromEntries(['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy', 'https_proxy', 'all_proxy'].map((key) => [key, undefined])),
+    GIT_SSH_COMMAND: undefined,
+    GIT_SSH: undefined,
+    GIT_SSH_VARIANT: undefined,
+    PATH: `${base}${delimiter}${releaseFixtureEnvironment().PATH}`,
+  } : {};
+  const cli = (args, env = {}, script = 'scripts/release.mjs') => spawnSync(process.execPath, ['--import', preload, script, ...args], { cwd: dir, encoding: 'utf8', timeout: 60000, env: releaseFixtureEnvironment({ GITHUB_TOKEN:'fixture-secret-token', GH_TOKEN:'', ...env, ...authorEnvironment }) });
   return { dir, base, git, commit, cli };
 }
 test('failed quality gate stops before release writes and preserves the frozen input', (t) => {
@@ -51,6 +81,30 @@ test('first release writes one Nx release commit and annotated tag then pushes o
   const body = requests.find(r=>r.method==='POST').body;
   assert.equal(body.tag_name,'v0.1.0'); assert.equal(body.prerelease,false); assert.equal(body.make_latest,'true');
   assert.match(body.body,/preserve point order/); assert.match(r.stdout,/Published/);
+});
+test('Thank You mentions resolved GitHub authors in the changelog, tag and published notes', (t) => {
+  const f = fixture(t, { githubAuthors: true });
+  f.commit('feat(route): support saved return trips\n\nCo-authored-by: Noreply Author <123+noreply-author@users.noreply.github.com>');
+  const inheritedSsh = { GIT_SSH_COMMAND: 'false', GIT_SSH: 'unavailable-test-ssh', GIT_SSH_VARIANT: 'plink' };
+  const before = f.git('show-ref');
+  const preview = f.cli(['--first-release', '--dry-run'], inheritedSsh);
+  assert.equal(preview.status, 0, preview.stdout + preview.stderr);
+  assert.match(preview.stdout, /- Release test @release-test/);
+  assert.match(preview.stdout, /- Noreply Author @noreply-author/);
+  assert.equal(f.git('show-ref'), before);
+  assert.equal(f.git('status', '--porcelain'), '');
+  assert.equal(existsSync(join(f.base, 'requests')), false);
+  const r = f.cli(['--first-release'], inheritedSsh);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const requests = readFileSync(join(f.base, 'requests'), 'utf8').trim().split('\n').map(JSON.parse);
+  const published = requests.find((request) => request.method === 'POST').body.body;
+  for (const notes of [readFileSync(join(f.dir, 'CHANGELOG.md'), 'utf8'), f.git('show', 'v0.1.0:CHANGELOG.md'), published]) {
+    const thanks = notes.slice(notes.indexOf('Thank You'));
+    assert.match(thanks, /- Release test @release-test/);
+    assert.match(thanks, /- Noreply Author @noreply-author/);
+    assert.equal(thanks.split('- Release test @release-test').length - 1, 1);
+  }
+  assert.deepEqual(readFileSync(join(f.base, 'author-requests'), 'utf8').trim().split('\n'), Array(2).fill('https://ungh.cc/users/find/release@example.invalid'));
 });
 test('preflight rejects missing API credentials and remote tag conflicts before running quality gates', (t) => {
   const f = fixture(t); const head=f.git('rev-parse','HEAD');

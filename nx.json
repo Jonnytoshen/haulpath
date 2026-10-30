@@ -101,7 +101,7 @@
       "workspaceChangelog": {
         "createRelease": false,
         "renderOptions": {
-          "applyUsernameToAuthors": false
+          "applyUsernameToAuthors": true
         }
       },
       "projectChangelogs": false
