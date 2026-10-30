@@ -1,12 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, cpSync, symlinkSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, cpSync, symlinkSync, writeFileSync, readFileSync, rmSync, existsSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { copyReleaseWorkspace, releaseFixtureEnvironment } from './helpers/release-workspace.mjs';
 const root = resolve(import.meta.dirname, '..');
-function fixture(t, version = '0.1.0') {
+function fixture(t, version = '0.1.0', environment = process.env) {
   const dir = mkdtempSync(join(tmpdir(), 'haulpath-release-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   cpSync(join(root, 'scripts'), join(dir, 'scripts'), { recursive: true });
@@ -24,10 +24,11 @@ function fixture(t, version = '0.1.0') {
   git('init', '-b', 'main'); git('config', 'user.name', 'Release test');
   git('config', 'user.email', 'release@example.invalid'); git('config', 'commit.gpgsign', 'false');
   let change = 0;
-  const commit = (message) => { writeFileSync(join(dir, 'change.txt'), String(++change)); git('add', '.'); git('commit', '--allow-empty', '-m', message); };
+  for (const project of ['apps/web', 'packages/domain']) writeFileSync(join(dir, project, 'src/release-fixture.ts'), 'export const releaseFixture = true;\n');
+  const commit = (message, file = 'change.txt') => { writeFileSync(join(dir, file), `// release fixture change ${++change}\n`); git('add', '.'); git('commit', '--allow-empty', '-m', message); };
   commit('feat(route): preserve point order');
   const cli = (...args) => spawnSync(process.execPath, ['scripts/release.mjs', ...args], {
-    cwd: dir, encoding: 'utf8', timeout: 60000, env: releaseFixtureEnvironment({ GITHUB_TOKEN: '', GH_TOKEN: '' }),
+    cwd: dir, encoding: 'utf8', timeout: 60000, env: releaseFixtureEnvironment({ GITHUB_TOKEN: '', GH_TOKEN: '' }, environment),
   });
   return { dir, git, commit, cli };
 }
@@ -38,6 +39,88 @@ test('first release previews 0.1.0 and history without writing files or refs', (
   assert.match(r.stdout, /0\.1\.0/); assert.match(r.stdout, /preserve point order/);
   assert.match(r.stdout, /Preview/); assert.equal(f.git('status', '--porcelain'), '');
   assert.equal(f.git('show-ref', '--head'), before);
+});
+function assertReadOnlyProductPreview(f, before) {
+  assert.equal(f.git('show-ref', '--head'), before);
+  assert.equal(f.git('status', '--porcelain'), '');
+  assert.equal(JSON.parse(readFileSync(join(f.dir, 'package.json'))).version, '1.0.0');
+  for (const project of ['apps/web', 'packages/domain']) {
+    const pkg = JSON.parse(readFileSync(join(f.dir, project, 'package.json')));
+    assert.equal(pkg.private, true);
+    assert.equal(Object.hasOwn(pkg, 'version'), false, `${pkg.name} must not acquire a version`);
+    assert.equal(existsSync(join(f.dir, project, 'CHANGELOG.md')), false, `${pkg.name} must not acquire a changelog`);
+  }
+}
+for (const [project, label] of [['packages/domain', 'domain'], ['apps/web', 'web']]) {
+  for (const [type, version] of [['feat', '1.1.0'], ['fix', '1.0.1'], ['refactor', '2.0.0']]) {
+    test(`a ${label}-only ${type} participates in the product release`, (t) => {
+      const f = fixture(t, '1.0.0');
+      f.git('tag', 'v1.0.0');
+      const file = `${project}/src/release-fixture.ts`;
+      const summary = `preserve ${label} ${type} behavior`;
+      const migration = 'Run the migration before opening saved projects.';
+      const message = `${type}(planning): ${summary}${type === 'refactor' ? `\n\nBREAKING CHANGE: replace saved planning input\n\n${migration}` : ''}`;
+      f.commit(message, file);
+      assert.equal(f.git('diff-tree', '--no-commit-id', '--name-only', '-r', 'HEAD'), file);
+      const before = f.git('show-ref', '--head');
+      const r = f.cli('--dry-run');
+      assert.equal(r.status, 0, r.stdout + r.stderr);
+      assert.ok(r.stdout.includes(`Preview: ${version} (v${version})`), r.stdout);
+      assert.ok(r.stdout.includes(summary), r.stdout);
+      if (type === 'refactor') assert.ok(r.stdout.includes(migration), r.stdout);
+      assertReadOnlyProductPreview(f, before);
+    });
+  }
+  test(`a ${label}-only maintenance change waits for an explicit product release`, (t) => {
+    const f = fixture(t, '1.0.0');
+    f.git('tag', 'v1.0.0');
+    const file = `${project}/src/release-fixture.ts`;
+    const summary = `explain ${label} planning input`;
+    f.commit(`docs(planning): ${summary}`, file);
+    assert.equal(f.git('diff-tree', '--no-commit-id', '--name-only', '-r', 'HEAD'), file);
+    const before = f.git('show-ref', '--head');
+    let r = f.cli('--dry-run');
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.match(r.stdout, /Skipped: no effective version changes/);
+    assertReadOnlyProductPreview(f, before);
+    r = f.cli('patch', '--dry-run');
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.match(r.stdout, /Preview: 1\.0\.1 \(v1\.0\.1\)/);
+    assert.ok(r.stdout.includes(summary), r.stdout);
+    assertReadOnlyProductPreview(f, before);
+  });
+}
+test('release fixtures ignore outer Nx workspace, cache and task context after restoring the caller environment', (t) => {
+  const wrong = mkdtempSync(join(tmpdir(), 'haulpath-release-outer-'));
+  t.after(() => rmSync(wrong, { recursive: true, force: true }));
+  const original = releaseFixtureEnvironment();
+  const caller = {
+    ...original,
+    NX_WORKSPACE_ROOT_PATH: wrong,
+    NX_WORKSPACE_ROOT: wrong,
+    NX_CACHE_DIRECTORY: join(wrong, 'cache'),
+    NX_WORKSPACE_DATA_DIRECTORY: join(wrong, 'workspace-data'),
+    NX_TASK_TARGET_PROJECT: 'outer-project',
+    NX_TASK_TARGET_TARGET: 'outer-test',
+    NX_TASK_HASH: 'outer-hash',
+    NX_INVOCATION_ANCESTOR_PIDS: '12345',
+    NX_TERMINAL_OUTPUT_PATH: join(wrong, 'terminal-output'),
+    NX_SKIP_NX_CACHE: 'true',
+  };
+  const f = fixture(t, '1.0.0', {
+    ...caller,
+    PATH: '/unavailable-outer-task-path',
+    HAULPATH_INTERNAL_CALLER_ENV: Buffer.from(JSON.stringify(caller)).toString('base64'),
+  });
+  f.git('tag', 'v1.0.0');
+  f.commit('feat(planning): isolate product preview', 'packages/domain/src/release-fixture.ts');
+  const before = f.git('show-ref', '--head');
+  const r = f.cli('--dry-run');
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /Preview: 1\.1\.0 \(v1\.1\.0\)/);
+  assert.match(r.stdout, /isolate product preview/);
+  assertReadOnlyProductPreview(f, before);
+  assert.deepEqual(readdirSync(wrong), [], 'outer Nx paths must not receive fixture output');
 });
 test('automatic releases use the stable tag and include domain scopes', (t) => {
   const f = fixture(t); f.git('tag', 'v0.1.0'); f.commit('feat(route): add return trips');

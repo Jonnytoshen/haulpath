@@ -22,7 +22,8 @@
     "test:browser": "node scripts/workspace.mjs test:browser",
     "release": "node scripts/workspace.mjs release",
     "test:release": "node scripts/workspace.mjs test:release",
-    "release:resume": "node scripts/workspace.mjs release:resume"
+    "release:resume": "node scripts/workspace.mjs release:resume",
+    "test:workspace": "node scripts/workspace.mjs test:workspace"
   },
   "devDependencies": {
     "@commitlint/cli": "^20.5.3",
@@ -59,7 +60,7 @@
         "cache": false,
         "parallelism": false,
         "options": {
-          "command": "node --test --test-concurrency=1 tests/foundation.test.mjs tests/coordinates.test.mjs tests/configuration.test.mjs tests/map-proxy.test.mjs tests/planning.test.mjs tests/planning-recovery.test.mjs tests/import.test.mjs tests/export.test.mjs tests/backup.test.mjs",
+          "command": "node --test --test-concurrency=1 tests/foundation.test.mjs tests/coordinates.test.mjs tests/configuration.test.mjs tests/map-proxy.test.mjs tests/planning.test.mjs tests/planning-recovery.test.mjs tests/import.test.mjs tests/export.test.mjs tests/backup.test.mjs tests/workspace-runtime.test.mjs",
           "cwd": "{workspaceRoot}"
         }
       },
@@ -105,6 +106,15 @@
         "parallelism": false,
         "options": {
           "command": "node scripts/release-command.mjs release:resume",
+          "cwd": "{workspaceRoot}"
+        }
+      },
+      "test-workspace": {
+        "executor": "nx:run-commands",
+        "cache": false,
+        "parallelism": false,
+        "options": {
+          "command": "node --test --test-concurrency=1 tests/workspace*.test.mjs",
           "cwd": "{workspaceRoot}"
         }
       }

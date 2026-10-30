@@ -12,7 +12,7 @@ export function copyReleaseWorkspace(root, directory) {
   }
 }
 
-export function releaseFixtureEnvironment(extra = {}) {
-  const environment = Object.fromEntries(Object.entries(callerEnvironment()).filter(([key]) => !key.startsWith('NX_') && key !== 'HAULPATH_INTERNAL_CALLER_ENV'));
+export function releaseFixtureEnvironment(extra = {}, inherited = process.env) {
+  const environment = Object.fromEntries(Object.entries(callerEnvironment(inherited)).filter(([key]) => !key.startsWith('NX_') && key !== 'HAULPATH_INTERNAL_CALLER_ENV'));
   return { ...environment, NX_DAEMON: 'false', NX_ISOLATE_PLUGINS: 'false', ...extra };
 }
