@@ -99,7 +99,7 @@
     },
     "changelog": {
       "workspaceChangelog": {
-        "createRelease": false,
+        "createRelease": "github",
         "renderOptions": {
           "applyUsernameToAuthors": true
         }
@@ -109,7 +109,6 @@
     "git": {
       "commit": true,
       "tag": true,
-      "push": false,
       "commitMessage": "chore: release v{version}"
     }
   }

@@ -465,3 +465,13 @@ Docker 最终验收基线为 `c8d564e12ab976dd5badb2abbbc16d3922c7e5ce`；相较
 - 检查真实 SDK 的搜索请求是否全部落在受控代理的精确允许路径；发现额外必要路径时先核实再扩展。
 
 自动化结果与真实联调应分别记录。普通驾车规划仍不提供重卡可通行保证。
+
+## 2026-10-30 — 发布入口改为 Nx 原生命令
+
+本次增量基于 `ba3ad67`，根 `release` 直接执行 `nx release --skip-publish`。删除 workspace 发布分发、两个自定义 Nx release targets、9 个自定义发布脚本及其直接 `semver` 依赖；保留其他应用和测试入口所需的脚本。GitHub Release 由 Nx 原生创建，未显式设置 `release.git.push`，避免 Nx 24 在 version 子阶段提前推送旧 HEAD。
+
+Node `24.21.0`、pnpm `12.10.1` 下，公开原生 `preminor --preid` 回归先确认旧驱动拒绝，再验证新入口通过。`NX_DAEMON=false NX_ISOLATE_PLUGINS=false pnpm run test:release` 从根测试入口实际执行，22/22 通过，失败、取消、跳过均为 0，约 16.8 秒；仅在受限环境关闭 Nx daemon / plugin isolation，未替换发布命令。覆盖单一根版本、两个子包的独立变更、原生显式版本和预发布、破坏性说明、全部分类图标、预览和文件/tag/Release 中的作者提及、commit-msg、SSH 签名、follow-tags、跳过 pre-push、签名失败不推送以及 API 失败保留已推产物。
+
+测试使用真实 pnpm/Nx/Git 与本地 bare remote，GitHub API 和作者查询仅在外部 HTTP 边界使用替身；logical GitHub URL 的 SSH 传输固定到本地，并清理外层代理和 SSH 覆盖环境。移除旧自定义候选规划、自动质量门禁和 API-only 恢复用例，当前行为与原生发布指南一致，不以旧测试数量要求保留已删除协议。
+
+`node --test --test-concurrency=1 tests/workspace-cache.test.mjs` 2/2 通过；冻结锁文件安装及文档本地链接、diff 检查通过。依赖清理后的离线供应链元数据不足，随后保持冻结锁文件联网完成策略检查。未修改应用或 Docker 运行源码，本次未重跑其完整套件，也未执行最低 Node 完整测试、真实 GitHub 发布或真实高德联调；历史应用和容器结果仍各自对应原验收源码。

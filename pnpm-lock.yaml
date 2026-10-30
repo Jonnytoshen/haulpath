@@ -196,9 +196,6 @@ importers:
       playwright:
         specifier: 1.62.1
         version: 1.62.1
-      semver:
-        specifier: 7.7.4
-        version: 7.7.4
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -2791,11 +2788,6 @@ packages:
 
   semver@6.3.1:
     resolution: {integrity: sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA==}
-    hasBin: true
-
-  semver@7.7.4:
-    resolution: {integrity: sha512-vFKC2IEtQnVhpT78h1Yp8wzwrf8CM+MzKMHGJZfBtzhZNycRFnXsHk6E5TxIkkMsgNS7mdX3AGB7x2QM2di4lA==}
-    engines: {node: '>=10'}
     hasBin: true
 
   semver@7.8.5:
@@ -5880,8 +5872,6 @@ snapshots:
   scheduler@0.28.0: {}
 
   semver@6.3.1: {}
-
-  semver@7.7.4: {}
 
   semver@7.8.5: {}
 

@@ -163,7 +163,7 @@ pnpm run test:commits
 
 ## 发布提交与版本分析
 
-[发布工作流](../releasing.md)使用 `chore: release v<版本>`，例如 `chore: release v0.1.1-beta.0`；不新增 `release` scope，不豁免提交规则，沿用用户身份、hook 和签名策略。实际发布串行校验提交历史、类型、webpack 构建及完整测试，通过后才写入发布提交与 tag；不依赖可绕过的 pre-push hook，也不关闭签名解决失败。首发校验包含根提交的全部历史，后续校验最近正式 tag 之后到待发布 HEAD。
+[发布工作流](../releasing.md)直接使用 `nx release --skip-publish`，发布提交为 `chore: release v<版本>`，例如 `chore: release v0.1.1-beta.0`；不新增 `release` scope，不豁免提交规则，沿用用户身份、commit-msg hook 和签名策略。维护者须在发布前显式串行校验提交历史、类型、webpack 构建及完整测试，再核对待发布 HEAD 和干净 main；原生入口不自动执行这些检查。首次历史检查包含根提交，后续检查所选发布基线之后的全部新增提交。Nx 原生 push 会跳过 pre-push 并 follow-tags，具体范围和失败处理见发布指南与 [ADR 0005](../adr/0005-native-release.md)。
 
 根 `haulpath` 是唯一产品版本和发布对象，私有的 `@haulpath/web` 与 `@haulpath/domain` 不设置独立版本。根产品在 Nx 中对两个子包配置隐式依赖，因此只改任一子包的提交也参与根版本与日志分析；不按工作区目录改写领域 scope，也不为子包单独生成 tag。架构取舍见 [ADR 0004](../adr/0004-workspace-and-single-product.md)。
 

@@ -29,10 +29,8 @@
 - 应用配置、shadcn `components.json`、`public` 与源码位于 `apps/web`；组件生成须使用应用目录配置。写应用代码前阅读 `apps/web/node_modules/next/dist/docs/` 中与任务相关的安装版本指南，保留根和应用内 Next.js 自动生成的代理规则。
 - 浏览器自动化建议使用 Playwright。模拟高德响应与真实密钥联调分别验证；模拟测试不能证明真实地图可用。
 - 纯文档改动核对链接、术语和 ADR 一致性，无需创建应用环境或测试框架。
-- 软件发布按[发布指南](docs/releasing.md)与 [ADR 0003](docs/adr/0003-prerelease-version-consistency.md)：从干净 main 执行，首发显式 `--first-release`；支持位置参数 `patch` / `minor` / `major` / `X.Y.Z`、`--channel` 与 `--dry-run`，恢复使用 `release:resume <目标tag>`。完整门禁通过后才写版本和日志，只推送 main 与本次 tag，始终跳过 npm 发布，不关闭 hook 或用户签名。
-- 候选转正保持同一基版；累计下限提高时先生成新候选。API 恢复从目标 tag 读取原始日志，只补 Release，不重做版本和 Git 操作，不覆盖人工说明或让旧版本抢占 Latest。API token 优先 `GITHUB_TOKEN`、其次 `GH_TOKEN`，与 Git 推送认证分开检查，禁止输出凭证。
-- 变更日志采用 Nx 默认渲染器，Conventional Commits 分类标题由 `changelog.title` 配置图标前缀及英文名称；`BREAKING CHANGE:` 的完整迁移说明使用普通段落或列表，写在 Markdown 标题或水平分隔线之前，遵循原生提取边界。历史 tag 的日志恢复仍按原文读取。
-- “Thank You” 启用 Nx 原生 GitHub 用户名映射，成功识别时显示 `姓名 @用户名`；预览也可能进行只读作者查询，无法识别时保留姓名，不自行猜测账号。
+- 软件发布按[发布指南](docs/releasing.md)与 [ADR 0005](docs/adr/0005-native-release.md)：根 `release` 直接 `nx release --skip-publish`，不经过 workspace 脚本。维护者先在干净 main 显式完成提交历史校验、类型、webpack 构建与完整测试，再预览并发布；入口不自动执行这些检查。首发、SemVer 与 `--preid` 按 Nx 原生规则，删除旧 `--channel` / `release:resume` 协议，始终跳过 registry 发布。
+- Nx 原生生成根日志、发布提交/tag、推送与 GitHub Release；保留 `commit-msg` hook 及用户签名。Nx 24 推送使用 `--follow-tags --no-verify --atomic`，会跳过 pre-push，可能推送其他可达 annotated tags；失败后先核对本地/远端状态，不盲目重跑或假定原生更新会保护人工说明。API 认证使用 `GITHUB_TOKEN` / `GH_TOKEN` 或已认证的 `gh`，与 Git 推送认证分别配置，禁止输出凭证。
 - 实际验证按日期、源码与覆盖范围记录在[验收记录](docs/acceptance.md)，历史结果不能代表当前 HEAD 已通过。最低 Node 未运行完整套件，真实 GitHub 与真实高德联调未执行；发布验证边界见[发布指南](docs/releasing.md#验证记录边界)。
 
 ## 开始任务前

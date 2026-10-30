@@ -142,6 +142,6 @@ Docker 验收单独使用 `pnpm run test:docker`；双架构核心验收使用 `
 
 ## 软件发布
 
-使用本机 Nx Release 工作流；先以 `pnpm run release --first-release --dry-run` 预览首个 `0.1.0` 正式基线。后续支持自动版本、位置参数 `patch` / `minor` / `major` / `X.Y.Z`、`--channel stable|alpha|beta|rc` 及 `--dry-run`；API 失败后使用 `pnpm run release:resume <目标tag>` 补建。完整门禁、认证、候选规则和精确恢复步骤见[发布指南](docs/releasing.md)。
+`pnpm run release` 直接执行 `nx release --skip-publish`，生成版本、根 CHANGELOG、Git 提交/tag 并推送、创建 GitHub Release。先显式完成提交校验、类型检查、webpack 构建及完整测试，再用 `pnpm run release --dry-run` 预览；预发布使用原生 `--preid`，不再提供 `--channel` 或 `release:resume`。参数、认证及失败处理见[发布指南](docs/releasing.md)。
 
 根 `haulpath` 是唯一版本与发布对象；Nx 中对两个子包的隐式依赖确保仅修改应用或领域包的提交也参与产品版本和日志分析，沿用现有领域 scope。发布仅维护源码版本、日志、Git tag 与 GitHub Release，始终跳过 npm 发布，不生成安装包或自动部署。历史验证基线与真实服务联调边界见[验收记录](docs/acceptance.md)。

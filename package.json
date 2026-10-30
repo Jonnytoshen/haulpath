@@ -20,9 +20,8 @@
     "test": "node scripts/workspace.mjs test",
     "test:docker": "node scripts/test-docker.mjs",
     "test:browser": "node scripts/workspace.mjs test:browser",
-    "release": "node scripts/workspace.mjs release",
+    "release": "nx release --skip-publish",
     "test:release": "node scripts/workspace.mjs test:release",
-    "release:resume": "node scripts/workspace.mjs release:resume",
     "test:workspace": "node scripts/workspace.mjs test:workspace"
   },
   "devDependencies": {
@@ -33,7 +32,6 @@
     "husky": "^9.1.7",
     "nx": "24.0.0",
     "playwright": "1.62.1",
-    "semver": "7.7.4",
     "typescript": "^6.0.3",
     "better-sqlite3": "^13.0.3",
     "exceljs": "^4.4.0",
@@ -88,24 +86,6 @@
         "parallelism": false,
         "options": {
           "command": "node --test --test-concurrency=1 tests/release*.test.mjs",
-          "cwd": "{workspaceRoot}"
-        }
-      },
-      "release": {
-        "executor": "nx:run-commands",
-        "cache": false,
-        "parallelism": false,
-        "options": {
-          "command": "node scripts/release-command.mjs release",
-          "cwd": "{workspaceRoot}"
-        }
-      },
-      "release-resume": {
-        "executor": "nx:run-commands",
-        "cache": false,
-        "parallelism": false,
-        "options": {
-          "command": "node scripts/release-command.mjs release:resume",
           "cwd": "{workspaceRoot}"
         }
       },
