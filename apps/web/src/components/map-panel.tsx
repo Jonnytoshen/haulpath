@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import type { Point, Route } from '@haulpath/domain';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { Leg, Point, Route } from '@haulpath/domain';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { MapPin, Search } from 'lucide-react';
@@ -41,19 +41,29 @@ export default function MapPanel({ config, route, library, onCandidate, onLibrar
   const sdk = useRef<AMapSDK | null>(null);
   const services = useRef<{ autocomplete: SearchService; places: SearchService } | null>(null);
   const callbacks = useRef({ onCandidate, onLibraryPoint });
-  callbacks.current = { onCandidate, onLibraryPoint };
-  const [ready, setReady] = useState(false);
-  const [failure, setFailure] = useState('');
+  useLayoutEffect(() => { callbacks.current = { onCandidate, onLibraryPoint }; }, [onCandidate, onLibraryPoint]);
+  const [mapStatus, setMapStatus] = useState({ session: '', ready: false, failure: '' });
   const [retry, setRetry] = useState(0);
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
   const [candidates, setCandidates] = useState<Poi[]>([]);
   const searchVersion = useRef(0);
+  const invalidateSearch = useCallback(() => { searchVersion.current++; }, []);
+  const routeId = route?.id;
+  const [searchRoute, setSearchRoute] = useState(routeId);
+  // Clear search UI before committing another route; the effect invalidates SDK callbacks.
+  if (searchRoute !== routeId) {
+    setSearchRoute(routeId); setQuery(''); setCandidates([]); setSearchError(''); setSearching(false);
+  }
+  const mapKey = config?.mapKey ?? '';
+  const securityProxyPath = config?.securityProxyPath ?? '/_AMapService';
+  const mapSession = JSON.stringify([mapKey, securityProxyPath, retry]);
+  const ready = mapStatus.session === mapSession && mapStatus.ready;
+  const failure = mapStatus.session === mapSession ? mapStatus.failure : '';
 
   useEffect(() => {
-    setReady(false); setFailure('');
-    if (!config?.mapKey || !container.current) return;
+    if (!mapKey || !container.current) return;
     let cancelled = false;
     let instance: MapInstance | null = null;
     const onClick = (event: MapEvent) => {
@@ -62,28 +72,29 @@ export default function MapPanel({ config, route, library, onCandidate, onLibrar
     };
     (async () => {
       try {
-        const api = await loadMapSDK<AMapSDK>(config, ['AMap.AutoComplete', 'AMap.PlaceSearch', 'AMap.MarkerCluster']);
+        const api = await loadMapSDK<AMapSDK>({ mapKey, securityProxyPath }, ['AMap.AutoComplete', 'AMap.PlaceSearch', 'AMap.MarkerCluster']);
         if (cancelled || !container.current) return;
         sdk.current = api;
         instance = new api.Map(container.current, { zoom: 5, center: [112.5, 33], viewMode: '2D', resizeEnable: true });
         map.current = instance;
         services.current = { autocomplete: new api.AutoComplete({ city: '全国' }), places: new api.PlaceSearch({ city: '全国', pageSize: 10, extensions: 'base' }) };
         instance.on('click', onClick);
-        setReady(true);
+        setMapStatus({ session: mapSession, ready: true, failure: '' });
       } catch (error) {
-        if (!cancelled) setFailure(`地图加载失败：${error instanceof Error ? error.message : String(error)}。请检查网络、JS Key 与 JS 安全密钥配置。`);
+        if (!cancelled) setMapStatus({ session: mapSession, ready: false, failure: `地图加载失败：${error instanceof Error ? error.message : String(error)}。请检查网络、JS Key 与 JS 安全密钥配置。` });
       }
     })();
     return () => {
-      cancelled = true; searchVersion.current++;
+      cancelled = true; invalidateSearch();
       services.current = null; sdk.current = null; map.current = null;
       instance?.off('click', onClick); instance?.destroy();
     };
-  }, [config?.mapKey, config?.securityProxyPath, retry]);
+  }, [mapKey, securityProxyPath, mapSession, invalidateSearch]);
 
-  useEffect(() => { searchVersion.current++; setQuery(''); setCandidates([]); setSearchError(''); setSearching(false); }, [route?.id]);
+  useEffect(() => { invalidateSearch(); }, [routeId, invalidateSearch]);
 
-  const overlayKey = JSON.stringify({ points: route?.points.map(({ id, name, longitude, latitude }) => [id, name, longitude, latitude]), legs: route?.snapshot?.inputVersion === route?.inputVersion ? route?.snapshot?.legs.map(({ polyline }) => polyline) : null, library: library.map(({ id, name, longitude, latitude }) => [id, name, longitude, latitude]) });
+  // Give the SDK one immutable geometry snapshot without reacting to unrelated route metadata.
+  const overlayKey = JSON.stringify({ points: route?.points ?? [], legs: route?.snapshot?.inputVersion === route?.inputVersion ? route?.snapshot?.legs.map(({ polyline }) => ({ polyline })) ?? [] : [], library });
   useEffect(() => {
     if (!ready || !map.current || !sdk.current) return;
     const instance = map.current;
@@ -94,24 +105,24 @@ export default function MapPanel({ config, route, library, onCandidate, onLibrar
     const markerContent = (point: Point, text: string, className: string) => {
       const content = document.createElement('button'); content.type = 'button'; content.className = `map-marker ${className}`; content.textContent = text; content.title = point.name; content.setAttribute('aria-label', `地图点位 ${point.name}`); return content;
     };
-    const points = route?.points ?? [];
+    const { points, legs, library: overlayLibrary } = JSON.parse(overlayKey) as { points: Point[]; legs: Pick<Leg, 'polyline'>[]; library: Point[] };
     points.forEach((point, index) => {
       const content = markerContent(point, String(index + 1), index === 0 ? 'marker-start' : index === points.length - 1 ? 'marker-end' : 'marker-waypoint');
       const marker = new api.Marker({ position: [point.longitude, point.latitude], content, offset: new api.Pixel(-15, -31), zIndex: 150, title: `${index + 1}. ${point.name}` });
       overlays.push(marker); routeOverlays.push(marker);
     });
-    if (route?.snapshot && route.snapshot.inputVersion === route.inputVersion) {
-      route.snapshot.legs.forEach((leg) => {
+    if (legs.length) {
+      legs.forEach((leg) => {
         const line = new api.Polyline({ path: leg.polyline, strokeColor: '#176b55', strokeWeight: 6, strokeOpacity: 0.9, lineJoin: 'round', showDir: true, outlineColor: '#ffffff', isOutline: true, borderWeight: 2 });
         overlays.unshift(line); routeOverlays.push(line);
       });
     }
     let cluster: Cluster | null = null;
-    if (library.length >= 100) {
-      cluster = new api.MarkerCluster(instance, library.map((point) => ({ lnglat: [point.longitude, point.latitude], extData: point })), { gridSize: 60, maxZoom: 17 });
+    if (overlayLibrary.length >= 100) {
+      cluster = new api.MarkerCluster(instance, overlayLibrary.map((point) => ({ lnglat: [point.longitude, point.latitude], extData: point })), { gridSize: 60, maxZoom: 17 });
       cluster.on?.('click', (event) => { const point = event.clusterData?.length === 1 ? event.clusterData[0].extData : undefined; if (point) void callbacks.current.onLibraryPoint(point); else instance.setFitView(); });
     } else {
-      library.forEach((point) => {
+      overlayLibrary.forEach((point) => {
         const marker = new api.Marker({ position: [point.longitude, point.latitude], content: markerContent(point, '', 'marker-library'), offset: new api.Pixel(-11, -20), title: `${point.name} · 点击选入线路`, zIndex: 90 });
         const handler = () => { void callbacks.current.onLibraryPoint(point); };
         marker.on('click', handler); listeners.push({ marker, handler }); overlays.push(marker);
@@ -125,17 +136,15 @@ export default function MapPanel({ config, route, library, onCandidate, onLibrar
 
   useEffect(() => {
     const version = ++searchVersion.current;
-    setSearchError('');
-    if (!query.trim() || !ready || !services.current) { setCandidates([]); setSearching(false); return; }
-    setSearching(true);
+    if (!query.trim() || !ready || !services.current) return;
     const timer = setTimeout(() => services.current?.autocomplete.search(query.trim(), (status, result) => {
       if (version !== searchVersion.current) return;
       setSearching(false);
       if (status === 'complete') setCandidates(result.tips ?? []);
       else { setCandidates([]); if (status === 'error') setSearchError('地点提示失败，请检查高德配置或点击搜索重试。'); }
     }), 300);
-    return () => { clearTimeout(timer); searchVersion.current++; };
-  }, [query, ready]);
+    return () => { clearTimeout(timer); invalidateSearch(); };
+  }, [query, ready, invalidateSearch]);
 
   function searchPlaces() {
     if (!query.trim() || !services.current) return;
@@ -170,7 +179,7 @@ export default function MapPanel({ config, route, library, onCandidate, onLibrar
 
   return <div className="map-body">
     <div ref={container} className="map-canvas" role="region" aria-label="高德地图" />
-    {ready && <div className="map-search"><form onSubmit={(event) => { event.preventDefault(); searchPlaces(); }}><Search aria-hidden="true" /><Input aria-label="搜索地点" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索地点，确认后加入线路" autoComplete="off" /><Button type="submit" disabled={!query.trim()}>搜索</Button></form>{(searching || candidates.length > 0 || searchError) && <div className="search-results">{searching && <p role="status">搜索中…</p>}{searchError && <p role="alert">{searchError}</p>}{candidates.map((poi, index) => <Button key={`${poi.id}-${index}`} onClick={() => choose(poi)}><strong>{poi.name}</strong><small>{poi.district} {typeof poi.address === 'string' ? poi.address : ''}</small></Button>)}<Button className="search-dismiss" onClick={() => { searchVersion.current++; setCandidates([]); setSearching(false); setSearchError(''); }}>收起搜索结果</Button></div>}</div>}
+    {ready && <div className="map-search"><form onSubmit={(event) => { event.preventDefault(); searchPlaces(); }}><Search aria-hidden="true" /><Input aria-label="搜索地点" value={query} onChange={(event) => { setQuery(event.target.value); setSearchError(''); setCandidates([]); setSearching(!!event.target.value.trim()); }} placeholder="搜索地点，确认后加入线路" autoComplete="off" /><Button type="submit" disabled={!query.trim()}>搜索</Button></form>{(searching || candidates.length > 0 || searchError) && <div className="search-results">{searching && <p role="status">搜索中…</p>}{searchError && <p role="alert">{searchError}</p>}{candidates.map((poi, index) => <Button key={`${poi.id}-${index}`} onClick={() => choose(poi)}><strong>{poi.name}</strong><small>{poi.district} {typeof poi.address === 'string' ? poi.address : ''}</small></Button>)}<Button className="search-dismiss" onClick={() => { searchVersion.current++; setCandidates([]); setSearching(false); setSearchError(''); }}>收起搜索结果</Button></div>}</div>}
     {!ready && <div className="map-placeholder"><span className="map-placeholder-icon"><MapPin /></span><h3>{failure ? '暂时无法加载地图' : config === null ? '正在读取地图配置' : !config.mapKey ? '配置高德地图，查看真实线路' : '正在加载高德地图'}</h3><p>{failure || (!config?.mapKey ? '也可以先编排点位，保存线路草稿；配置完成后再预览地图。' : '地图将显示编号点位与完整路线方案。')}</p>{config && !config.mapKey && <details className="map-config-help"><summary>查看地图配置说明</summary><p>在本机环境文件配置 AMAP_JS_KEY、AMAP_JS_SECURITY_CODE 和 AMAP_WEB_SERVICE_KEY，重启服务后刷新。</p></details>}{failure && <Button className="button" onClick={async () => { await resetMapSDK(); setRetry((value) => value + 1); }}>重新加载地图</Button>}<span className="map-provider-note">高德地图 JS API 2.0</span></div>}
     {config && !config.webServiceConfigured && <div className="map-service-warning">驾车测算与 WGS84 转换尚未配置，GCJ-02 点位及线路草稿可正常保存。</div>}
   </div>;
