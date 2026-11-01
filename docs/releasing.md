@@ -53,12 +53,12 @@ pnpm run release 0.1.0 --first-release --dry-run
 
 根产品通过 Nx 隐式依赖包含两个子包，因此仅修改网页应用或领域包的提交也参与根版本及统一日志，见 [ADR 0004](adr/0004-workspace-and-single-product.md)。提交 scope 继续表示领域范围，`useCommitScope: false`；软件版本独立于 SQLite schema 和测算输入版本。
 
-| 提交变化 | 0.x 阶段 | 1.x 起 |
-| --- | --- | --- |
-| `feat` | patch | minor |
-| `fix`、`perf` | patch | patch |
-| 任意允许类型的破坏性变更 | minor | major |
-| 其他普通允许类型 | 不自动递增 | 不自动递增 |
+| 提交变化                 | 0.x 阶段   | 1.x 起     |
+| ------------------------ | ---------- | ---------- |
+| `feat`                   | patch      | minor      |
+| `fix`、`perf`            | patch      | patch      |
+| 任意允许类型的破坏性变更 | minor      | major      |
+| 其他普通允许类型         | 不自动递增 | 不自动递增 |
 
 上述是稳定版本的自动推导映射；原生预发布与显式版本按 Nx 规则执行，手动目标不再经过项目自定义的累计下限校验。`adjustSemverBumpsForZeroMajorVersion: true` 也影响手动相对参数：0.x 的 `major` 调整为 minor、`minor` 调整为 patch（预发布形式同理）；希望精确选择基版时传完整版本号。维护提交可进入下次日志，也可显式选择版本。原提交与 revert 使用 Nx 原生版本分析和日志配对语义，不按最终代码净差异保证跳过发布。
 

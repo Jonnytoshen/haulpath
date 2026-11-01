@@ -1,5 +1,13 @@
 import assert from 'node:assert/strict';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -34,7 +42,11 @@ test('the public command accepts a valid Angular-style message', () => {
 
 function rejects(message, hint) {
   const result = lint(message);
-  assert.notEqual(result.status, 0, `Unexpectedly accepted ${JSON.stringify(message)}\n${result.output}`);
+  assert.notEqual(
+    result.status,
+    0,
+    `Unexpectedly accepted ${JSON.stringify(message)}\n${result.output}`,
+  );
   if (hint) assert.match(result.output, hint);
 }
 
@@ -46,22 +58,42 @@ test('scope must be one exact value from the project vocabulary', () => {
 
 test('headers require exact punctuation, spacing, and a lowercase English summary start', () => {
   for (const message of [
-    'feat:  add a point', 'feat(): add a point', ' feat: add a point',
-    'feat: add a point ', 'feat: add a point\t', 'feat( route): add a point',
-    'feat(route ): add a point', 'feat:add a point', 'feat : add a point',
-    'feat: Add a point', 'feat: 添加点位', 'feat: add a point.', 'feat: ',
-  ]) rejects(`${message}\n`, /header|subject|scope/);
+    'feat:  add a point',
+    'feat(): add a point',
+    ' feat: add a point',
+    'feat: add a point ',
+    'feat: add a point\t',
+    'feat( route): add a point',
+    'feat(route ): add a point',
+    'feat:add a point',
+    'feat : add a point',
+    'feat: Add a point',
+    'feat: 添加点位',
+    'feat: add a point.',
+    'feat: ',
+  ])
+    rejects(`${message}\n`, /header|subject|scope/);
   accepts('feat(storage): add SQLite support\n');
 });
 
 test('generated and temporary messages receive no exemptions', () => {
   for (const message of [
-    'Merge branch main', 'Revert "feat: add a point"', 'v1.2.3',
-    'WIP: add a point', 'fixup! feat: add a point', 'squash! feat: add a point',
-    'amend! feat: add a point', 'feat: wip add a point', 'feat: fixup! add a point',
-    'feat: squash! add a point', 'feat: amend! add a point',
-  ]) rejects(`${message}\n`);
-  accepts('docs(git): explain temporary commits\n\nDiscuss WIP, fixup!, squash!, and amend! here.\n');
+    'Merge branch main',
+    'Revert "feat: add a point"',
+    'v1.2.3',
+    'WIP: add a point',
+    'fixup! feat: add a point',
+    'squash! feat: add a point',
+    'amend! feat: add a point',
+    'feat: wip add a point',
+    'feat: fixup! add a point',
+    'feat: squash! add a point',
+    'feat: amend! add a point',
+  ])
+    rejects(`${message}\n`);
+  accepts(
+    'docs(git): explain temporary commits\n\nDiscuss WIP, fixup!, squash!, and amend! here.\n',
+  );
 });
 
 test('ordinary bodies are optional, bilingual, short, or arbitrarily long', () => {
@@ -93,17 +125,22 @@ test('breaking changes require one exact footer marker, a summary, and separated
     'BREAKING CHANGE: change storage layout\n\n   \n',
     'BREAKING CHANGE: change storage layout\n\n# Run the migration.\n',
     'BREAKING CHANGE: change storage layout\n\nRefs: #123\n',
-  ]) rejects(`feat(storage): change storage layout\n\n${suffix}`, /breaking|BREAKING/);
+  ])
+    rejects(`feat(storage): change storage layout\n\n${suffix}`, /breaking|BREAKING/);
   rejects('feat!: change storage layout\n');
   rejects('feat(storage)!: change storage layout\n');
-  accepts(`feat(storage): change storage layout\n\nExplain why.\n\nBREAKING CHANGE: change the schema\n\n执行迁移：${'迁'.repeat(120)}\n`);
+  accepts(
+    `feat(storage): change storage layout\n\nExplain why.\n\nBREAKING CHANGE: change the schema\n\n执行迁移：${'迁'.repeat(120)}\n`,
+  );
 });
 
 const revertedSha = '0123456789abcdef0123456789abcdef01234567';
 
 test('revert commits include an exact full SHA record and an independent reason', () => {
   for (const body of [
-    '', 'Restore the previous behavior.', `This reverts commit ${revertedSha}.`,
+    '',
+    'Restore the previous behavior.',
+    `This reverts commit ${revertedSha}.`,
     `This reverts commit ${revertedSha.slice(0, 7)}.\n\nRestore behavior.`,
     `This reverts commit ${'a'.repeat(41)}.\n\nRestore behavior.`,
     `This reverts commit ${'z'.repeat(40)}.\n\nRestore behavior.`,
@@ -111,9 +148,12 @@ test('revert commits include an exact full SHA record and an independent reason'
     `Reason: This reverts commit ${revertedSha}.\n\nRestore behavior.`,
     `This reverts commit ${revertedSha}.\n\n# Restore behavior.`,
     `This reverts commit ${revertedSha}.\n\nRefs: #123`,
-  ]) rejects(`revert(route): restore point order\n\n${body}\n`, /revert/);
+  ])
+    rejects(`revert(route): restore point order\n\n${body}\n`, /revert/);
   for (const scope of ['', '(route)']) {
-    accepts(`revert${scope}: restore point order\n\nThis reverts commit ${revertedSha}.\n\n恢复原有顺序，修正本次回归。\n`);
+    accepts(
+      `revert${scope}: restore point order\n\nThis reverts commit ${revertedSha}.\n\n恢复原有顺序，修正本次回归。\n`,
+    );
   }
 });
 
@@ -125,14 +165,28 @@ function repository(t) {
   }
   mkdirSync(join(cwd, '.husky'));
   const hook = join(root, '.husky/commit-msg');
-  try { cpSync(hook, join(cwd, '.husky/commit-msg')); } catch (error) {
+  try {
+    cpSync(hook, join(cwd, '.husky/commit-msg'));
+  } catch (error) {
     if (error.code !== 'ENOENT') throw error;
   }
   symlinkSync(join(root, 'node_modules'), join(cwd, 'node_modules'), 'dir');
   writeFileSync(join(cwd, 'pnpm-workspace.yaml'), 'verifyDepsBeforeRun: false\n');
-  const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null',
-    HUSKY: '1', HUSKY_SKIP_HOOKS: '' };
-  for (const name of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_CONFIG', 'GIT_CONFIG_COUNT']) delete env[name];
+  const env = {
+    ...process.env,
+    GIT_CONFIG_NOSYSTEM: '1',
+    GIT_CONFIG_GLOBAL: '/dev/null',
+    HUSKY: '1',
+    HUSKY_SKIP_HOOKS: '',
+  };
+  for (const name of [
+    'GIT_DIR',
+    'GIT_WORK_TREE',
+    'GIT_INDEX_FILE',
+    'GIT_CONFIG',
+    'GIT_CONFIG_COUNT',
+  ])
+    delete env[name];
   const git = (...args) => run('git', args, { cwd, env });
   const ok = (...args) => {
     const result = git(...args);
@@ -170,13 +224,38 @@ test('prepare installs a hook that blocks invalid commits and amendments, and re
 });
 
 test('the declared types, optional scopes, and full-header length boundaries are enforced', () => {
-  for (const type of ['build', 'ci', 'docs', 'feat', 'fix', 'perf', 'refactor', 'test', 'chore', 'style']) {
+  for (const type of [
+    'build',
+    'ci',
+    'docs',
+    'feat',
+    'fix',
+    'perf',
+    'refactor',
+    'test',
+    'chore',
+    'style',
+  ]) {
     accepts(`${type}: describe one complete change\n`);
   }
-  for (const scope of ['project', 'route', 'point', 'planning', 'map', 'import', 'export', 'storage', 'ui', 'git', 'deps', 'tooling']) {
+  for (const scope of [
+    'project',
+    'route',
+    'point',
+    'planning',
+    'map',
+    'import',
+    'export',
+    'storage',
+    'ui',
+    'git',
+    'deps',
+    'tooling',
+  ]) {
     accepts(`feat(${scope}): describe one complete change\n`);
   }
-  for (const type of ['feature', 'Fix', 'maintenance']) rejects(`${type}: describe one change\n`, /type|header/);
+  for (const type of ['feature', 'Fix', 'maintenance'])
+    rejects(`${type}: describe one change\n`, /type|header/);
   accepts(`feat: ${'a'.repeat(94)}\n`);
   rejects(`feat: ${'a'.repeat(95)}\n`, /header-max-length/);
 });
@@ -186,14 +265,24 @@ test('stdin and message files including paths with spaces reach the same rules',
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const path = join(dir, 'commit message.txt');
   for (const message of [
-    'feat(point): add SQLite support\n', 'feat:  add a point\n',
-    'feat: add a point \n', ' feat: add a point\n', 'feat(route/point): add a point\n',
-    'fixup! feat: add a point\n', '', '   \n\t\n', '# Only a comment.\n',
+    'feat(point): add SQLite support\n',
+    'feat:  add a point\n',
+    'feat: add a point \n',
+    ' feat: add a point\n',
+    'feat(route/point): add a point\n',
+    'fixup! feat: add a point\n',
+    '',
+    '   \n\t\n',
+    '# Only a comment.\n',
   ]) {
     writeFileSync(path, message);
     const stdinResult = lint(message);
     const fileResult = lint(undefined, ['--edit', path]);
-    assert.equal(fileResult.status === 0, stdinResult.status === 0, `${JSON.stringify(message)}\n${fileResult.output}`);
+    assert.equal(
+      fileResult.status === 0,
+      stdinResult.status === 0,
+      `${JSON.stringify(message)}\n${fileResult.output}`,
+    );
   }
 });
 
@@ -225,8 +314,13 @@ test('revert --no-commit uses the hook when creating the documented ordinary com
   const invalid = repo.git('commit', '-m', 'revert(route): restore original point order');
   assert.notEqual(invalid.status, 0, invalid.output);
   assert.equal(repo.ok('rev-parse', 'HEAD'), target);
-  repo.ok('commit', '-m', 'revert(route): restore original point order', '-m',
-    `This reverts commit ${target}.\n\nRestore the intended point order after a regression.`);
+  repo.ok(
+    'commit',
+    '-m',
+    'revert(route): restore original point order',
+    '-m',
+    `This reverts commit ${target}.\n\nRestore the intended point order after a regression.`,
+  );
   assert.equal(readFileSync(join(repo.cwd, 'example.txt'), 'utf8'), 'original\n');
   const saved = repo.ok('log', '-1', '--format=%B');
   accepts(saved);
@@ -240,7 +334,11 @@ test('edit aliases, equals syntax, and default paths preserve empty-file protect
     writeFileSync(path, message);
     writeFileSync(defaultPath, message);
     for (const args of [
-      ['-e', path], [`--edit=${path}`], [`-e=${path}`], ['--edit', '--verbose'], ['-e'],
+      ['-e', path],
+      [`--edit=${path}`],
+      [`-e=${path}`],
+      ['--edit', '--verbose'],
+      ['-e'],
     ]) {
       const result = run('pnpm', ['run', 'commitlint', ...args], { cwd: repo.cwd, env: repo.env });
       assert.equal(result.status === 0, message.startsWith('feat'), result.output);
@@ -250,7 +348,8 @@ test('edit aliases, equals syntax, and default paths preserve empty-file protect
 
 test('range validation checks every included commit and follows from-exclusive to-inclusive boundaries', (t) => {
   const repo = repository(t);
-  const unchecked = (message) => repo.ok('-c', 'core.hooksPath=/dev/null', 'commit', '--allow-empty', '-m', message);
+  const unchecked = (message) =>
+    repo.ok('-c', 'core.hooksPath=/dev/null', 'commit', '--allow-empty', '-m', message);
   unchecked('invalid baseline marker');
   const baseline = repo.ok('rev-parse', 'HEAD');
   unchecked('feat(point): preserve point names');
@@ -259,7 +358,11 @@ test('range validation checks every included commit and follows from-exclusive t
   const middle = repo.ok('rev-parse', 'HEAD');
   unchecked('docs(point): explain point names');
   const latest = repo.ok('rev-parse', 'HEAD');
-  const range = (from, to) => run('pnpm', ['run', 'commitlint', '--from', from, '--to', to], { cwd: repo.cwd, env: repo.env });
+  const range = (from, to) =>
+    run('pnpm', ['run', 'commitlint', '--from', from, '--to', to], {
+      cwd: repo.cwd,
+      env: repo.env,
+    });
   const excludesBaseline = range(baseline, valid);
   assert.equal(excludesBaseline.status, 0, excludesBaseline.output);
   const includesMiddle = range(baseline, latest);
@@ -289,7 +392,10 @@ test('independent checks discover the generated message from a direct git revert
   }
   const saved = repo.ok('log', '-1', '--format=%B');
   rejects(saved);
-  const result = run('pnpm', ['run', 'commitlint', '--from', target, '--to', 'HEAD'], { cwd: repo.cwd, env: repo.env });
+  const result = run('pnpm', ['run', 'commitlint', '--from', target, '--to', 'HEAD'], {
+    cwd: repo.cwd,
+    env: repo.env,
+  });
   assert.notEqual(result.status, 0, result.output);
   assert.match(result.output, /Revert/);
 });
@@ -307,7 +413,10 @@ test('Git comment cleanup cannot remove the only explanation after the hook acce
     assert.notEqual(result.status, 0, result.output);
     assert.notEqual(repo.git('rev-parse', '--verify', 'HEAD').status, 0);
   }
-  writeFileSync(path, `revert(route): restore point order\n\nThis reverts commit ${revertedSha}.\n\nRestore intended ordering.\n# Git removes this note.\n`);
+  writeFileSync(
+    path,
+    `revert(route): restore point order\n\nThis reverts commit ${revertedSha}.\n\nRestore intended ordering.\n# Git removes this note.\n`,
+  );
   repo.ok('commit', '--edit', '--allow-empty', '-F', path);
   const saved = repo.ok('log', '-1', '--format=%B');
   assert.doesNotMatch(saved, /Git removes/);
@@ -334,38 +443,77 @@ test('Git comment cleanup cannot remove the required revert SHA record', (t) => 
   const repo = repository(t);
   repo.ok('config', 'core.editor', 'true');
   const path = join(repo.cwd, 'commit message.txt');
-  writeFileSync(path, `revert(route): restore point order\n\nThis reverts commit ${revertedSha}.\n\nRestore the intended point order.\n`);
-  const env = { ...repo.env, GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'core.commentChar', GIT_CONFIG_VALUE_0: 'T' };
+  writeFileSync(
+    path,
+    `revert(route): restore point order\n\nThis reverts commit ${revertedSha}.\n\nRestore the intended point order.\n`,
+  );
+  const env = {
+    ...repo.env,
+    GIT_CONFIG_COUNT: '1',
+    GIT_CONFIG_KEY_0: 'core.commentChar',
+    GIT_CONFIG_VALUE_0: 'T',
+  };
   const checked = run('pnpm', ['run', 'commitlint', '--edit', path], { cwd: repo.cwd, env });
   assert.notEqual(checked.status, 0, checked.output);
   assert.match(checked.output, /revert/);
-  const committed = run('git', ['commit', '--edit', '--allow-empty', '-F', path], { cwd: repo.cwd, env });
+  const committed = run('git', ['commit', '--edit', '--allow-empty', '-F', path], {
+    cwd: repo.cwd,
+    env,
+  });
   assert.notEqual(committed.status, 0, committed.output);
   assert.notEqual(repo.git('rev-parse', '--verify', 'HEAD').status, 0);
 });
 
 test('indented metadata cannot stand in for a revert reason or migration instructions', () => {
-  for (const metadata of [' Refs: #123', '\tSigned-off-by: Example <example@example.invalid>', '  Fixes #123']) {
-    rejects(`revert(route): restore point order\n\nThis reverts commit ${revertedSha}.\n\n${metadata}\n`, /revert/);
-    rejects(`feat(storage): change storage layout\n\nBREAKING CHANGE: change the schema\n\n${metadata}\n`, /breaking|BREAKING/);
+  for (const metadata of [
+    ' Refs: #123',
+    '\tSigned-off-by: Example <example@example.invalid>',
+    '  Fixes #123',
+  ]) {
+    rejects(
+      `revert(route): restore point order\n\nThis reverts commit ${revertedSha}.\n\n${metadata}\n`,
+      /revert/,
+    );
+    rejects(
+      `feat(storage): change storage layout\n\nBREAKING CHANGE: change the schema\n\n${metadata}\n`,
+      /breaking|BREAKING/,
+    );
   }
-  accepts('docs(git): explain commit metadata\n\nExplain how Refs: and Signed-off-by: metadata help review.\n');
+  accepts(
+    'docs(git): explain commit metadata\n\nExplain how Refs: and Signed-off-by: metadata help review.\n',
+  );
 });
-
 
 test('breaking notes recognized by the parser must use the exact project marker', () => {
-  for (const marker of ['breaking change:', 'Breaking Change:', 'breaking-change:', 'BREAKING CHANGE']) {
-    rejects(`feat(storage): change storage layout\n\n${marker} change the schema\n`, /breaking|BREAKING/);
+  for (const marker of [
+    'breaking change:',
+    'Breaking Change:',
+    'breaking-change:',
+    'BREAKING CHANGE',
+  ]) {
+    rejects(
+      `feat(storage): change storage layout\n\n${marker} change the schema\n`,
+      /breaking|BREAKING/,
+    );
   }
-  accepts('docs(git): explain compatibility notes\n\nDiscuss BREAKING CHANGE: notes and breaking-change wording in prose.\n');
+  accepts(
+    'docs(git): explain compatibility notes\n\nDiscuss BREAKING CHANGE: notes and breaking-change wording in prose.\n',
+  );
 });
-
 
 test('empty historical messages fail without changing commit range boundaries', (t) => {
   const repo = repository(t);
   repo.ok('commit', '--allow-empty', '-m', 'build(git): establish a valid baseline');
   const baseline = repo.ok('rev-parse', 'HEAD');
-  repo.ok('-c', 'core.hooksPath=/dev/null', 'commit', '--allow-empty', '--allow-empty-message', '-m', '');
+  repo.ok(
+    '-c',
+    'core.hooksPath=/dev/null',
+    'commit',
+    '--allow-empty',
+    '--allow-empty-message',
+    '-m',
+    '',
+  );
   const empty = repo.ok('rev-parse', 'HEAD');
   for (const args of [
     ['--from', baseline, '--to', empty],
@@ -378,7 +526,11 @@ test('empty historical messages fail without changing commit range boundaries', 
     assert.match(result.output, /empty/i);
   }
   repo.ok('commit', '--allow-empty', '-m', 'docs(git): describe a valid latest change');
-  const range = (from, to) => run('pnpm', ['run', 'commitlint', '--from', from, '--to', to], { cwd: repo.cwd, env: repo.env });
+  const range = (from, to) =>
+    run('pnpm', ['run', 'commitlint', '--from', from, '--to', to], {
+      cwd: repo.cwd,
+      env: repo.env,
+    });
   const includesEmpty = range(baseline, 'HEAD');
   assert.notEqual(includesEmpty.status, 0, includesEmpty.output);
   const excludesEmpty = range(empty, 'HEAD');

@@ -1,5 +1,11 @@
 import ExcelJS from 'exceljs';
-import { PLANNING_NOTICE, routeStatus, strategyLabels, type Project, type Route } from '@haulpath/domain';
+import {
+  PLANNING_NOTICE,
+  routeStatus,
+  strategyLabels,
+  type Project,
+  type Route,
+} from '@haulpath/domain';
 
 const overviewColumns = [
   { header: '项目名称', key: 'project', width: 24 },
@@ -43,14 +49,24 @@ function addSheet(workbook: ExcelJS.Workbook, name: string, columns: Partial<Exc
 
 function shanghaiTime(timestamp: string): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
   }).formatToParts(new Date(timestamp));
-  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)!.value;
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)!.value;
   return `${value('year')}-${value('month')}-${value('day')} ${value('hour')}:${value('minute')}:${value('second')}`;
 }
 
-export async function exportWorkbook(project: Project, routes: Route[]): Promise<Uint8Array<ArrayBuffer>> {
+export async function exportWorkbook(
+  project: Project,
+  routes: Route[],
+): Promise<Uint8Array<ArrayBuffer>> {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = '重途';
   const overview = addSheet(workbook, '线路总览', overviewColumns);
@@ -59,19 +75,29 @@ export async function exportWorkbook(project: Project, routes: Route[]): Promise
     const status = routeStatus(route);
     const snapshot = status === '已规划' ? route.snapshot : null;
     overview.addRow({
-      project: project.name, routeId: route.id, route: route.name,
-      origin: route.points.at(0)?.name ?? null, destination: route.points.at(-1)?.name ?? null,
+      project: project.name,
+      routeId: route.id,
+      route: route.name,
+      origin: route.points.at(0)?.name ?? null,
+      destination: route.points.at(-1)?.name ?? null,
       points: route.points.length ? route.points.map((point) => point.name).join(' → ') : null,
       distance: snapshot ? snapshot.totalDistanceMeters / 1000 : null,
-      strategy: strategyLabels[route.strategy], calculatedAt: snapshot ? shanghaiTime(snapshot.calculatedAt) : null, status,
+      strategy: strategyLabels[route.strategy],
+      calculatedAt: snapshot ? shanghaiTime(snapshot.calculatedAt) : null,
+      status,
     });
     if (snapshot) {
       let cumulativeMeters = 0;
       for (const leg of snapshot.legs) {
         cumulativeMeters += leg.distanceMeters;
         details.addRow({
-          project: project.name, routeId: route.id, route: route.name, index: leg.index,
-          origin: leg.from.name, destination: leg.to.name, distance: leg.distanceMeters / 1000,
+          project: project.name,
+          routeId: route.id,
+          route: route.name,
+          index: leg.index,
+          origin: leg.from.name,
+          destination: leg.to.name,
+          distance: leg.distanceMeters / 1000,
           cumulativeDistance: cumulativeMeters / 1000,
         });
       }

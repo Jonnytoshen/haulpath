@@ -7,8 +7,12 @@ import { createServer } from 'node:net';
 import { prepareNextCommand } from '../../scripts/next-command.mjs';
 import { callerEnvironment } from '../../scripts/workspace-environment.mjs';
 
-export async function startApplication(extraEnvironment = {}, existingDirectory, { mode = 'dev' } = {}) {
-  const directory = existingDirectory ?? await mkdtemp(join(tmpdir(), 'haulpath-test-'));
+export async function startApplication(
+  extraEnvironment = {},
+  existingDirectory,
+  { mode = 'dev' } = {},
+) {
+  const directory = existingDirectory ?? (await mkdtemp(join(tmpdir(), 'haulpath-test-')));
   const port = await new Promise((resolve, reject) => {
     const socket = createServer();
     socket.once('error', reject);
@@ -18,15 +22,24 @@ export async function startApplication(extraEnvironment = {}, existingDirectory,
     });
   });
   const baseUrl = `http://127.0.0.1:${port}`;
-  const command = prepareNextCommand(mode, ['--port', String(port)], { ...callerEnvironment(), NEXT_TELEMETRY_DISABLED: '1', HAULPATH_DB_PATH: join(directory, 'test.sqlite'), ...extraEnvironment });
+  const command = prepareNextCommand(mode, ['--port', String(port)], {
+    ...callerEnvironment(),
+    NEXT_TELEMETRY_DISABLED: '1',
+    HAULPATH_DB_PATH: join(directory, 'test.sqlite'),
+    ...extraEnvironment,
+  });
   const server = spawn(command.file, command.args, {
     cwd: command.cwd,
     env: command.env,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let output = '';
-  server.stdout.on('data', (chunk) => { output += chunk; });
-  server.stderr.on('data', (chunk) => { output += chunk; });
+  server.stdout.on('data', (chunk) => {
+    output += chunk;
+  });
+  server.stderr.on('data', (chunk) => {
+    output += chunk;
+  });
   async function stop(signal = 'SIGTERM') {
     if (server.exitCode === null && server.signalCode === null) {
       server.kill(signal);
@@ -34,11 +47,20 @@ export async function startApplication(extraEnvironment = {}, existingDirectory,
     }
   }
   for (let attempt = 0; attempt < 180; attempt++) {
-    if (server.exitCode !== null) throw new Error(`Application exited before readiness:\n${output}`);
+    if (server.exitCode !== null)
+      throw new Error(`Application exited before readiness:\n${output}`);
     try {
       await fetch(`${baseUrl}/api/projects`, { signal: AbortSignal.timeout(1000) });
-      return { baseUrl, directory, stop, cleanup: () => rm(directory, { recursive: true, force: true }), logs: () => output };
-    } catch { await setTimeout(250); }
+      return {
+        baseUrl,
+        directory,
+        stop,
+        cleanup: () => rm(directory, { recursive: true, force: true }),
+        logs: () => output,
+      };
+    } catch {
+      await setTimeout(250);
+    }
   }
   await stop();
   throw new Error(`Application did not become ready:\n${output}`);

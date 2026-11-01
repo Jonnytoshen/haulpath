@@ -15,11 +15,19 @@ export const strategyGroups = [
   {
     label: '组合偏好',
     options: [
-      { value: 39, label: '躲避拥堵＋高速优先', description: '优先避开拥堵路段，并优先选择高速道路。' },
+      {
+        value: 39,
+        label: '躲避拥堵＋高速优先',
+        description: '优先避开拥堵路段，并优先选择高速道路。',
+      },
       { value: 40, label: '躲避拥堵＋不走高速', description: '结合躲避拥堵与不走高速策略测算。' },
       { value: 41, label: '躲避拥堵＋少收费', description: '结合躲避拥堵与少收费偏好测算。' },
       { value: 42, label: '少收费＋不走高速', description: '结合少收费与不走高速策略测算。' },
-      { value: 43, label: '躲避拥堵＋少收费＋不走高速', description: '结合躲避拥堵、少收费与不走高速策略测算。' },
+      {
+        value: 43,
+        label: '躲避拥堵＋少收费＋不走高速',
+        description: '结合躲避拥堵、少收费与不走高速策略测算。',
+      },
       { value: 44, label: '躲避拥堵＋大路优先', description: '优先避开拥堵路段，并优先选择大路。' },
       { value: 45, label: '躲避拥堵＋速度最快', description: '结合躲避拥堵与速度最快策略测算。' },
     ],
@@ -96,7 +104,9 @@ export interface Route {
 }
 
 export const PLANNING_NOTICE = '未校验重卡限高、限重及货车限行';
-export const strategyLabels = Object.fromEntries(strategyGroups.flatMap((group) => group.options.map((option) => [option.value, option.label]))) as Record<Strategy, string>;
+export const strategyLabels = Object.fromEntries(
+  strategyGroups.flatMap((group) => group.options.map((option) => [option.value, option.label])),
+) as Record<Strategy, string>;
 
 export function isStrategy(input: unknown): input is Strategy {
   return strategyGroups.some((group) => group.options.some((option) => option.value === input));

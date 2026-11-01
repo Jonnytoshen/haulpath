@@ -5,13 +5,14 @@ max_score: 40
 na_heuristics:
 p0_count: 0
 p1_count: 0
-target_identity: "file:/Users/chao/.codex/worktrees/overview-map-craft/haulpath/src/components/route-overview-map.tsx"
-target_fingerprint: "sha256:fbfffee5cfa007a49605be1dc8a61a303d09c1aa5872e695f4d8fc2b088c4702"
+target_identity: 'file:/Users/chao/.codex/worktrees/overview-map-craft/haulpath/src/components/route-overview-map.tsx'
+target_fingerprint: 'sha256:fbfffee5cfa007a49605be1dc8a61a303d09c1aa5872e695f4d8fc2b088c4702'
 target_path: /Users/chao/.codex/worktrees/overview-map-craft/haulpath/src/components/route-overview-map.tsx
 timestamp: 2026-10-29T07-53-33Z
 slug: src-components-route-overview-map-tsx
 closed: true
 ---
+
 Method: dual-agent (A: /root/critique_design_a · B: /root/critique_evidence_b)
 
 当前设计评分 **30/40，良好**。地图、线路身份和独立打开入口有清楚的产品逻辑；主要问题集中在连续换线的阅读稳定性，以及短窗口里的资料核对效率。没有发现 P0/P1 阻断问题，有三项值得下一轮处理的 P2。
@@ -20,19 +21,19 @@ Method: dual-agent (A: /root/critique_design_a · B: /root/critique_evidence_b)
 
 ## 设计健康评分
 
-| 项目 | 分数 | 主要依据 |
-| --- | ---: | --- |
-| 系统状态可见 | 3/4 | 选择、结果和配置状态明确；选线缺少辅助播报 |
-| 符合现实语言 | 4/4 | 线路、点位、规划偏好、北京时间表达准确 |
-| 用户控制 | 3/4 | 预览与打开分离；摘要滚动会干扰换线 |
-| 一致性 | 3/4 | 风格连贯；左右两个线路列表的动作不同 |
-| 防错 | 3/4 | 无有效方案不冒充当前里程，浏览不隐式测算 |
-| 识别优于记忆 | 3/4 | 身份信息集中；短屏核心资料需要另滚 |
-| 灵活与效率 | 2/4 | 支持键盘选线，但到所选摘要的路径偏长 |
-| 美观与简洁 | 3/4 | 无装饰噪声，资料区空间分配仍偏紧 |
-| 错误恢复 | 3/4 | 缺配置仍可操作资料；SDK重试本轮仅核对源码 |
-| 帮助与说明 | 3/4 | 配置帮助就地提供，操作说明简短 |
-| **总分** | **30/40** | **良好；优先改善连续核对体验** |
+| 项目         |      分数 | 主要依据                                   |
+| ------------ | --------: | ------------------------------------------ |
+| 系统状态可见 |       3/4 | 选择、结果和配置状态明确；选线缺少辅助播报 |
+| 符合现实语言 |       4/4 | 线路、点位、规划偏好、北京时间表达准确     |
+| 用户控制     |       3/4 | 预览与打开分离；摘要滚动会干扰换线         |
+| 一致性       |       3/4 | 风格连贯；左右两个线路列表的动作不同       |
+| 防错         |       3/4 | 无有效方案不冒充当前里程，浏览不隐式测算   |
+| 识别优于记忆 |       3/4 | 身份信息集中；短屏核心资料需要另滚         |
+| 灵活与效率   |       2/4 | 支持键盘选线，但到所选摘要的路径偏长       |
+| 美观与简洁   |       3/4 | 无装饰噪声，资料区空间分配仍偏紧           |
+| 错误恢复     |       3/4 | 缺配置仍可操作资料；SDK重试本轮仅核对源码  |
+| 帮助与说明   |       3/4 | 配置帮助就地提供，操作说明简短             |
+| **总分**     | **30/40** | **良好；优先改善连续核对体验**             |
 
 ## 设计判断与有效之处
 

@@ -1,8 +1,14 @@
 ---
 version: 1
-slug: "src-components-route-overview-map-tsx"
-primary_target: "src/components/route-overview-map.tsx"
-related_targets: ["src/components/overview-map.tsx", "src/components/route-overview-details.tsx", "src/components/route-overview.tsx", "src/app/globals.css"]
+slug: 'src-components-route-overview-map-tsx'
+primary_target: 'src/components/route-overview-map.tsx'
+related_targets:
+  [
+    'src/components/overview-map.tsx',
+    'src/components/route-overview-details.tsx',
+    'src/components/route-overview.tsx',
+    'src/app/globals.css',
+  ]
 ---
 
 # 项目线路分布

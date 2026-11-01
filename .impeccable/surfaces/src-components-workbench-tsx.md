@@ -1,8 +1,15 @@
 ---
 version: 1
-slug: "src-components-workbench-tsx"
-primary_target: "src/components/workbench.tsx"
-related_targets: ["src/app/globals.css","src/components/project-library.tsx","src/components/route-overview.tsx","src/components/import-dialog.tsx","src/components/map-panel.tsx"]
+slug: 'src-components-workbench-tsx'
+primary_target: 'src/components/workbench.tsx'
+related_targets:
+  [
+    'src/app/globals.css',
+    'src/components/project-library.tsx',
+    'src/components/route-overview.tsx',
+    'src/components/import-dialog.tsx',
+    'src/components/map-panel.tsx',
+  ]
 ---
 
 # 任务画布

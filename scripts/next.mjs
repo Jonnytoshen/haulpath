@@ -6,6 +6,10 @@ const prepared = prepareNextCommand(command === 'typecheck' ? 'typegen' : comman
 const child = runProcess(prepared.file, prepared.args, prepared);
 if (command === 'typecheck') {
   child.once('exit', (code) => {
-    if (code === 0) runProcess(process.execPath, [applicationDependency('typescript/bin/tsc'), '--noEmit'], { cwd: new URL('../apps/web/', import.meta.url), env: prepared.env });
+    if (code === 0)
+      runProcess(process.execPath, [applicationDependency('typescript/bin/tsc'), '--noEmit'], {
+        cwd: new URL('../apps/web/', import.meta.url),
+        env: prepared.env,
+      });
   });
 }

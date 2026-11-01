@@ -43,6 +43,15 @@ export const amapBrowserScript = `(() => {
 
 export async function replaceAmapSDK(page, { failures = 0 } = {}) {
   const state = { requests: 0 };
-  await page.route('https://webapi.amap.com/maps?**', (route) => { state.requests++; return state.requests <= failures ? route.abort('failed') : route.fulfill({ status: 200, contentType: 'application/javascript', body: amapBrowserScript }); });
+  await page.route('https://webapi.amap.com/maps?**', (route) => {
+    state.requests++;
+    return state.requests <= failures
+      ? route.abort('failed')
+      : route.fulfill({
+          status: 200,
+          contentType: 'application/javascript',
+          body: amapBrowserScript,
+        });
+  });
   return state;
 }

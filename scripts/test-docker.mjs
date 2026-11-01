@@ -25,8 +25,10 @@ try {
     const argument = process.argv[index];
     if (argument === '--matrix') matrix = true;
     else if (argument === '--core') core = true;
-    else if (argument === '--platform') { platform = process.argv[++index]; explicitPlatform = true; }
-    else nodeArguments.push(argument);
+    else if (argument === '--platform') {
+      platform = process.argv[++index];
+      explicitPlatform = true;
+    } else nodeArguments.push(argument);
   }
   if ((explicitPlatform || platform) && !['linux/amd64', 'linux/arm64'].includes(platform)) {
     throw new Error('目标架构仅支持 linux/amd64 或 linux/arm64。');
@@ -34,25 +36,38 @@ try {
   if (matrix && explicitPlatform) throw new Error('--matrix 与 --platform 不能同时使用。');
   let engine;
   try {
-    engine = (await run('docker', ['version', '--format', '{{.Server.Version}}'], { timeout: 15000 })).stdout.trim();
+    engine = (
+      await run('docker', ['version', '--format', '{{.Server.Version}}'], { timeout: 15000 })
+    ).stdout.trim();
   } catch (error) {
-    throw new Error(error.code === 'ENOENT'
-      ? 'Docker 命令不可用，请先安装 Docker Engine 28+ 或对应 Docker Desktop。'
-      : 'Docker Engine 不可用，请启动 Docker 并确认当前连接后重试。');
+    throw new Error(
+      error.code === 'ENOENT'
+        ? 'Docker 命令不可用，请先安装 Docker Engine 28+ 或对应 Docker Desktop。'
+        : 'Docker Engine 不可用，请启动 Docker 并确认当前连接后重试。',
+    );
   }
-  if (Number(engine.split('.')[0]) < 28) throw new Error('Docker 验收需要 Docker Engine 28 或更高版本。');
+  if (Number(engine.split('.')[0]) < 28)
+    throw new Error('Docker 验收需要 Docker Engine 28 或更高版本。');
   let compose;
   try {
-    compose = (await run('docker', ['compose', 'version', '--short'], { timeout: 15000 })).stdout.trim().replace(/^v/, '');
+    compose = (await run('docker', ['compose', 'version', '--short'], { timeout: 15000 })).stdout
+      .trim()
+      .replace(/^v/, '');
   } catch {
     throw new Error('Docker Compose 不可用，请安装 Compose 2.30+。');
   }
   const [major, minor] = compose.split('.').map(Number);
-  if (major < 2 || (major === 2 && minor < 30)) throw new Error('Docker 验收需要 Compose 2.30 或更高版本。');
+  if (major < 2 || (major === 2 && minor < 30))
+    throw new Error('Docker 验收需要 Compose 2.30 或更高版本。');
   console.log(`Docker Engine ${engine}；Compose ${compose}`);
   const files = (await readdir(new URL('../tests/docker/', import.meta.url)))
-    .filter((name) => name.endsWith('.test.mjs') && (!(core || matrix) || ['runtime.test.mjs', 'core.test.mjs'].includes(name)))
-    .sort().map((name) => `tests/docker/${name}`);
+    .filter(
+      (name) =>
+        name.endsWith('.test.mjs') &&
+        (!(core || matrix) || ['runtime.test.mjs', 'core.test.mjs'].includes(name)),
+    )
+    .sort()
+    .map((name) => `tests/docker/${name}`);
   let child;
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => child?.kill(signal));
   for (const target of matrix ? ['linux/amd64', 'linux/arm64'] : [platform]) {
@@ -60,13 +75,22 @@ try {
     const environment = { ...process.env };
     if (target) environment.HAULPATH_DOCKER_TEST_PLATFORM = target;
     const code = await new Promise((resolve, reject) => {
-      child = spawn(process.execPath, ['--test', '--test-concurrency=1', ...nodeArguments, ...files], {
-        cwd: root, stdio: 'inherit', env: environment,
-      });
+      child = spawn(
+        process.execPath,
+        ['--test', '--test-concurrency=1', ...nodeArguments, ...files],
+        {
+          cwd: root,
+          stdio: 'inherit',
+          env: environment,
+        },
+      );
       child.once('error', reject);
       child.once('exit', (value) => resolve(value ?? 1));
     });
-    if (code !== 0) { process.exitCode = code; break; }
+    if (code !== 0) {
+      process.exitCode = code;
+      break;
+    }
   }
 } catch (error) {
   console.error(error.message);

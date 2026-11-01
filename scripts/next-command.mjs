@@ -24,9 +24,28 @@ export function prepareNextCommand(command, args = [], environment = process.env
     process.env = previousEnvironment;
   }
   delete prepared[snapshotVariable];
-  prepared.HAULPATH_DB_PATH = resolve(workspaceRoot, prepared.HAULPATH_DB_PATH || 'data/haulpath.sqlite');
-  const defaults = command === 'dev' || command === 'start' ? ['--hostname', '127.0.0.1'] : command === 'build' ? ['--webpack'] : [];
-  return { file: process.execPath, args: [applicationRequire.resolve('next/dist/bin/next'), command, applicationRoot, ...defaults, ...args], cwd: workspaceRoot, env: prepared };
+  prepared.HAULPATH_DB_PATH = resolve(
+    workspaceRoot,
+    prepared.HAULPATH_DB_PATH || 'data/haulpath.sqlite',
+  );
+  const defaults =
+    command === 'dev' || command === 'start'
+      ? ['--hostname', '127.0.0.1']
+      : command === 'build'
+        ? ['--webpack']
+        : [];
+  return {
+    file: process.execPath,
+    args: [
+      applicationRequire.resolve('next/dist/bin/next'),
+      command,
+      applicationRoot,
+      ...defaults,
+      ...args,
+    ],
+    cwd: workspaceRoot,
+    env: prepared,
+  };
 }
 
 export function applicationDependency(name) {

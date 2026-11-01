@@ -2,8 +2,10 @@ import { setTimeout } from 'node:timers/promises';
 
 const port = 47653;
 export const amapEnvironment = {
-  HAULPATH_TEST_MODE: '1', AMAP_API_BASE_URL: `http://127.0.0.1:${port}`,
-  AMAP_WEB_SERVICE_KEY: 'docker-test-web-key', AMAP_JS_KEY: 'docker-test-js-key',
+  HAULPATH_TEST_MODE: '1',
+  AMAP_API_BASE_URL: `http://127.0.0.1:${port}`,
+  AMAP_WEB_SERVICE_KEY: 'docker-test-web-key',
+  AMAP_JS_KEY: 'docker-test-js-key',
   AMAP_JS_SECURITY_CODE: 'docker-test-security-code',
 };
 
@@ -47,15 +49,26 @@ createServer(async (request, response) => {
 `;
 
 export async function injectAmap(app) {
-  await app.compose(['exec', '--detach', '--no-TTY', 'app', 'node', '--input-type=module', '--eval', source]);
+  await app.compose([
+    'exec',
+    '--detach',
+    '--no-TTY',
+    'app',
+    'node',
+    '--input-type=module',
+    '--eval',
+    source,
+  ]);
   const control = async (body) => {
     const options = body === undefined ? {} : { method: 'POST', body: JSON.stringify(body) };
     const script = `const response = await fetch('http://127.0.0.1:${port}/__fixture', ${JSON.stringify(options)}); if (!response.ok) throw new Error('fixture control failed'); process.stdout.write(await response.text());`;
     return JSON.parse((await app.exec(['node', '--input-type=module', '--eval', script])).stdout);
   };
   for (let attempt = 0; attempt < 30; attempt++) {
-    try { await control(); return { state: () => control(), holdAfter: (count) => control({ holdAfter: count }) }; }
-    catch (error) {
+    try {
+      await control();
+      return { state: () => control(), holdAfter: (count) => control({ holdAfter: count }) };
+    } catch (error) {
       if (attempt === 29) throw error;
       await setTimeout(100);
     }

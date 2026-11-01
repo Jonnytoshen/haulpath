@@ -1,9 +1,7 @@
 {
   "$schema": "./node_modules/nx/schemas/nx-schema.json",
   "release": {
-    "projects": [
-      "haulpath"
-    ],
+    "projects": ["haulpath"],
     "projectsRelationship": "fixed",
     "releaseTag": {
       "pattern": "v{version}",
