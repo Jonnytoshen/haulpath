@@ -18,55 +18,55 @@ type(scope): summary
 
 scope 可省略；填写时只能选一个完整的小写值。冒号后恰好一个空格，标题无首尾空白，整体最多 100 个字符，计数包含类型、范围和标点。摘要必须非空，以英文小写字母开头，使用英文祈使句，末尾不加英文句点；摘要内部允许 `Next.js`、`SQLite` 等技术名称的大写字母。
 
-| type | 用途 |
-| --- | --- |
-| `build` | 构建系统、依赖或开发工具链变更。 |
-| `ci` | 持续集成配置和脚本；保留此类型不表示当前已有 CI。 |
-| `docs` | 仅涉及文档的变更。 |
-| `feat` | 新增功能。 |
-| `fix` | 修复缺陷。 |
-| `perf` | 改善性能的代码变更。 |
-| `refactor` | 不新增功能、不修复缺陷的代码重构。 |
-| `test` | 增补或修正测试。 |
-| `chore` | 其他维护性变更。 |
-| `style` | 不改变代码含义的格式调整；界面功能或视觉行为变更不能仅因涉及样式就使用此类型。 |
-| `revert` | 撤销已有提交，必须补全下文的撤销说明。 |
+| type       | 用途                                                                           |
+| ---------- | ------------------------------------------------------------------------------ |
+| `build`    | 构建系统、依赖或开发工具链变更。                                               |
+| `ci`       | 持续集成配置和脚本；保留此类型不表示当前已有 CI。                              |
+| `docs`     | 仅涉及文档的变更。                                                             |
+| `feat`     | 新增功能。                                                                     |
+| `fix`      | 修复缺陷。                                                                     |
+| `perf`     | 改善性能的代码变更。                                                           |
+| `refactor` | 不新增功能、不修复缺陷的代码重构。                                             |
+| `test`     | 增补或修正测试。                                                               |
+| `chore`    | 其他维护性变更。                                                               |
+| `style`    | 不改变代码含义的格式调整；界面功能或视觉行为变更不能仅因涉及样式就使用此类型。 |
+| `revert`   | 撤销已有提交，必须补全下文的撤销说明。                                         |
 
-| scope | 含义 |
-| --- | --- |
-| `project` | 项目管理及项目归属。 |
-| `route` | 线路及其有序点位、草稿和维护操作。 |
-| `point` | 点位、项目点位库及点位复用。 |
+| scope      | 含义                                         |
+| ---------- | -------------------------------------------- |
+| `project`  | 项目管理及项目归属。                         |
+| `route`    | 线路及其有序点位、草稿和维护操作。           |
+| `point`    | 点位、项目点位库及点位复用。                 |
 | `planning` | 行前测算、区间汇总及路线方案的结果生命周期。 |
-| `map` | 地图显示、地点搜索和地图交互。 |
-| `import` | 文件导入、预览、列映射与确认。 |
-| `export` | 线路或项目导出及工作簿输出。 |
-| `storage` | 本机数据持久化和数据访问。 |
-| `ui` | 界面结构、展示和通用交互。 |
-| `git` | Git 提交约束及仓库提交操作。 |
-| `deps` | 依赖与版本管理。 |
-| `tooling` | 其他开发工具和辅助工程能力。 |
+| `map`      | 地图显示、地点搜索和地图交互。               |
+| `import`   | 文件导入、预览、列映射与确认。               |
+| `export`   | 线路或项目导出及工作簿输出。                 |
+| `storage`  | 本机数据持久化和数据访问。                   |
+| `ui`       | 界面结构、展示和通用交互。                   |
+| `git`      | Git 提交约束及仓库提交操作。                 |
+| `deps`     | 依赖与版本管理。                             |
+| `tooling`  | 其他开发工具和辅助工程能力。                 |
 
 scope 表达改动范围，不绑定目录。跨范围改动可省略 scope，但仍须具有同一目的。不能用逗号、斜杠或反斜杠组合多个 scope；新增 scope 时同步修改规格、规则、测试和本指南。
 
-| 合法示例 | 说明 |
-| --- | --- |
-| `feat(route): preserve point order` | 单一业务范围与英文祈使句。 |
+| 合法示例                                   | 说明                         |
+| ------------------------------------------ | ---------------------------- |
+| `feat(route): preserve point order`        | 单一业务范围与英文祈使句。   |
 | `build(deps): update Next.js dependencies` | 摘要内部保留技术名称大小写。 |
-| `fix(storage): preserve SQLite snapshots` | 存储范围。 |
-| `docs: clarify planning limits` | 不填写 scope。 |
+| `fix(storage): preserve SQLite snapshots`  | 存储范围。                   |
+| `docs: clarify planning limits`            | 不填写 scope。               |
 
-| 非法示例 | 原因 |
-| --- | --- |
-| `feature(route): preserve point order` | 未知类型。 |
-| `feat(routes): preserve point order` | 未知 scope。 |
+| 非法示例                                  | 原因                                   |
+| ----------------------------------------- | -------------------------------------- |
+| `feature(route): preserve point order`    | 未知类型。                             |
+| `feat(routes): preserve point order`      | 未知 scope。                           |
 | `feat(route,point): preserve point order` | 多个 scope；斜杠或反斜杠组合也不允许。 |
-| `feat(route):  preserve point order` | 冒号后多一个空格。 |
-| `feat(route): Preserve point order` | 摘要以大写字母开头。 |
-| `feat(route): 保留点位顺序` | 摘要未以英文小写字母开头。 |
-| `feat(route): preserve point order.` | 摘要末尾有英文句点。 |
-| `feat(route)!: change point order` | 不接受标题中的破坏性变更简写。 |
-| `feat(route): wip preserve point order` | 摘要带临时前缀。 |
+| `feat(route):  preserve point order`      | 冒号后多一个空格。                     |
+| `feat(route): Preserve point order`       | 摘要以大写字母开头。                   |
+| `feat(route): 保留点位顺序`               | 摘要未以英文小写字母开头。             |
+| `feat(route): preserve point order.`      | 摘要末尾有英文句点。                   |
+| `feat(route)!: change point order`        | 不接受标题中的破坏性变更简写。         |
+| `feat(route): wip preserve point order`   | 摘要带临时前缀。                       |
 
 `WIP`、`fixup!`、`squash!` 和 `amend!` 临时标题或摘要前缀均被拒绝，包括 Git 自动生成的对应标题；正文中讨论这些操作不受影响。空消息、纯空白和仅有 Git 注释的消息也不能通过。
 
@@ -152,6 +152,16 @@ pnpm run test:commits
 统一入口通过薄启动层执行真实 commitlint CLI，并默认传入 `--strict`。薄层补齐 commitlint `20.5.3` 跳过空消息文件及历史空消息的行为；历史范围复用官方读取 API，保持起止边界一致，消息规则仍由同一份共享配置与项目规则完成。项目关闭默认忽略，将必要空行设为错误，保留 100 字符标题上限并关闭正文与页脚行长限制；仅继承 conventional preset 不足以表达全部约定。
 
 错误返回非零退出码，并显示规则名称和修正提示。按反馈修改原消息后重新校验或提交即可；`git commit --amend` 同样执行检查。`pnpm run test:commits` 覆盖真实 CLI、消息文件和区间，以及隔离临时 Git 仓库中的安装修复、普通提交、修订、合并和撤销；测试不修改当前仓库签名设置。历史 22 项通过记录见[提交工具验收记录](../acceptance.md#2026-10-21-提交工具验收)，不代表当前 HEAD 已重新验证。
+
+## 代码格式检查
+
+提交前 `pre-commit` 执行 `pnpm run format:staged`，只读检查 Git index 中本次新增、修改和重命名后的普通文件；删除项、忽略项及不支持的类型跳过。工作区里的未暂存修改不代替实际待提交内容，符号链接不作为源码解析。配置与忽略规则使用当前工作区的根配置。空提交没有待检查文件时通过，原有 `commit-msg` 仍独立校验提交消息。
+
+检查失败会列出文件并返回非零。可运行 `pnpm run format` 修正格式，然后用 `git diff` 和 `git diff --cached` 核对工作区及待提交内容，重新暂存需要的修改后提交。部分暂存文件应手动保留所需边界，不要为了通过检查直接暂存整文件；也可以用 `pnpm exec prettier --write -- <文件>` 定向修复。检查不会自动改写、暂存或隐藏任何修改。
+
+`pnpm run format:check` 只读检查整个工作区；它和暂存区检查的输入不同，不能互相替代。统一规则为单引号、分号、两空格缩进、100 列行宽。生成产物、本地资料、锁文件、测试数据夹具、品牌 SVG 和 Nx 生成的根变更日志不参与格式检查，测试源码仍参与。
+
+安装依赖时若使用 `--ignore-scripts`，需按上文执行 `pnpm run prepare` 安装或修复两个 hook；独立 worktree 使用上文的 worktree 专属 `GIT_CONFIG` 命令，不能改写其他工作副本的 hook 配置。检查依赖需完整安装；配置或执行错误也会阻止提交，应按诊断修复后重试。hook 可以被跳过，不构成远端门禁；本次不新增发布前自动检查或修改 Nx 原生发布入口。
 
 ## 检查边界与维护
 

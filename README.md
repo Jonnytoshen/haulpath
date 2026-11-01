@@ -19,12 +19,12 @@ test -e .env.local || cp .env.example .env.local
 
 环境文件保留在仓库根目录，无需移入 `apps/web`。在根 `.env.local` 填写自己的高德凭证：
 
-| 变量 | 用途 |
-| --- | --- |
-| `AMAP_WEB_SERVICE_KEY` | 服务端驾车规划、WGS84 坐标转换 |
-| `AMAP_JS_KEY` | 高德 JS API 2.0 地图、地点搜索；浏览器可见 |
-| `AMAP_JS_SECURITY_CODE` | 与 JS Key 配套的安全密钥，服务端通过受控代理使用 |
-| `HAULPATH_DB_PATH` | SQLite 路径，默认 `./data/haulpath.sqlite`；相对路径以仓库根目录为准 |
+| 变量                    | 用途                                                                 |
+| ----------------------- | -------------------------------------------------------------------- |
+| `AMAP_WEB_SERVICE_KEY`  | 服务端驾车规划、WGS84 坐标转换                                       |
+| `AMAP_JS_KEY`           | 高德 JS API 2.0 地图、地点搜索；浏览器可见                           |
+| `AMAP_JS_SECURITY_CODE` | 与 JS Key 配套的安全密钥，服务端通过受控代理使用                     |
+| `HAULPATH_DB_PATH`      | SQLite 路径，默认 `./data/haulpath.sqlite`；相对路径以仓库根目录为准 |
 
 Web 服务 Key 与 JS 安全密钥不发送到浏览器。请按高德控制台要求配置对应服务权限与本机访问来源。无凭证时仍可管理项目、线路草稿、GCJ-02 点位及导出；地图、规划和 WGS84 转换会提示缺少相应配置。
 
@@ -81,11 +81,11 @@ docker compose --env-file .env.docker up --detach --build --wait app
 
 支持高德普通驾车 v5 文档列出的全部 17 项策略。原生下拉框按下列顺序分组，选择后显示当前项的简短说明；每次选择一个完整策略，整条线路统一使用。
 
-| 分组 | 选项 |
-| --- | --- |
-| 常用偏好 | 高德推荐、躲避拥堵、高速优先、不走高速、少收费、大路优先、速度最快 |
+| 分组     | 选项                                                                                                                                           |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| 常用偏好 | 高德推荐、躲避拥堵、高速优先、不走高速、少收费、大路优先、速度最快                                                                             |
 | 组合偏好 | 躲避拥堵＋高速优先、躲避拥堵＋不走高速、躲避拥堵＋少收费、少收费＋不走高速、躲避拥堵＋少收费＋不走高速、躲避拥堵＋大路优先、躲避拥堵＋速度最快 |
-| 其他策略 | 速度优先、费用优先、常规最快 |
+| 其他策略 | 速度优先、费用优先、常规最快                                                                                                                   |
 
 “速度优先”“费用优先”“常规最快”按高德文档只返回一条路线；其他策略仍按既有规则采用各区间返回的第一条方案。“少收费”不等于不走收费路段，也不把任何策略解释为距离最短或重卡通行保证。策略含义以[高德路径规划 2.0 文档](https://developer.amap.com/api/webservice/guide/api/newroute)为准。
 
@@ -97,11 +97,11 @@ docker compose --env-file .env.docker up --detach --build --wait app
 
 仓库使用 pnpm workspace 和 Nx，只有一个 Next.js 应用和一个内部领域包；它们共同组成重途产品：
 
-| 位置 | 职责 |
-| --- | --- |
-| [`apps/web`](apps/web/) | `@haulpath/web`，页面、同源 HTTP API、SQLite、规划、地图、导入导出和静态资源 |
+| 位置                                  | 职责                                                                               |
+| ------------------------------------- | ---------------------------------------------------------------------------------- |
+| [`apps/web`](apps/web/)               | `@haulpath/web`，页面、同源 HTTP API、SQLite、规划、地图、导入导出和静态资源       |
 | [`packages/domain`](packages/domain/) | `@haulpath/domain`，平台无关的领域类型、规划偏好目录、路线方案状态和里程格式化规则 |
-| 仓库根目录 | 唯一锁文件、产品版本、发布日志、任务入口及集成测试 |
+| 仓库根目录                            | 唯一锁文件、产品版本、发布日志、任务入口及集成测试                                 |
 
 应用以 `workspace:*` 依赖领域包，通过包名直接消费 TypeScript 源码，由 Next.js 转译；领域包无需预构建或额外监听。两个子包均私有且无独立版本，领域仍是一个业务上下文。架构取舍见 [ADR 0004](docs/adr/0004-workspace-and-single-product.md)。
 
@@ -112,6 +112,18 @@ docker compose --env-file .env.docker up --detach --build --wait app
 ```sh
 pnpm run dev
 ```
+
+代码格式由根 Prettier 配置统一约定：单引号、分号、两空格缩进、100 列行宽。根命令通过 Nx 执行，默认覆盖整个工作区，与分支比较基线无关：
+
+```sh
+pnpm run format
+pnpm run format:check
+# 显式检查少量文件或某个 Git 基线之后的已提交修改：
+pnpm exec nx format:check --files=README.md,package.json
+pnpm exec nx format:check --base=main --head=HEAD
+```
+
+格式化包含源码、测试源码、常规配置、Markdown 和 CSS 等受支持文件；根忽略规则排除生成产物、本地资料、锁文件、测试数据夹具、品牌 SVG 及自动生成的根 CHANGELOG。只读 `pnpm run format:staged` 检查实际暂存内容，提交前 hook 自动调用它；失败后修正并重新核对暂存内容，部分暂存尤其不要直接暂存整文件。安装与故障处理见[提交约定](docs/agents/git-commits.md#代码格式检查)，格式化器检测及原生能力见 [Nx Code Formatting Reference](https://nx.dev/docs/reference/code-formatting)。
 
 验证入口：
 
