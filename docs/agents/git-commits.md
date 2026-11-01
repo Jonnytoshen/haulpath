@@ -121,7 +121,7 @@ pnpm install --dev --ignore-scripts --frozen-lockfile
 pnpm run prepare
 ```
 
-缓存齐全时，安装命令可加 `--offline`。安装开发依赖时通常由 `prepare` 生命周期配置 hook；若跳过生命周期脚本，或需要修复 hook，显式执行 `pnpm run prepare`。不要依赖重复安装一定会再次执行生命周期。项目仅配置 `commit-msg`，不在该 hook 中运行应用检查，也未配置 `pre-commit`。
+缓存齐全时，安装命令可加 `--offline`。安装开发依赖时通常由 `prepare` 生命周期配置 hook；若跳过生命周期脚本，或需要修复 hook，显式执行 `pnpm run prepare`。不要依赖重复安装一定会再次执行生命周期。项目配置两个 hook：`pre-commit` 只读检查暂存区代码格式，`commit-msg` 校验提交消息；两者都不运行应用类型检查、构建或完整测试。
 
 在已启用 `extensions.worktreeConfig` 的独立 worktree 中，使用以下命令仅向当前 worktree 配置安装 hook，避免改变共享的 `core.hooksPath`：
 
