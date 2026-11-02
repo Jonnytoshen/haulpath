@@ -32,7 +32,11 @@ const detailColumns = [
 
 function addSheet(workbook: ExcelJS.Workbook, name: string, columns: Partial<ExcelJS.Column>[]) {
   const sheet = workbook.addWorksheet(name, { views: [{ state: 'frozen', ySplit: 2 }] });
-  sheet.columns = columns.map(({ header: _header, ...column }) => column);
+  sheet.columns = columns.map((column) => {
+    const options = { ...column };
+    delete options.header;
+    return options;
+  });
   sheet.mergeCells(1, 1, 1, columns.length);
   sheet.getCell('A1').value = PLANNING_NOTICE;
   sheet.getRow(1).height = 28;

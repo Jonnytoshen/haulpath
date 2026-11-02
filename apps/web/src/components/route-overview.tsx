@@ -1,6 +1,13 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, type Dispatch, type SetStateAction } from 'react';
+import {
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useRef,
+  type Dispatch,
+  type SetStateAction,
+} from 'react';
 
 import { Map, Plus, Route as RouteIcon, Search, TableProperties } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -81,8 +88,9 @@ export default function RouteOverview({
   createDisabled,
 }: Props) {
   const scroll = useRef<HTMLDivElement>(null);
+  const restoreScroll = useEffectEvent(() => scroll.current?.scrollTo(browsing.left, browsing.top));
   useLayoutEffect(() => {
-    scroll.current?.scrollTo(browsing.left, browsing.top);
+    restoreScroll();
   }, [loaded, browsing.view]);
   const query = browsing.query.trim().toLocaleLowerCase();
   const visible = routes.filter(

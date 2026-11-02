@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import type { Point, Route } from '@haulpath/domain';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { Leg, Point, Route } from '@haulpath/domain';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { MapPin, Search } from 'lucide-react';
@@ -114,20 +114,37 @@ export default function MapPanel({
   const sdk = useRef<AMapSDK | null>(null);
   const services = useRef<{ autocomplete: SearchService; places: SearchService } | null>(null);
   const callbacks = useRef({ onCandidate, onLibraryPoint });
-  callbacks.current = { onCandidate, onLibraryPoint };
-  const [ready, setReady] = useState(false);
-  const [failure, setFailure] = useState('');
+  useLayoutEffect(() => {
+    callbacks.current = { onCandidate, onLibraryPoint };
+  }, [onCandidate, onLibraryPoint]);
+  const [mapStatus, setMapStatus] = useState({ session: '', ready: false, failure: '' });
   const [retry, setRetry] = useState(0);
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
   const [candidates, setCandidates] = useState<Poi[]>([]);
   const searchVersion = useRef(0);
+  const invalidateSearch = useCallback(() => {
+    searchVersion.current++;
+  }, []);
+  const routeId = route?.id;
+  const [searchRoute, setSearchRoute] = useState(routeId);
+  // Clear search UI before committing another route; the effect invalidates SDK callbacks.
+  if (searchRoute !== routeId) {
+    setSearchRoute(routeId);
+    setQuery('');
+    setCandidates([]);
+    setSearchError('');
+    setSearching(false);
+  }
+  const mapKey = config?.mapKey ?? '';
+  const securityProxyPath = config?.securityProxyPath ?? '/_AMapService';
+  const mapSession = JSON.stringify([mapKey, securityProxyPath, retry]);
+  const ready = mapStatus.session === mapSession && mapStatus.ready;
+  const failure = mapStatus.session === mapSession ? mapStatus.failure : '';
 
   useEffect(() => {
-    setReady(false);
-    setFailure('');
-    if (!config?.mapKey || !container.current) return;
+    if (!mapKey || !container.current) return;
     let cancelled = false;
     let instance: MapInstance | null = null;
     const onClick = (event: MapEvent) => {
@@ -142,7 +159,7 @@ export default function MapPanel({
     };
     (async () => {
       try {
-        const api = await loadMapSDK<AMapSDK>(config, [
+        const api = await loadMapSDK<AMapSDK>({ mapKey, securityProxyPath }, [
           'AMap.AutoComplete',
           'AMap.PlaceSearch',
           'AMap.MarkerCluster',
@@ -161,45 +178,39 @@ export default function MapPanel({
           places: new api.PlaceSearch({ city: '全国', pageSize: 10, extensions: 'base' }),
         };
         instance.on('click', onClick);
-        setReady(true);
+        setMapStatus({ session: mapSession, ready: true, failure: '' });
       } catch (error) {
         if (!cancelled)
-          setFailure(
-            `地图加载失败：${error instanceof Error ? error.message : String(error)}。请检查网络、JS Key 与 JS 安全密钥配置。`,
-          );
+          setMapStatus({
+            session: mapSession,
+            ready: false,
+            failure: `地图加载失败：${error instanceof Error ? error.message : String(error)}。请检查网络、JS Key 与 JS 安全密钥配置。`,
+          });
       }
     })();
     return () => {
       cancelled = true;
-      searchVersion.current++;
+      invalidateSearch();
       services.current = null;
       sdk.current = null;
       map.current = null;
       instance?.off('click', onClick);
       instance?.destroy();
     };
-  }, [config?.mapKey, config?.securityProxyPath, retry]);
+  }, [mapKey, securityProxyPath, mapSession, invalidateSearch]);
 
   useEffect(() => {
-    searchVersion.current++;
-    setQuery('');
-    setCandidates([]);
-    setSearchError('');
-    setSearching(false);
-  }, [route?.id]);
+    invalidateSearch();
+  }, [routeId, invalidateSearch]);
 
+  // Give the SDK one immutable geometry snapshot without reacting to unrelated route metadata.
   const overlayKey = JSON.stringify({
-    points: route?.points.map(({ id, name, longitude, latitude }) => [
-      id,
-      name,
-      longitude,
-      latitude,
-    ]),
+    points: route?.points ?? [],
     legs:
       route?.snapshot?.inputVersion === route?.inputVersion
-        ? route?.snapshot?.legs.map(({ polyline }) => polyline)
-        : null,
-    library: library.map(({ id, name, longitude, latitude }) => [id, name, longitude, latitude]),
+        ? (route?.snapshot?.legs.map(({ polyline }) => ({ polyline })) ?? [])
+        : [],
+    library,
   });
   useEffect(() => {
     if (!ready || !map.current || !sdk.current) return;
@@ -217,7 +228,15 @@ export default function MapPanel({
       content.setAttribute('aria-label', `地图点位 ${point.name}`);
       return content;
     };
-    const points = route?.points ?? [];
+    const {
+      points,
+      legs,
+      library: overlayLibrary,
+    } = JSON.parse(overlayKey) as {
+      points: Point[];
+      legs: Pick<Leg, 'polyline'>[];
+      library: Point[];
+    };
     points.forEach((point, index) => {
       const content = markerContent(
         point,
@@ -238,8 +257,8 @@ export default function MapPanel({
       overlays.push(marker);
       routeOverlays.push(marker);
     });
-    if (route?.snapshot && route.snapshot.inputVersion === route.inputVersion) {
-      route.snapshot.legs.forEach((leg) => {
+    if (legs.length) {
+      legs.forEach((leg) => {
         const line = new api.Polyline({
           path: leg.polyline,
           strokeColor: '#176b55',
@@ -256,10 +275,13 @@ export default function MapPanel({
       });
     }
     let cluster: Cluster | null = null;
-    if (library.length >= 100) {
+    if (overlayLibrary.length >= 100) {
       cluster = new api.MarkerCluster(
         instance,
-        library.map((point) => ({ lnglat: [point.longitude, point.latitude], extData: point })),
+        overlayLibrary.map((point) => ({
+          lnglat: [point.longitude, point.latitude],
+          extData: point,
+        })),
         { gridSize: 60, maxZoom: 17 },
       );
       cluster.on?.('click', (event) => {
@@ -268,7 +290,7 @@ export default function MapPanel({
         else instance.setFitView();
       });
     } else {
-      library.forEach((point) => {
+      overlayLibrary.forEach((point) => {
         const marker = new api.Marker({
           position: [point.longitude, point.latitude],
           content: markerContent(point, '', 'marker-library'),
@@ -296,13 +318,7 @@ export default function MapPanel({
 
   useEffect(() => {
     const version = ++searchVersion.current;
-    setSearchError('');
-    if (!query.trim() || !ready || !services.current) {
-      setCandidates([]);
-      setSearching(false);
-      return;
-    }
-    setSearching(true);
+    if (!query.trim() || !ready || !services.current) return;
     const timer = setTimeout(
       () =>
         services.current?.autocomplete.search(query.trim(), (status, result) => {
@@ -318,9 +334,9 @@ export default function MapPanel({
     );
     return () => {
       clearTimeout(timer);
-      searchVersion.current++;
+      invalidateSearch();
     };
-  }, [query, ready]);
+  }, [query, ready, invalidateSearch]);
 
   function searchPlaces() {
     if (!query.trim() || !services.current) return;
@@ -387,7 +403,12 @@ export default function MapPanel({
             <Input
               aria-label="搜索地点"
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setSearchError('');
+                setCandidates([]);
+                setSearching(!!event.target.value.trim());
+              }}
               placeholder="搜索地点，确认后加入线路"
               autoComplete="off"
             />

@@ -51,6 +51,8 @@ function workspace(t) {
     'nx.json',
     'pnpm-lock.yaml',
     'tsconfig.base.json',
+    'eslint.config.mjs',
+    'eslint.shared.mjs',
   ])
     cpSync(join(root, file), join(directory, file));
   writeFileSync(
@@ -64,6 +66,7 @@ function workspace(t) {
   cpSync(join(root, 'apps/web/package.json'), join(directory, 'apps/web/package.json'), {
     recursive: true,
   });
+  cpSync(join(root, 'apps/web/eslint.config.mjs'), join(directory, 'apps/web/eslint.config.mjs'));
   symlinkSync(join(root, 'node_modules'), join(directory, 'node_modules'), 'dir');
   const environment = testEnvironment({ NX_LOAD_DOT_ENV_FILES: 'false' });
   function check({ cached = false, success = true } = {}) {

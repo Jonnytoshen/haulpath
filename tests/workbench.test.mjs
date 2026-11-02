@@ -1,3 +1,5 @@
+// Browser globals below are evaluated inside Playwright page callbacks.
+/* global document, window */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
@@ -169,6 +171,48 @@ test(
       await page.getByRole('heading', { name: '偏好草稿', exact: true }).waitFor();
       await goTask(page, '测算线路');
       assert.equal(await select.inputValue(), '44');
+      assert.deepEqual(context.errors, []);
+    } finally {
+      await context.close();
+    }
+  },
+);
+
+test(
+  'brand home navigation clears URL state and reloads the browsing session',
+  { timeout: 120000 },
+  async () => {
+    const context = await openWorkbench();
+    const { page, app } = context;
+    try {
+      await page.goto(`${app.baseUrl}/?entry=brand`);
+      await createProject(page, '品牌导航项目');
+      await createRoute(page, '品牌导航线路');
+      await page.getByRole('link', { name: '跳到线路编辑', exact: true }).focus();
+      await page.keyboard.press('Enter');
+      assert.equal(page.url(), `${app.baseUrl}/?entry=brand#line-editor`);
+
+      const documents = [];
+      page.on('request', (request) => {
+        if (request.isNavigationRequest() && request.frame() === page.mainFrame())
+          documents.push(request.url());
+      });
+      await Promise.all([
+        page.waitForEvent('domcontentloaded'),
+        page.getByRole('link', { name: '重途首页', exact: true }).click(),
+      ]);
+      assert.equal(
+        page.url(),
+        `${app.baseUrl}/`,
+        'home navigation clears both the query and the fragment',
+      );
+      assert.deepEqual(
+        documents,
+        [`${app.baseUrl}/`],
+        'home loads the root document rather than retaining the client session',
+      );
+      await assertOverview(page);
+      await openRouteFromSidebar(page, '品牌导航线路');
       assert.deepEqual(context.errors, []);
     } finally {
       await context.close();

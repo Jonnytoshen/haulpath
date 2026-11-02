@@ -110,5 +110,35 @@
       "commitMessage": "chore: release v{version}"
     }
   },
+  "plugins": [
+    {
+      "plugin": "@nx/eslint/plugin",
+      "options": {
+        "targetName": "lint"
+      }
+    }
+  ],
+  "namedInputs": {
+    "lint": [
+      "default",
+      "{workspaceRoot}/eslint.config.mjs",
+      "{workspaceRoot}/eslint.shared.mjs",
+      "{workspaceRoot}/package.json",
+      "{workspaceRoot}/pnpm-lock.yaml",
+      {
+        "runtime": "node --version"
+      }
+    ]
+  },
+  "targetDefaults": {
+    "lint": {
+      "cache": true,
+      "inputs": ["lint"],
+      "outputs": [],
+      "options": {
+        "max-warnings": 0
+      }
+    }
+  },
   "analytics": false
 }

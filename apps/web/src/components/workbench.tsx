@@ -9,6 +9,7 @@ import {
   type SetStateAction,
   type FormEvent,
 } from 'react';
+import Link from 'next/link';
 import {
   ArrowDown,
   ArrowUp,
@@ -114,14 +115,17 @@ export default function Workbench() {
     beginPlanning,
     isPlanningCurrent,
     endPlanning,
+    applyRoute: applyCachedRoute,
   } = routeCache;
   const [projectView, setProjectView] = useState<{
     projectId: string;
     view: 'overview' | 'workbench' | 'library';
   }>({ projectId: '', view: 'overview' });
   const view = projectView.projectId === projectId ? projectView.view : 'overview';
-  const setView = (next: 'overview' | 'workbench' | 'library') =>
-    setProjectView({ projectId, view: next });
+  const setView = useCallback(
+    (next: 'overview' | 'workbench' | 'library') => setProjectView({ projectId, view: next }),
+    [projectId],
+  );
   const [task, setTask] = useState<'edit' | 'plan' | 'results'>('edit');
   const [choosingPoints, setChoosingPoints] = useState(false);
   const [focusRequest, requestFocus] = useState(0);
@@ -132,11 +136,14 @@ export default function Workbench() {
   }));
   const overviewBrowsing =
     overviewSession.projectId === projectId ? overviewSession.value : emptyOverviewBrowsing();
-  const setOverviewBrowsing: Dispatch<SetStateAction<OverviewBrowsing>> = (next) =>
-    setOverviewSession((current) => {
-      const value = current.projectId === projectId ? current.value : emptyOverviewBrowsing();
-      return { projectId, value: typeof next === 'function' ? next(value) : next };
-    });
+  const setOverviewBrowsing = useCallback<Dispatch<SetStateAction<OverviewBrowsing>>>(
+    (next) =>
+      setOverviewSession((current) => {
+        const value = current.projectId === projectId ? current.value : emptyOverviewBrowsing();
+        return { projectId, value: typeof next === 'function' ? next(value) : next };
+      }),
+    [projectId],
+  );
   const [route, setRoute] = useState<Route | null>(null);
   const routeRef = useRef<Route | null>(null);
   const projectRef = useRef('');
@@ -170,10 +177,7 @@ export default function Workbench() {
   const project = projects.find((item) => item.id === projectId);
   const valid = !!route?.snapshot && route.snapshot.inputVersion === route.inputVersion;
   const planningReady = config?.webServiceConfigured === true;
-  const canUndo =
-    removedPoint?.projectId === projectId &&
-    removedPoint?.routeId === route?.id &&
-    removedPoint.scope === undoScope.current;
+  const canUndo = removedPoint?.projectId === projectId && removedPoint?.routeId === route?.id;
 
   const selectRoute = useCallback((next: Route | null) => {
     if (routeRef.current?.id !== next?.id || routeRef.current?.projectId !== next?.projectId) {
@@ -185,9 +189,33 @@ export default function Workbench() {
   }, []);
   const applyRoute = useCallback(
     (next: Route, read: ProjectRouteRead) => {
-      if (routeCache.applyRoute(next, read) && routeRef.current?.id === next.id) selectRoute(next);
+      if (applyCachedRoute(next, read) && routeRef.current?.id === next.id) selectRoute(next);
     },
-    [routeCache.applyRoute, selectRoute],
+    [applyCachedRoute, selectRoute],
+  );
+
+  const changeProject = useCallback(
+    (nextId: string) => {
+      if (projectRef.current === nextId) return;
+      projectRef.current = nextId;
+      selection.current++;
+      setProjectId(nextId);
+      setProjectView({ projectId: nextId, view: 'overview' });
+      setOverviewSession({ projectId: nextId, value: emptyOverviewBrowsing() });
+      selectRoute(null);
+      setLibrary([]);
+      setLoading(!!nextId);
+      setPointEditor(null);
+      setImporting(false);
+      setError('');
+      setNotice('');
+      setRouteSearch('');
+      setLibrarySearch('');
+      setTask('edit');
+      setChoosingPoints(false);
+      setLibraryDelete(null);
+    },
+    [selectRoute],
   );
 
   useEffect(() => {
@@ -201,13 +229,13 @@ export default function Workbench() {
       .then((items) => {
         if (cancelled) return;
         setProjects(items);
-        setProjectId(items[0]?.id ?? '');
+        changeProject(items[0]?.id ?? '');
       })
       .catch((failure) => {
         if (!cancelled) setError(errorMessage(failure));
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && !projectRef.current) setLoading(false);
       });
     request<MapConfig>('/api/config')
       .then((value) => {
@@ -224,26 +252,11 @@ export default function Workbench() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [changeProject]);
 
   useEffect(() => {
-    projectRef.current = projectId;
     const epoch = ++selection.current;
-    setView('overview');
-    setOverviewBrowsing(emptyOverviewBrowsing());
-    selectRoute(null);
-    setLibrary([]);
-    setPointEditor(null);
-    setImporting(false);
-    setError('');
-    setNotice('');
-    setRouteSearch('');
-    setLibrarySearch('');
-    setTask('edit');
-    setChoosingPoints(false);
-    setLibraryDelete(null);
     if (!projectId) return;
-    setLoading(true);
     const read = captureRead();
     request<Point[]>(`/api/projects/${projectId}/points`)
       .then((nextLibrary) => {
@@ -256,7 +269,7 @@ export default function Workbench() {
       .finally(() => {
         if (epoch === selection.current) setLoading(false);
       });
-  }, [projectId, selectRoute, captureRead, isSessionCurrent]);
+  }, [projectId, captureRead, isSessionCurrent]);
 
   useEffect(() => {
     if (focusRequest === consumedFocus.current) return;
@@ -379,7 +392,7 @@ export default function Workbench() {
         setProjects((items) =>
           editor.id ? items.map((item) => (item.id === next.id ? next : item)) : [...items, next],
         );
-        setProjectId(next.id);
+        changeProject(next.id);
       } else {
         const write = beginWrite();
         try {
@@ -412,7 +425,7 @@ export default function Workbench() {
         await request(`/api/projects/${project.id}`, 'DELETE');
         const remaining = projects.filter((item) => item.id !== project.id);
         setProjects(remaining);
-        setProjectId(remaining[0]?.id ?? '');
+        changeProject(remaining[0]?.id ?? '');
       } else if (confirmDelete === 'route' && route) {
         const write = beginWrite();
         try {
@@ -833,9 +846,17 @@ export default function Workbench() {
         aria-label="项目与线路导航"
       >
         <div className="brand-row">
-          <a href="/" className="brand" aria-label="重途首页">
+          <Link
+            href="/"
+            className="brand"
+            aria-label="重途首页"
+            onNavigate={(event) => {
+              event.preventDefault();
+              window.location.assign(new URL('/', window.location.origin).href);
+            }}
+          >
             <BrandLogo />
-          </a>
+          </Link>
           <Button
             className="navigation-toggle"
             aria-label={navigationOpen ? '收起项目与线路' : '展开项目与线路'}
@@ -871,7 +892,7 @@ export default function Workbench() {
                 aria-label={item.name}
                 disabled={busy}
                 onClick={() => {
-                  setProjectId(item.id);
+                  changeProject(item.id);
                   setNavigationOpen(false);
                 }}
                 aria-pressed={item.id === projectId}

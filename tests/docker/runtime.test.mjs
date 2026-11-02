@@ -59,7 +59,7 @@ test(
       assert.equal(book.getWorksheet('线路总览').getCell('J3').value, '未规划');
       assert.equal(book.getWorksheet('区间明细').rowCount, 2);
       const html = await (await fetch(app.baseUrl)).text();
-      const script = html.match(/src="([^\"]*\/_next\/static\/[^\"]+\.js[^\"]*)"/);
+      const script = html.match(/src="([^"]*\/_next\/static\/[^"]+\.js[^"]*)"/);
       assert.ok(script, 'the application page references a built client script');
       assert.equal(
         (await fetch(new URL(script[1].replaceAll('&amp;', '&'), app.baseUrl))).status,

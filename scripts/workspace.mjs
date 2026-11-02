@@ -14,19 +14,26 @@ const rootCommands = [
   'test:release',
   'test:workspace',
 ];
-if (![...applicationCommands, ...rootCommands].includes(command))
+const lintCommands = ['lint', 'lint:fix'];
+if (![...applicationCommands, ...rootCommands, ...lintCommands].includes(command))
   throw new Error(`Unknown workspace command: ${command}`);
 const target = `${applicationCommands.includes(command) ? '@haulpath/web' : 'haulpath'}:${command.replaceAll(':', '-')}`;
+const nxArgs = lintCommands.includes(command)
+  ? [
+      'run-many',
+      '--target=lint',
+      '--projects=haulpath,@haulpath/web,@haulpath/domain',
+      '--outputStyle=stream',
+      ...args,
+      ...(command === 'lint:fix' ? ['--fix', '--skip-nx-cache'] : []),
+    ]
+  : ['run', target, '--outputStyle=stream', ...args];
 const originalEnvironment = callerEnvironment();
-runProcess(
-  process.execPath,
-  [require.resolve('nx/bin/nx'), 'run', target, '--outputStyle=stream', ...args],
-  {
-    cwd: resolve(import.meta.dirname, '..'),
-    env: {
-      ...process.env,
-      NX_LOAD_DOT_ENV_FILES: 'false',
-      [snapshotVariable]: Buffer.from(JSON.stringify(originalEnvironment)).toString('base64'),
-    },
+runProcess(process.execPath, [require.resolve('nx/bin/nx'), ...nxArgs], {
+  cwd: resolve(import.meta.dirname, '..'),
+  env: {
+    ...process.env,
+    NX_LOAD_DOT_ENV_FILES: 'false',
+    [snapshotVariable]: Buffer.from(JSON.stringify(originalEnvironment)).toString('base64'),
   },
-);
+});

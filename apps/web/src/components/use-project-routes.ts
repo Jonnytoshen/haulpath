@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Route } from '@haulpath/domain';
 import { request } from '@/lib/client-request';
 
@@ -22,7 +22,9 @@ export function useProjectRoutes(projectId: string) {
   const [refreshError, setRefreshError] = useState('');
   const [planningRequests, setPlanningRequests] = useState<LocalPlanningRequest[]>([]);
   const latestProject = useRef(projectId);
-  latestProject.current = projectId;
+  useLayoutEffect(() => {
+    latestProject.current = projectId;
+  }, [projectId]);
   const session = useRef<ProjectSession>({ projectId: '' });
   const generation = useRef(0);
   const sequence = useRef(0);
@@ -136,7 +138,9 @@ export function useProjectRoutes(projectId: string) {
     inFlight.current = work;
     return work;
   }, [captureRead, clearTimer, commitRoutes, isReadCurrent, isSessionCurrent, schedule]);
-  refreshRef.current = refreshRoutes;
+  useLayoutEffect(() => {
+    refreshRef.current = refreshRoutes;
+  }, [refreshRoutes]);
 
   const applyRoute = useCallback(
     (next: Route, read: ProjectRouteRead) => {
@@ -229,6 +233,7 @@ export function useProjectRoutes(projectId: string) {
     [isPlanningCurrent],
   );
 
+  /* eslint-disable react-hooks/set-state-in-effect -- Starting a remote project subscription clears its old cache and pending requests atomically before accepting new responses. */
   useEffect(() => {
     session.current = { projectId };
     generation.current++;
@@ -251,6 +256,7 @@ export function useProjectRoutes(projectId: string) {
       inFlight.current = null;
     };
   }, [projectId, clearTimer, commitRoutes]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
     const focus = () => {

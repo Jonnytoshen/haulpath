@@ -1,3 +1,5 @@
+// Browser globals below are evaluated inside Playwright page callbacks.
+/* global window, document, requestAnimationFrame */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';

@@ -128,13 +128,14 @@ pnpm exec nx format:check --base=main --head=HEAD
 验证入口：
 
 ```sh
+pnpm lint
 pnpm run typecheck
 pnpm run build
 pnpm run test:api
 pnpm run test:browser
 pnpm run test:commits
 pnpm run test:release
-# 只排查工作区入口、环境、数据库定位与缓存回归：
+# 只排查工作区入口、环境、数据库定位、lint 与缓存回归：
 pnpm run test:workspace
 # 一次串行运行全部测试文件（分类入口存在交叉）：
 pnpm test
@@ -142,7 +143,19 @@ pnpm test
 
 API 与浏览器测试会启动真实本机应用并使用临时 SQLite，下载和读取实际 Excel 文件；仅高德 HTTP 服务及地图 SDK 使用可控替身。浏览器测试默认使用已安装的 Google Chrome；可用 `PLAYWRIGHT_CHROMIUM_CHANNEL` 选择其他已安装的 Playwright 浏览器 channel。请先停止当前工作副本的开发或生产服务，再串行运行这些命令，避免争用 `apps/web/.next`、类型生成及其他应用产物。
 
-应用类型检查先运行 `next typegen`，检查和 webpack 构建均依赖领域包类型检查。只有无产物的领域类型检查使用本机缓存，输入包含源码、包清单、类型配置、锁文件和 Node 版本；应用检查、构建和全部测试每次实际执行。同一次 Nx 调度中，共享应用产物的任务禁止并行；独立命令进程仍须由执行者串行安排。
+`pnpm lint` 通过 Nx 检查全仓维护中的 JS/TS：应用、领域包、根脚本、测试及工程配置。JS/TS 使用非类型感知的推荐规则，应用叠加 Next Core Web Vitals、React 和 Hooks 推荐规则；依赖、生成产物、缓存、本地数据、备份与 `.scratch` 等资料被排除。普通检查不改写文件，根入口及独立任务均要求零错误、零警告；lint 不依赖 Next 类型生成或应用构建，也不替代类型检查。
+
+需要自动修复时显式运行 `pnpm lint:fix`。该命令覆盖相同范围并跳过 Nx 缓存，修复后仍有错误或警告时返回失败；执行后检查实际改动。三个工作区项目也可单独检查：
+
+```sh
+pnpm exec nx run haulpath:lint
+pnpm exec nx run @haulpath/web:lint
+pnpm exec nx run @haulpath/domain:lint
+```
+
+规范检查使用 ESLint 9、与 Nx 同版的 `@nx/eslint` 及与应用 Next 版本一致的 ESLint 配置，保留 Node `>=22.12.0` 的兼容要求。此配置不引入格式化工具、类型感知严格规则、模块边界规则、hook 或 CI。
+
+应用类型检查先运行 `next typegen`，类型检查和 webpack 构建均依赖领域包类型检查。无产物的领域类型检查与 lint 使用本机 Nx 缓存；lint 的输入包括受检源码、项目配置、根与共享 ESLint 配置、根包清单、锁文件和 Node 版本，变化后相关缓存失效。应用类型检查、构建和全部测试每次实际执行。同一次 Nx 调度中，共享应用产物的任务禁止并行；独立命令进程仍须由执行者串行安排。
 
 Docker 验收单独使用 `pnpm run test:docker`；双架构核心验收使用 `pnpm run test:docker --matrix`。它们需要可用 Docker，使用独立项目、临时卷和假凭证，不纳入 `pnpm test` 或软件发布门禁；参数与边界见 [Docker 验收说明](docs/docker.md#开发验收与边界)。
 
@@ -154,6 +167,6 @@ Docker 验收单独使用 `pnpm run test:docker`；双架构核心验收使用 `
 
 ## 软件发布
 
-`pnpm run release` 直接执行 `nx release --skip-publish`，生成版本、根 CHANGELOG、Git 提交/tag 并推送、创建 GitHub Release。先显式完成提交校验、类型检查、webpack 构建及完整测试，再用 `pnpm run release --dry-run` 预览；预发布使用原生 `--preid`，不再提供 `--channel` 或 `release:resume`。参数、认证及失败处理见[发布指南](docs/releasing.md)。
+`pnpm run release` 直接执行 `nx release --skip-publish`，生成版本、根 CHANGELOG、Git 提交/tag 并推送、创建 GitHub Release。先显式完成提交校验、lint、类型检查、webpack 构建及完整测试，再用 `pnpm run release --dry-run` 预览；预发布使用原生 `--preid`，不再提供 `--channel` 或 `release:resume`。参数、认证及失败处理见[发布指南](docs/releasing.md)。
 
 根 `haulpath` 是唯一版本与发布对象；Nx 中对两个子包的隐式依赖确保仅修改应用或领域包的提交也参与产品版本和日志分析，沿用现有领域 scope。发布仅维护源码版本、日志、Git tag 与 GitHub Release，始终跳过 npm 发布，不生成安装包或自动部署。历史验证基线与真实服务联调边界见[验收记录](docs/acceptance.md)。

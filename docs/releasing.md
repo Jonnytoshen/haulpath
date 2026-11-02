@@ -11,12 +11,15 @@
 ```sh
 # base 为本轮提交校验起点，例如上一发布 tag；首次历史检查省略 --from
 pnpm run commitlint --from "$base" --to HEAD
+pnpm lint
 pnpm run typecheck
 pnpm run build
 pnpm test
 ```
 
-全部通过且工作区与待发布 HEAD 未变后，再预览和发布。Docker 验收保持独立入口。保留 Git 身份、`commit-msg` hook 及用户签名设置，签名失败时修复环境。
+lint 覆盖应用、领域包、根脚本、测试及工程配置，要求零错误、零警告。普通检查不改文件并可使用 Nx 缓存；需要修复时显式运行 `pnpm lint:fix`，该入口跳过缓存。修复后核对改动、完成提交，并针对待发布源码重新完成上述检查。
+
+全部通过且工作区与待发布 HEAD 未变后，再预览和发布。发布入口不自动运行 lint 或其他门禁，也不新增提交 hook 或 CI。Docker 验收保持独立入口。保留 Git 身份、`commit-msg` hook 及用户签名设置，签名失败时修复环境。
 
 GitHub API 认证按 Nx 原生顺序使用 `GITHUB_TOKEN`、`GH_TOKEN`，也可回退到已认证的 `gh` CLI；Git 推送另需有效的 SSH / HTTPS 认证。不要输出 token 或提交真实凭证。Nx CLI 原生加载根 `.local.env`、`.env.local` 和 `.env`，已存在的进程变量优先；发布不再经过 `scripts/workspace.mjs` 的调用者环境适配，也不依赖应用启动器加载根 `.env.local`。
 

@@ -105,7 +105,9 @@ test(
             signal: AbortSignal.timeout(1000),
           });
           if (response.ok) return response.json();
-        } catch {}
+        } catch {
+          /* The service may still be starting; retry until its deadline. */
+        }
         await delay(250);
       }
       throw new Error(`Root command did not become ready:\n${output}`);
@@ -147,6 +149,8 @@ test(
         'pnpm-lock.yaml',
         'pnpm-workspace.yaml',
         'tsconfig.base.json',
+        'eslint.config.mjs',
+        'eslint.shared.mjs',
         'scripts',
         'commitlint.config.mjs',
         '.husky',

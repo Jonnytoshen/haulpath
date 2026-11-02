@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import type { Route } from '@haulpath/domain';
+import type { Point, Route } from '@haulpath/domain';
 import { loadMapSDK, resetMapSDK, type MapConfig } from './amap-loader';
 
 export type MapCamera = { center: [number, number]; zoom: number; request: number };
@@ -70,17 +70,21 @@ export default function OverviewMap(props: Props) {
   const container = useRef<HTMLDivElement>(null);
   const runtime = useRef<{ map: MapInstance; api: AMapSDK } | null>(null);
   const current = useRef(props);
-  current.current = props;
+  useLayoutEffect(() => {
+    current.current = props;
+  }, [props]);
   const appliedRequest = useRef<number | null>(null);
-  const [ready, setReady] = useState(false);
-  const [failure, setFailure] = useState('');
+  const [mapStatus, setMapStatus] = useState({ session: '', ready: false, failure: '' });
   const [retry, setRetry] = useState(0);
+  const mapKey = config?.mapKey ?? '';
+  const securityProxyPath = config?.securityProxyPath ?? '/_AMapService';
+  const mapSession = JSON.stringify([mapKey, securityProxyPath, retry]);
+  const ready = mapStatus.session === mapSession && mapStatus.ready;
+  const failure = mapStatus.session === mapSession ? mapStatus.failure : '';
 
   useEffect(() => {
-    setReady(false);
-    setFailure('');
     appliedRequest.current = null;
-    if (!config?.mapKey || !container.current) return;
+    if (!mapKey || !container.current) return;
     let cancelled = false;
     let instance: MapInstance | null = null;
     const rememberCamera = () => {
@@ -94,7 +98,7 @@ export default function OverviewMap(props: Props) {
     };
     (async () => {
       try {
-        const api = await loadMapSDK<AMapSDK>(config);
+        const api = await loadMapSDK<AMapSDK>({ mapKey, securityProxyPath });
         if (cancelled || !container.current) return;
         const { camera, viewRequest: request } = current.current;
         instance = new api.Map(container.current, {
@@ -107,12 +111,14 @@ export default function OverviewMap(props: Props) {
         appliedRequest.current = camera?.request === request.version ? request.version : null;
         instance.on('moveend', rememberCamera);
         instance.on('zoomend', rememberCamera);
-        setReady(true);
+        setMapStatus({ session: mapSession, ready: true, failure: '' });
       } catch (error) {
         if (!cancelled)
-          setFailure(
-            `地图加载失败：${error instanceof Error ? error.message : String(error)}。请检查网络、JS Key 与 JS 安全密钥配置。`,
-          );
+          setMapStatus({
+            session: mapSession,
+            ready: false,
+            failure: `地图加载失败：${error instanceof Error ? error.message : String(error)}。请检查网络、JS Key 与 JS 安全密钥配置。`,
+          });
       }
     })();
     return () => {
@@ -122,17 +128,19 @@ export default function OverviewMap(props: Props) {
       instance?.destroy();
       runtime.current = null;
     };
-  }, [config?.mapKey, config?.securityProxyPath, retry]);
+  }, [mapKey, securityProxyPath, mapSession]);
 
+  // Only geometry or an explicit view request redraws overlays; camera persistence is independent.
   const overlayKey = JSON.stringify(
-    routes.map((route) => [
-      route.id,
-      route.name,
-      route.snapshot?.inputVersion === route.inputVersion
-        ? route.snapshot?.legs.map((leg) => leg.polyline)
-        : null,
-      route.id === selectedId ? route.points : null,
-    ]),
+    routes.map((route) => ({
+      id: route.id,
+      name: route.name,
+      paths:
+        route.snapshot?.inputVersion === route.inputVersion
+          ? (route.snapshot?.legs.map((leg) => leg.polyline) ?? [])
+          : [],
+      points: route.id === selectedId ? route.points : [],
+    })),
   );
   useEffect(() => {
     if (!ready || !runtime.current) return;
@@ -140,12 +148,17 @@ export default function OverviewMap(props: Props) {
     const overlays: Overlay[] = [];
     const selectedOverlays: Overlay[] = [];
     const listeners: { overlay: Overlay; callback: () => void }[] = [];
-    for (const route of routes) {
-      if (!route.snapshot || route.snapshot.inputVersion !== route.inputVersion) continue;
+    const overlayRoutes = JSON.parse(overlayKey) as {
+      id: string;
+      name: string;
+      paths: [number, number][][];
+      points: Point[];
+    }[];
+    for (const route of overlayRoutes) {
       const selected = route.id === selectedId;
-      for (const leg of route.snapshot.legs) {
+      for (const path of route.paths) {
         const line = new api.Polyline({
-          path: leg.polyline,
+          path,
           strokeColor: overviewRouteColor(route.id),
           strokeWeight: selected ? 7 : 4,
           strokeOpacity: selected ? 1 : 0.8,
@@ -168,7 +181,7 @@ export default function OverviewMap(props: Props) {
         if (selected) selectedOverlays.push(line);
       }
     }
-    const selected = routes.find((route) => route.id === selectedId);
+    const selected = overlayRoutes.find((route) => route.id === selectedId);
     selected?.points.forEach((point, index) => {
       const role = pointRole(index, selected.points.length);
       const label = `${index + 1}. ${role.name} · ${point.name}`;
@@ -205,7 +218,7 @@ export default function OverviewMap(props: Props) {
       listeners.forEach(({ overlay, callback }) => overlay.off('click', callback));
       if (runtime.current?.map === map) map.remove(overlays);
     };
-  }, [ready, overlayKey, selectedId, viewRequest.version]);
+  }, [ready, overlayKey, selectedId, viewRequest.version, viewRequest.target]);
 
   const validCount = routes.filter(
     (route) => route.snapshot?.inputVersion === route.inputVersion,

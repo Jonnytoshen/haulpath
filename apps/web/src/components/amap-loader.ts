@@ -8,7 +8,10 @@ export interface MapConfig {
 // Serialize callers so every mounted consumer receives that rejection.
 let pendingMapLoad: Promise<unknown> | null = null;
 
-export async function loadMapSDK<T>(config: MapConfig, plugins: string[] = []): Promise<T> {
+export async function loadMapSDK<T>(
+  config: Pick<MapConfig, 'mapKey' | 'securityProxyPath'>,
+  plugins: string[] = [],
+): Promise<T> {
   const loader = await import('@amap/amap-jsapi-loader');
   (window as Window & { _AMapSecurityConfig?: { serviceHost: string } })._AMapSecurityConfig = {
     serviceHost: `${location.origin}${config.securityProxyPath}`,
@@ -24,7 +27,10 @@ export async function loadMapSDK<T>(config: MapConfig, plugins: string[] = []): 
 }
 
 export async function resetMapSDK() {
-  const module = await import('@amap/amap-jsapi-loader');
-  const loader = module as unknown as { reset?: () => void; default?: { reset?: () => void } };
+  const importedLoader = await import('@amap/amap-jsapi-loader');
+  const loader = importedLoader as unknown as {
+    reset?: () => void;
+    default?: { reset?: () => void };
+  };
   (loader.reset ?? loader.default?.reset)?.();
 }
