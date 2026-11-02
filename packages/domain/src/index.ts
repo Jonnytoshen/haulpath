@@ -120,3 +120,28 @@ export function routeStatus(route: Route): '已规划' | '待重算' | '未规�
 export function formatKilometers(integerMeters: number): string {
   return (integerMeters / 1000).toFixed(3);
 }
+
+export type JsonValue = string | number | boolean | null | JsonValue[] | JsonObject;
+export interface JsonObject {
+  [key: string]: JsonValue;
+}
+
+/** Versioned draft data; result entries are context, not validated calculation conclusions. */
+export interface PlanningScenarioContext {
+  schemaVersion: 1;
+  resources: JsonObject;
+  annual: JsonObject[];
+  results: JsonObject[];
+}
+
+export interface PlanningScenario {
+  id: string;
+  projectId: string;
+  name: string;
+  status: 'draft';
+  inputVersion: number;
+  revision: number;
+  context: PlanningScenarioContext;
+  createdAt: string;
+  updatedAt: string;
+}

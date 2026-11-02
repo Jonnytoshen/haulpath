@@ -34,6 +34,7 @@ import {
   SlidersHorizontal,
   TableProperties,
   LayoutList,
+  ClipboardList,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -63,6 +64,7 @@ import MapPanel, { type MapCandidate, type MapConfig } from './map-panel';
 import ImportDialog from './import-dialog';
 import RouteOverview, { emptyOverviewBrowsing, type OverviewBrowsing } from './route-overview';
 import ProjectLibrary from './project-library';
+import PlanningScenarioWorkbench from './planning-scenario-workbench';
 import { request } from '@/lib/client-request';
 import { useProjectRoutes, type ProjectRouteRead } from './use-project-routes';
 export { request } from '@/lib/client-request';
@@ -119,11 +121,12 @@ export default function Workbench() {
   } = routeCache;
   const [projectView, setProjectView] = useState<{
     projectId: string;
-    view: 'overview' | 'workbench' | 'library';
+    view: 'overview' | 'workbench' | 'library' | 'scenarios';
   }>({ projectId: '', view: 'overview' });
   const view = projectView.projectId === projectId ? projectView.view : 'overview';
   const setView = useCallback(
-    (next: 'overview' | 'workbench' | 'library') => setProjectView({ projectId, view: next }),
+    (next: 'overview' | 'workbench' | 'library' | 'scenarios') =>
+      setProjectView({ projectId, view: next }),
     [projectId],
   );
   const [task, setTask] = useState<'edit' | 'plan' | 'results'>('edit');
@@ -280,7 +283,9 @@ export default function Workbench() {
           ? 'route-overview'
           : view === 'library'
             ? 'point-library'
-            : 'line-editor',
+            : view === 'scenarios'
+              ? 'planning-scenarios'
+              : 'line-editor',
       )
       ?.focus({ preventScroll: true });
   }, [focusRequest, view, task]);
@@ -829,7 +834,9 @@ export default function Workbench() {
               ? '#route-overview'
               : view === 'library'
                 ? '#point-library'
-                : '#line-editor'
+                : view === 'scenarios'
+                  ? '#planning-scenarios'
+                  : '#line-editor'
             : '#workspace-content'
         }
       >
@@ -838,7 +845,9 @@ export default function Workbench() {
             ? '跳到线路总览'
             : view === 'library'
               ? '跳到项目点位库'
-              : '跳到线路编辑'
+              : view === 'scenarios'
+                ? '跳到规划方案'
+                : '跳到线路编辑'
           : '跳到主内容'}
       </a>
       <aside
@@ -870,7 +879,10 @@ export default function Workbench() {
         <div className="mobile-context">
           <span>{project?.name ?? '我的项目'}</span>
           <ChevronDown aria-hidden="true" />
-          <span>{activeRoute?.name ?? (view === 'library' ? '项目点位库' : '线路总览')}</span>
+          <span>
+            {activeRoute?.name ??
+              (view === 'library' ? '项目点位库' : view === 'scenarios' ? '规划方案' : '线路总览')}
+          </span>
         </div>
         <div id="workspace-navigation" className="sidebar-content">
           <div className="sidebar-section-title">
@@ -921,6 +933,23 @@ export default function Workbench() {
                 >
                   <LayoutList />
                   线路总览<span>{routes.length}</span>
+                </Button>
+                <Button
+                  className={view === 'scenarios' ? 'active' : ''}
+                  aria-pressed={view === 'scenarios'}
+                  aria-label="规划方案"
+                  onClick={() => {
+                    if (busy) return;
+                    setView('scenarios');
+                    setChoosingPoints(false);
+                    setNavigationOpen(false);
+                    setError('');
+                    setNotice('');
+                    requestFocus((current) => current + 1);
+                  }}
+                >
+                  <ClipboardList />
+                  规划方案
                 </Button>
                 <Button
                   className={view === 'library' && !choosingPoints ? 'active' : ''}
@@ -1077,7 +1106,9 @@ export default function Workbench() {
                   ? choosingPoints
                     ? '选择线路点位'
                     : '项目点位库'
-                  : (project?.name ?? '从一个项目，规划下一程'))}
+                  : view === 'scenarios'
+                    ? '规划方案'
+                    : (project?.name ?? '从一个项目，规划下一程'))}
             </h1>
             <p>
               {view === 'workbench' && route ? (
@@ -1095,6 +1126,8 @@ export default function Workbench() {
                 ) : (
                   '集中维护常用地点，供本项目的线路重复选用。'
                 )
+              ) : view === 'scenarios' ? (
+                '保存方案草案，持续整理运输与换电站规划。'
               ) : project ? (
                 '查看行驶安排与测算状态，打开一条线路继续处理。'
               ) : (
@@ -1231,6 +1264,8 @@ export default function Workbench() {
             onCreate={createRoute}
             createDisabled={busy || loading}
           />
+        ) : view === 'scenarios' ? (
+          <PlanningScenarioWorkbench key={project.id} project={project} />
         ) : view === 'library' ? (
           <div className="library-view" id="point-library" tabIndex={-1}>
             <ProjectLibrary
@@ -1666,7 +1701,7 @@ export default function Workbench() {
           <p className="delete-description">
             确定删除“{confirmDelete === 'project' ? project?.name : route?.name}”？
             {confirmDelete === 'project'
-              ? '项目下的全部线路、点位库和路线方案将一并删除。'
+              ? '项目下的全部线路、点位库、路线方案和规划方案将一并删除。'
               : '该线路及其路线方案将一并删除。'}
             此操作无法撤销。
           </p>

@@ -2,10 +2,19 @@ import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import type { PlanningSnapshot, Point, Project, Route, Strategy } from '@haulpath/domain';
+import { isDeepStrictEqual } from 'node:util';
+import type {
+  PlanningScenario,
+  PlanningSnapshot,
+  Point,
+  Project,
+  Route,
+  Strategy,
+} from '@haulpath/domain';
 import { HttpError } from './http';
 
 import { nameOf, pointOf, pointsOf, strategyOf } from './validation';
+import { scenarioContext, scenarioFields, scenarioRevision } from './scenario-validation';
 
 class Storage {
   private db: Database.Database;
@@ -16,7 +25,7 @@ class Storage {
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('busy_timeout = 5000');
     const version = this.db.pragma('user_version', { simple: true }) as number;
-    if (version > 2) throw new Error('本机数据库版本比当前应用更新，请使用匹配的应用版本');
+    if (version > 3) throw new Error('本机数据库版本比当前应用更新，请使用匹配的应用版本');
     if (version === 0)
       this.db.transaction(() => {
         this.db
@@ -31,6 +40,16 @@ class Storage {
       this.db.transaction(() => {
         this.db.exec('ALTER TABLE projects ADD COLUMN last_strategy INTEGER NOT NULL DEFAULT 32');
         this.db.pragma('user_version = 2');
+      })();
+    if (version < 3)
+      this.db.transaction(() => {
+        this.db.exec(`CREATE TABLE planning_scenarios (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+          payload TEXT NOT NULL
+        );
+        CREATE INDEX planning_scenarios_project ON planning_scenarios(project_id);`);
+        this.db.pragma('user_version = 3');
       })();
     // The process-global storage instance survives route reloads; only an initial open recovers abandoned work.
     this.db.transaction(() => {
@@ -84,6 +103,80 @@ class Storage {
   deleteProject(id: string): void {
     this.getProject(id);
     this.db.prepare('DELETE FROM projects WHERE id = ?').run(id);
+  }
+  listScenarios(projectId: string): PlanningScenario[] {
+    this.getProject(projectId);
+    return (
+      this.db
+        .prepare('SELECT payload FROM planning_scenarios WHERE project_id = ? ORDER BY rowid')
+        .all(projectId) as { payload: string }[]
+    ).map((row) => JSON.parse(row.payload) as PlanningScenario);
+  }
+  getScenario(projectId: string, scenarioId: string): PlanningScenario {
+    this.getProject(projectId);
+    const row = this.db
+      .prepare('SELECT payload FROM planning_scenarios WHERE id = ? AND project_id = ?')
+      .get(scenarioId, projectId) as { payload: string } | undefined;
+    if (!row) throw new HttpError(404, '该项目下的规划方案不存在');
+    return JSON.parse(row.payload) as PlanningScenario;
+  }
+  createScenario(projectId: string, input: Record<string, unknown>): PlanningScenario {
+    return this.db.transaction(() => {
+      this.getProject(projectId);
+      scenarioFields(input, ['name']);
+      const time = new Date().toISOString();
+      const scenario: PlanningScenario = {
+        id: randomUUID(),
+        projectId,
+        name: nameOf(input.name),
+        status: 'draft',
+        inputVersion: 1,
+        revision: 1,
+        context: { schemaVersion: 1, resources: {}, annual: [], results: [] },
+        createdAt: time,
+        updatedAt: time,
+      };
+      this.db
+        .prepare('INSERT INTO planning_scenarios VALUES (?, ?, ?)')
+        .run(scenario.id, projectId, JSON.stringify(scenario));
+      return scenario;
+    })();
+  }
+  updateScenario(
+    projectId: string,
+    scenarioId: string,
+    input: Record<string, unknown>,
+  ): PlanningScenario {
+    return this.db.transaction(() => {
+      const scenario = this.getScenario(projectId, scenarioId);
+      scenarioFields(input, ['name', 'context', 'expectedRevision']);
+      if (scenarioRevision(input.expectedRevision) !== scenario.revision)
+        throw new HttpError(409, '规划方案已被更新，请重新加载后编辑');
+      const name = input.name === undefined ? scenario.name : nameOf(input.name);
+      const context =
+        input.context === undefined ? scenario.context : scenarioContext(input.context);
+      const inputChanged = !isDeepStrictEqual(context, scenario.context);
+      if (name === scenario.name && !inputChanged) return scenario;
+      if (inputChanged) scenario.inputVersion++;
+      scenario.name = name;
+      scenario.context = context;
+      scenario.revision++;
+      scenario.updatedAt = new Date().toISOString();
+      this.db
+        .prepare('UPDATE planning_scenarios SET payload = ? WHERE id = ? AND project_id = ?')
+        .run(JSON.stringify(scenario), scenarioId, projectId);
+      return scenario;
+    })();
+  }
+  deleteScenario(projectId: string, scenarioId: string, expectedRevision: unknown): void {
+    this.db.transaction(() => {
+      const scenario = this.getScenario(projectId, scenarioId);
+      if (scenarioRevision(expectedRevision) !== scenario.revision)
+        throw new HttpError(409, '规划方案已被更新，请重新加载后删除');
+      this.db
+        .prepare('DELETE FROM planning_scenarios WHERE id = ? AND project_id = ?')
+        .run(scenarioId, projectId);
+    })();
   }
   listRoutes(projectId: string): Route[] {
     this.getProject(projectId);
