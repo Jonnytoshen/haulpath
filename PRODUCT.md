@@ -30,6 +30,7 @@ web
 - 核心流程围绕一条线路展开：创建或选择项目 → 从默认线路总览打开线路，或新建草稿 → 在“编排点位”中录入或复用点位并调整顺序 → 在“测算线路”中核对地图、选择偏好并手动规划 → 在“核对方案”中核对地图、里程和区间，再导出当前线路。整个项目的导出保留在项目层。
 - 项目点位库与线路总览并列，独立管理时不选中线路、不显示线路地图或方案。在线路中选用点库点位时进入明确目标线路的选择模式，支持连续选点后返回编排。
 - 点位来源包括地点搜索、地图选点、手动坐标，以及 `.xlsx` / UTF-8 CSV 坐标表与 UTF-8 KML/KMZ 地标点。表格先选择工作表、映射列、声明坐标系；KML/KMZ 固定 WGS84，KMZ 含多个 KML 时由用户选一个。均在预览校验后确认选中的有效项。
+- 项目内“规划方案”与线路总览、点位库并列，当前支持草案创建、选择、改名、删除和重开，持续显示项目、方案及输入版本。运输、站网和财务计算按后续工单交付。
 - 项目数据由本机服务写入 SQLite，不依赖某个浏览器的缓存。每个数据库仅运行一个应用服务；备份与恢复按[运行维护](docs/operations.md)执行。
 - 地图、地点搜索、驾车测算及 WGS84 转换依赖相应高德配置和在线服务。无凭证时仍可管理项目、线路草稿、GCJ-02 点位及导出，并明确提示缺失配置。
 - 主要使用环境为电脑网页；手机专用界面、离线地图和原生桌面安装包不在首版范围。
@@ -43,6 +44,12 @@ web
 - 点位可增删、编辑、拖动或使用上移/下移按钮排序；点位角色由顺序决定，不自动优化点位顺序。
 - 手动输入和表格坐标系由用户声明，默认 GCJ-02；KML/KMZ 固定 WGS84。WGS84 经高德转换后使用，保留原始坐标与坐标系，不猜测或重复转换。
 - KML/KMZ 只导入 Point，多个点展开为独立点位，线、面、轨迹及网络链接不导入，来源路径仅供预览。每次确认追加所选有效点，不自动去重；转换失败不写入半批数据。
+
+### 规划方案草案
+
+- 规划方案围绕同一业务目标组织站网、运输计划、参数及分析结果，与单条线路的路线方案区分；当前仅交付草案管理和版本化上下文。
+- 保存和删除使用修订号检查；上下文变化递增输入版本，仅改名保持输入版本。冲突或校验失败保留已有资料。
+- 草案归属项目，服务重启及更换浏览器后可重新选择。项目删除时同时删除所属草案，原有线路和点位库可独立使用。
 
 ### 项目线路总览
 
@@ -97,7 +104,7 @@ web
 
 - [README](README.md)记录产品定位、当前流程、技术栈、启动方式与配置边界；[运行维护](docs/operations.md)记录本机数据管理。
 - [术语表](GLOSSARY.md)、[ADR 0001](docs/adr/0001-driving-v2-estimation-scope.md)及[ADR 0002](docs/adr/0002-segment-planning-and-result-snapshots.md)分别约束领域语言、普通驾车测算范围和完整结果快照。
-- 本地已确认需求基线为 `.scratch/haulpath-v1/spec.md`，规划偏好扩展为 `.scratch/haulpath-planning-preferences/spec.md`，更名规格为 `.scratch/haulpath-name/spec.md`，线路总览规格为 `.scratch/haulpath-route-overview/spec.md`，地图预览增量为 `.scratch/haulpath-route-overview-map/spec.md`，任务画布与项目资源分层为 `.scratch/haulpath-ux-restructure/spec.md`。地图预览扩展总览的地图展示范围，任务画布规格替代旧工作台的页面结构约定；既有领域、数据、状态和导出规则继续生效；`.scratch/` 不入 Git，其他工作副本可能没有这些文件。
+- 本地已确认需求基线为 `.scratch/haulpath-v1/spec.md`，规划偏好扩展为 `.scratch/haulpath-planning-preferences/spec.md`，更名规格为 `.scratch/haulpath-name/spec.md`，线路总览规格为 `.scratch/haulpath-route-overview/spec.md`，地图预览增量为 `.scratch/haulpath-route-overview-map/spec.md`，任务画布与项目资源分层为 `.scratch/haulpath-ux-restructure/spec.md`，换电站选址扩展为 `.scratch/haulpath-swap-station-siting/spec.md`（按编号工单逐票交付）。地图预览扩展总览的地图展示范围，任务画布规格替代旧工作台的页面结构约定；既有领域、数据、状态和导出规则继续生效；`.scratch/` 不入 Git，其他工作副本可能没有这些文件。
 - 工程采用单应用与领域源码包，仍由同一服务提供网页和接口；业务上下文与产品范围保持不变，取舍见 [ADR 0004](docs/adr/0004-workspace-and-single-product.md)。
 - 当前已有[工作台实现](apps/web/src/components/workbench.tsx)和[浏览器完整流程验收](tests/acceptance.test.mjs)。[验收记录](docs/acceptance.md)涵盖真实应用、临时 SQLite、下载工作簿、代表规模及备份恢复；其中高德 HTTP 与地图 SDK 使用可控替身。
 - 现有记录中真实高德凭证联调尚未执行。模拟验收不能作为真实地图、搜索或重卡可通行的证明；未记录的客户、口碑、业务收益和性能承诺不能编造。
