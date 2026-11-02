@@ -1,5 +1,5 @@
 // Browser globals are evaluated inside Playwright callbacks.
-/* global document */
+/* global document, window */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
@@ -205,6 +205,76 @@ test(
         .getByRole('button', { name: `打开规划方案 ${scenario.name}`, exact: true })
         .click();
       await current.getByRole('heading', { name: scenario.name, exact: true }).waitFor();
+    } finally {
+      await browser.close();
+      await app.stop();
+      await app.cleanup();
+    }
+  },
+);
+
+test(
+  'long scenario lists and detail actions remain reachable in short desktop viewports',
+  { timeout: 120000 },
+  async () => {
+    const app = await startApplication(environment);
+    const browser = await chromium.launch({
+      channel: process.env.PLAYWRIGHT_CHROMIUM_CHANNEL || 'chrome',
+      headless: true,
+    });
+    try {
+      const request = (path, method, body) => jsonRequest(app.baseUrl, path, method, body);
+      const project = (await request('/api/projects', 'POST', { name: '多草案项目' })).body;
+      for (let number = 1; number <= 30; number++) {
+        const created = await request(scenarios(project.id), 'POST', {
+          name: `运输草案 ${number}`,
+        });
+        assert.equal(created.status, 201);
+      }
+      const page = await browser.newPage({ viewport: { width: 1440, height: 700 } });
+      await page.goto(app.baseUrl);
+      await selectProject(page, project.name);
+      await openScenarios(page);
+      const last = page.getByRole('button', { name: '打开规划方案 运输草案 30', exact: true });
+      await last.waitFor();
+      await last.scrollIntoViewIfNeeded();
+      const newDraft = page.getByRole('button', { name: '新建规划方案', exact: true });
+      const insideViewport = (locator) =>
+        locator.evaluate((element) => {
+          const box = element.getBoundingClientRect();
+          return box.top >= 0 && box.bottom <= window.innerHeight;
+        });
+      assert.equal(
+        await insideViewport(last),
+        true,
+        'the last persisted draft can be scrolled into view',
+      );
+      assert.equal(
+        await insideViewport(newDraft),
+        true,
+        'creating a draft remains available while scrolling the list',
+      );
+      await last.click();
+      const detail = page.getByRole('region', { name: '当前规划方案', exact: true });
+      await detail.getByRole('heading', { name: '运输草案 30', exact: true }).waitFor();
+      const rename = detail.getByRole('button', { name: '重命名规划方案', exact: true });
+      await rename.scrollIntoViewIfNeeded();
+      assert.equal(await insideViewport(rename), true);
+      await rename.click();
+      await page
+        .getByRole('dialog', { name: '重命名规划方案', exact: true })
+        .getByRole('button', { name: '取消', exact: true })
+        .click();
+      await page.setViewportSize({ width: 1024, height: 600 });
+      await page.getByRole('button', { name: '返回方案列表', exact: true }).click();
+      await last.scrollIntoViewIfNeeded();
+      assert.equal(await insideViewport(last), true);
+      assert.equal(await insideViewport(newDraft), true);
+      await last.click();
+      await detail.getByRole('heading', { name: '运输草案 30', exact: true }).waitFor();
+      await rename.scrollIntoViewIfNeeded();
+      assert.equal(await insideViewport(rename), true);
+      assert.equal(await insideViewport(newDraft), true);
     } finally {
       await browser.close();
       await app.stop();

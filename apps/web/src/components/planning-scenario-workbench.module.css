@@ -232,3 +232,42 @@
     max-width: 70%;
   }
 }
+@media (min-width: 901px) {
+  .workbench {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .heading,
+  .feedback,
+  .saved,
+  .listHeading {
+    flex-shrink: 0;
+  }
+  .content {
+    flex: 1;
+    min-height: 0;
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .listPanel {
+    display: flex;
+    min-height: 0;
+    max-height: 100%;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .list {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+  .detail {
+    max-height: 100%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+}
