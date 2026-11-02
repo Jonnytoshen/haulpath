@@ -61,7 +61,7 @@ test('root commands preserve environment, database, process and uncached executi
       try {
         const response = await fetch(`${baseUrl}/api/config`, { signal: AbortSignal.timeout(1000) });
         if (response.ok) return response.json();
-      } catch {}
+      } catch { /* The service may still be starting; retry until its deadline. */ }
       await delay(250);
     }
     throw new Error(`Root command did not become ready:\n${output}`);
@@ -83,7 +83,7 @@ test('root commands preserve environment, database, process and uncached executi
   }
 
   try {
-    for (const file of ['.gitignore', 'package.json', 'nx.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'tsconfig.base.json', 'scripts', 'commitlint.config.mjs', '.husky']) await cp(join(root, file), join(directory, file), { recursive: true });
+    for (const file of ['.gitignore', 'package.json', 'nx.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'tsconfig.base.json', 'eslint.config.mjs', 'eslint.shared.mjs', 'scripts', 'commitlint.config.mjs', '.husky']) await cp(join(root, file), join(directory, file), { recursive: true });
     for (const path of ['apps/web', 'packages/domain']) {
       await cp(join(root, path), join(directory, path), { recursive: true, filter: (source) => !source.includes('/node_modules') && !source.includes('/.next') && !source.endsWith('.tsbuildinfo') && basename(source) !== '.env' && !basename(source).startsWith('.env.') && !/\.(?:sqlite3?|db)(?:-|$)/.test(basename(source)) });
       await cp(join(root, path, 'node_modules'), join(directory, path, 'node_modules'), { recursive: true, verbatimSymlinks: true });

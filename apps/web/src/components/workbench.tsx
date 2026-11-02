@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction, type FormEvent } from 'react';
+import Link from 'next/link';
 import { ArrowDown, ArrowUp, ArrowRight, Check, Download, FolderOpen, GripVertical, MapPin, Plus, Route as RouteIcon, X, AlertTriangle, Search, Menu, ChevronDown, Pencil, Trash2, ArrowLeft, RefreshCw, ListOrdered, SlidersHorizontal, TableProperties, LayoutList } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,20 +29,20 @@ export default function Workbench() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectId, setProjectId] = useState('');
   const routeCache = useProjectRoutes(projectId);
-  const { routes, routesRef, refreshing, loaded: routesLoaded, refreshError, refreshRoutes, captureRead, isReadCurrent, isSessionCurrent, beginWrite, commitRoute, removeRoute: removeCachedRoute, endWrite, planningRequests, beginPlanning, isPlanningCurrent, endPlanning } = routeCache;
+  const { routes, routesRef, refreshing, loaded: routesLoaded, refreshError, refreshRoutes, captureRead, isReadCurrent, isSessionCurrent, beginWrite, commitRoute, removeRoute: removeCachedRoute, endWrite, planningRequests, beginPlanning, isPlanningCurrent, endPlanning, applyRoute: applyCachedRoute } = routeCache;
   const [projectView, setProjectView] = useState<{ projectId: string; view: 'overview' | 'workbench' | 'library' }>({ projectId: '', view: 'overview' });
   const view = projectView.projectId === projectId ? projectView.view : 'overview';
-  const setView = (next: 'overview' | 'workbench' | 'library') => setProjectView({ projectId, view: next });
+  const setView = useCallback((next: 'overview' | 'workbench' | 'library') => setProjectView({ projectId, view: next }), [projectId]);
   const [task, setTask] = useState<'edit' | 'plan' | 'results'>('edit');
   const [choosingPoints, setChoosingPoints] = useState(false);
   const [focusRequest, requestFocus] = useState(0);
   const consumedFocus = useRef(0);
   const [overviewSession, setOverviewSession] = useState(() => ({ projectId: '', value: emptyOverviewBrowsing() }));
   const overviewBrowsing = overviewSession.projectId === projectId ? overviewSession.value : emptyOverviewBrowsing();
-  const setOverviewBrowsing: Dispatch<SetStateAction<OverviewBrowsing>> = (next) => setOverviewSession((current) => {
+  const setOverviewBrowsing = useCallback<Dispatch<SetStateAction<OverviewBrowsing>>>((next) => setOverviewSession((current) => {
     const value = current.projectId === projectId ? current.value : emptyOverviewBrowsing();
     return { projectId, value: typeof next === 'function' ? next(value) : next };
-  });
+  }), [projectId]);
   const [route, setRoute] = useState<Route | null>(null);
   const routeRef = useRef<Route | null>(null);
   const projectRef = useRef('');
@@ -71,7 +72,7 @@ export default function Workbench() {
   const project = projects.find((item) => item.id === projectId);
   const valid = !!route?.snapshot && route.snapshot.inputVersion === route.inputVersion;
   const planningReady = config?.webServiceConfigured === true;
-  const canUndo = removedPoint?.projectId === projectId && removedPoint?.routeId === route?.id && removedPoint.scope === undoScope.current;
+  const canUndo = removedPoint?.projectId === projectId && removedPoint?.routeId === route?.id;
 
   const selectRoute = useCallback((next: Route | null) => {
     if (routeRef.current?.id !== next?.id || routeRef.current?.projectId !== next?.projectId) {
@@ -80,8 +81,16 @@ export default function Workbench() {
     routeRef.current = next; setRoute(next);
   }, []);
   const applyRoute = useCallback((next: Route, read: ProjectRouteRead) => {
-    if (routeCache.applyRoute(next, read) && routeRef.current?.id === next.id) selectRoute(next);
-  }, [routeCache.applyRoute, selectRoute]);
+    if (applyCachedRoute(next, read) && routeRef.current?.id === next.id) selectRoute(next);
+  }, [applyCachedRoute, selectRoute]);
+
+  const changeProject = useCallback((nextId: string) => {
+    if (projectRef.current === nextId) return;
+    projectRef.current = nextId; selection.current++;
+    setProjectId(nextId); setProjectView({ projectId: nextId, view: 'overview' });
+    setOverviewSession({ projectId: nextId, value: emptyOverviewBrowsing() });
+    selectRoute(null); setLibrary([]); setLoading(!!nextId); setPointEditor(null); setImporting(false); setError(''); setNotice(''); setRouteSearch(''); setLibrarySearch(''); setTask('edit'); setChoosingPoints(false); setLibraryDelete(null);
+  }, [selectRoute]);
 
   useEffect(() => {
     const current = routeRef.current;
@@ -92,26 +101,23 @@ export default function Workbench() {
     let cancelled = false;
     request<Project[]>('/api/projects').then((items) => {
       if (cancelled) return;
-      setProjects(items); setProjectId(items[0]?.id ?? '');
-    }).catch((failure) => { if (!cancelled) setError(errorMessage(failure)); }).finally(() => { if (!cancelled) setLoading(false); });
+      setProjects(items); changeProject(items[0]?.id ?? '');
+    }).catch((failure) => { if (!cancelled) setError(errorMessage(failure)); }).finally(() => { if (!cancelled && !projectRef.current) setLoading(false); });
     request<MapConfig>('/api/config').then((value) => { if (!cancelled) setConfig(value); }).catch(() => {
       if (!cancelled) setConfig({ mapKey: '', securityProxyPath: '/_AMapService', webServiceConfigured: false });
     });
     return () => { cancelled = true; };
-  }, []);
+  }, [changeProject]);
 
   useEffect(() => {
-    projectRef.current = projectId;
     const epoch = ++selection.current;
-    setView('overview'); setOverviewBrowsing(emptyOverviewBrowsing()); selectRoute(null); setLibrary([]); setPointEditor(null); setImporting(false); setError(''); setNotice(''); setRouteSearch(''); setLibrarySearch(''); setTask('edit'); setChoosingPoints(false); setLibraryDelete(null);
     if (!projectId) return;
-    setLoading(true);
     const read = captureRead();
     request<Point[]>(`/api/projects/${projectId}/points`).then((nextLibrary) => {
       if (epoch !== selection.current || !isSessionCurrent(read)) return;
       setLibrary(nextLibrary);
     }).catch((failure) => { if (epoch === selection.current) setError(errorMessage(failure)); }).finally(() => { if (epoch === selection.current) setLoading(false); });
-  }, [projectId, selectRoute, captureRead, isSessionCurrent]);
+  }, [projectId, captureRead, isSessionCurrent]);
 
   useEffect(() => {
     if (focusRequest === consumedFocus.current) return;
@@ -178,7 +184,7 @@ export default function Workbench() {
       if (editor.kind === 'project') {
         const next = await request<Project>(editor.id ? `/api/projects/${editor.id}` : '/api/projects', editor.id ? 'PATCH' : 'POST', { name: editor.name.trim() });
         setProjects((items) => editor.id ? items.map((item) => item.id === next.id ? next : item) : [...items, next]);
-        setProjectId(next.id);
+        changeProject(next.id);
       } else {
         const write = beginWrite();
         try {
@@ -196,7 +202,7 @@ export default function Workbench() {
       if (confirmDelete === 'project' && project) {
         await request(`/api/projects/${project.id}`, 'DELETE');
         const remaining = projects.filter((item) => item.id !== project.id);
-        setProjects(remaining); setProjectId(remaining[0]?.id ?? '');
+        setProjects(remaining); changeProject(remaining[0]?.id ?? '');
       } else if (confirmDelete === 'route' && route) {
         const write = beginWrite();
         try {
@@ -352,11 +358,11 @@ export default function Workbench() {
   return <div className="app-shell">
     <a className="skip-link" href={project ? view === 'overview' ? '#route-overview' : view === 'library' ? '#point-library' : '#line-editor' : '#workspace-content'}>{project ? view === 'overview' ? '跳到线路总览' : view === 'library' ? '跳到项目点位库' : '跳到线路编辑' : '跳到主内容'}</a>
     <aside className={`sidebar ${navigationOpen ? 'navigation-open' : ''}`} aria-label="项目与线路导航">
-      <div className="brand-row"><a href="/" className="brand" aria-label="重途首页"><BrandLogo /></a><Button className="navigation-toggle" aria-label={navigationOpen ? '收起项目与线路' : '展开项目与线路'} aria-expanded={navigationOpen} aria-controls="workspace-navigation" onClick={() => setNavigationOpen((open) => !open)}>{navigationOpen ? <X /> : <Menu />}</Button></div>
+      <div className="brand-row"><Link href="/" className="brand" aria-label="重途首页" onNavigate={(event) => { event.preventDefault(); window.location.assign(new URL('/', window.location.origin).href); }}><BrandLogo /></Link><Button className="navigation-toggle" aria-label={navigationOpen ? '收起项目与线路' : '展开项目与线路'} aria-expanded={navigationOpen} aria-controls="workspace-navigation" onClick={() => setNavigationOpen((open) => !open)}>{navigationOpen ? <X /> : <Menu />}</Button></div>
       <div className="mobile-context"><span>{project?.name ?? '我的项目'}</span><ChevronDown aria-hidden="true" /><span>{activeRoute?.name ?? (view === 'library' ? '项目点位库' : '线路总览')}</span></div>
       <div id="workspace-navigation" className="sidebar-content">
         <div className="sidebar-section-title"><span>我的项目</span><Button className="sidebar-add" aria-label="新建项目" title="新建项目" onClick={() => setEditor({ kind: 'project', name: '' })}><Plus /></Button></div>
-        <div className="project-list">{projects.map((item) => <Button className={`project-item ${item.id === projectId ? 'selected' : ''}`} key={item.id} aria-label={item.name} disabled={busy} onClick={() => { setProjectId(item.id); setNavigationOpen(false); }} aria-pressed={item.id === projectId}><FolderOpen className="folder-icon" /><span>{item.name}</span>{item.id === projectId && <Check className="project-check" />}</Button>)}</div>
+        <div className="project-list">{projects.map((item) => <Button className={`project-item ${item.id === projectId ? 'selected' : ''}`} key={item.id} aria-label={item.name} disabled={busy} onClick={() => { changeProject(item.id); setNavigationOpen(false); }} aria-pressed={item.id === projectId}><FolderOpen className="folder-icon" /><span>{item.name}</span>{item.id === projectId && <Check className="project-check" />}</Button>)}</div>
         {!projects.length && !loading && <p className="sidebar-empty">创建项目，集中整理<br />线路和常用点位。</p>}
         {project && <>
           <nav className="project-navigation" aria-label="项目资源">

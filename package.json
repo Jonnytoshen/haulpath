@@ -22,20 +22,28 @@
     "test:browser": "node scripts/workspace.mjs test:browser",
     "release": "nx release --skip-publish",
     "test:release": "node scripts/workspace.mjs test:release",
-    "test:workspace": "node scripts/workspace.mjs test:workspace"
+    "test:workspace": "node scripts/workspace.mjs test:workspace",
+    "lint": "node scripts/workspace.mjs lint",
+    "lint:fix": "node scripts/workspace.mjs lint:fix"
   },
   "devDependencies": {
     "@commitlint/cli": "^20.5.3",
     "@commitlint/config-conventional": "^20.5.3",
     "@commitlint/read": "20.5.0",
+    "@eslint/js": "9.39.5",
+    "@next/env": "16.4.2",
+    "@nx/eslint": "24.0.0",
     "@nx/js": "24.0.0",
+    "better-sqlite3": "^13.0.3",
+    "eslint": "9.39.5",
+    "eslint-config-next": "16.4.2",
+    "exceljs": "^4.4.0",
+    "globals": "^16.5.0",
     "husky": "^9.1.7",
     "nx": "24.0.0",
     "playwright": "1.62.1",
     "typescript": "^6.0.3",
-    "better-sqlite3": "^13.0.3",
-    "exceljs": "^4.4.0",
-    "@next/env": "16.4.2"
+    "typescript-eslint": "8.72.1"
   },
   "nx": {
     "includedScripts": [],
@@ -95,6 +103,13 @@
         "parallelism": false,
         "options": {
           "command": "node --test --test-concurrency=1 tests/workspace*.test.mjs",
+          "cwd": "{workspaceRoot}"
+        }
+      },
+      "lint": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "eslint \"*.{js,cjs,mjs,jsx,ts,cts,mts,tsx}\" \"scripts/**/*.{js,cjs,mjs,jsx,ts,cts,mts,tsx}\" \"tests/**/*.{js,cjs,mjs,jsx,ts,cts,mts,tsx}\" --no-error-on-unmatched-pattern",
           "cwd": "{workspaceRoot}"
         }
       }
