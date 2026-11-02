@@ -1,0 +1,225 @@
+.section {
+  margin-top: 24px;
+  padding-top: 24px;
+  min-width: 0;
+}
+.heading,
+.cycleHeading,
+.cycleActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.heading {
+  align-items: start;
+}
+.heading h3,
+.cycleHeading h4,
+.editorTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.heading p,
+.boundary,
+.empty {
+  color: var(--secondary);
+  margin: 8px 0 0;
+  line-height: 1.6;
+}
+.heading button {
+  flex-shrink: 0;
+}
+.cycles {
+  margin-top: 16px;
+  display: grid;
+  gap: 20px;
+}
+.cycle {
+  min-width: 0;
+  padding: 16px;
+  border-radius: 6px;
+  background: var(--muted);
+}
+.cycleHeading {
+  align-items: baseline;
+}
+.pending,
+.confirmed {
+  font-size: 13px;
+  white-space: nowrap;
+}
+.confirmed,
+.notice {
+  color: var(--primary);
+}
+.positions,
+.editorPositions {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0;
+}
+.positions li,
+.editorPositions li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 6px 0;
+}
+.positions li > div,
+.editorPositions li > div {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.positions strong,
+.editorPositions strong {
+  font-size: 14px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.positions li > div > span,
+.editorPositions li > div > span {
+  color: var(--secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.positions svg {
+  width: 16px;
+  height: 16px;
+  color: var(--secondary);
+}
+.order {
+  flex: none;
+  width: 20px;
+  color: var(--secondary);
+  font-size: 13px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.facts {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0;
+  font-size: 13px;
+}
+.facts > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.facts dt {
+  color: var(--secondary);
+  flex: none;
+}
+.facts dd {
+  margin: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.gaps {
+  margin: 16px 0;
+  font-size: 13px;
+}
+.gaps p {
+  margin: 0 0 4px;
+  font-weight: 500;
+}
+.gaps ul {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--secondary);
+  line-height: 1.7;
+}
+.boundary {
+  margin-top: 16px;
+  font-size: 12px;
+}
+.empty {
+  margin: 16px 0;
+}
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  margin: 12px 0 0;
+}
+.notice svg {
+  width: 16px;
+  height: 16px;
+}
+.editorTitle {
+  margin-top: 20px;
+}
+.confirmation {
+  display: flex;
+  gap: 8px;
+  align-items: start;
+  margin: 20px 0 8px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.confirmation input {
+  flex: none;
+  margin-top: 5px;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+}
+@media (max-width: 720px) {
+  .cycle {
+    padding: 12px;
+  }
+  .heading button,
+  .cycleActions button {
+    min-height: 44px;
+  }
+  .heading button {
+    width: 100%;
+  }
+  .facts > div {
+    align-items: start;
+  }
+}
+
+.editorPositions li > .positionActions {
+  display: flex;
+  flex: none;
+  gap: 2px;
+}
+.newPoint {
+  margin: 20px 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  min-width: 0;
+}
+.newPoint legend {
+  font-size: 14px;
+  padding: 0 4px;
+}
+.coordinates {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+@media (max-width: 720px) {
+  .editorPositions li {
+    flex-wrap: wrap;
+  }
+  .editorPositions li > .positionActions {
+    margin-left: auto;
+  }
+  .coordinates {
+    grid-template-columns: 1fr;
+  }
+}

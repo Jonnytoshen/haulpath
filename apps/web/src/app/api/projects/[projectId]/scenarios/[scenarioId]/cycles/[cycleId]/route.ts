@@ -1,0 +1,30 @@
+import { api, readJson } from '@/server/http';
+import { storage } from '@/server/storage';
+
+type Context = { params: Promise<{ projectId: string; scenarioId: string; cycleId: string }> };
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+export function PATCH(request: Request, context: Context) {
+  return api(async () => {
+    const { projectId, scenarioId, cycleId } = await context.params;
+    return Response.json(
+      storage.updateTransportCycle(projectId, scenarioId, cycleId, await readJson(request)),
+    );
+  });
+}
+
+export function DELETE(request: Request, context: Context) {
+  return api(async () => {
+    const { projectId, scenarioId, cycleId } = await context.params;
+    const revision = new URL(request.url).searchParams.get('expectedRevision');
+    return Response.json(
+      storage.deleteTransportCycle(
+        projectId,
+        scenarioId,
+        cycleId,
+        revision === null ? undefined : Number(revision),
+      ),
+    );
+  });
+}

@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog } from '@/components/app-dialog';
 import { request } from '@/lib/client-request';
 import styles from './planning-scenario-workbench.module.css';
+import TransportCycles from './transport-cycles';
 
 type NameEditor = { scenario: PlanningScenario | null; name: string };
 const messageOf = (error: unknown) =>
@@ -280,6 +281,21 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
             <p className={styles.description}>
               草案已保存在本机。关闭页面或重启服务后，可从本项目重新打开。
             </p>
+            <TransportCycles
+              key={selected.id}
+              scenario={selected}
+              disabled={busy || reading}
+              onChange={(saved) => {
+                setSelected(saved);
+                setScenarios((items) => items.map((item) => (item.id === saved.id ? saved : item)));
+              }}
+              onWritingChange={(value) => {
+                writing.current = value;
+                if (value) generation.current++;
+                setBusy(value);
+                setReading(false);
+              }}
+            />
             <div className={styles.detailActions}>
               <Button
                 className="button"

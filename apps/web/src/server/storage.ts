@@ -10,11 +10,13 @@ import type {
   Project,
   Route,
   Strategy,
+  TransportCycle,
 } from '@haulpath/domain';
 import { HttpError } from './http';
 
 import { nameOf, pointOf, pointsOf, strategyOf } from './validation';
 import { scenarioContext, scenarioFields, scenarioRevision } from './scenario-validation';
+import { cyclePositions, confirmCycle } from './transport-cycle-validation';
 
 class Storage {
   private db: Database.Database;
@@ -155,6 +157,8 @@ class Storage {
       const name = input.name === undefined ? scenario.name : nameOf(input.name);
       const context =
         input.context === undefined ? scenario.context : scenarioContext(input.context);
+      if (!isDeepStrictEqual(context.transportCycles, scenario.context.transportCycles))
+        throw new HttpError(400, '运输循环须通过专用接口维护，不能直接覆盖');
       const inputChanged = !isDeepStrictEqual(context, scenario.context);
       if (name === scenario.name && !inputChanged) return scenario;
       if (inputChanged) scenario.inputVersion++;
@@ -176,6 +180,125 @@ class Storage {
       this.db
         .prepare('DELETE FROM planning_scenarios WHERE id = ? AND project_id = ?')
         .run(scenarioId, projectId);
+    })();
+  }
+  createTransportCycle(
+    projectId: string,
+    scenarioId: string,
+    input: Record<string, unknown>,
+  ): PlanningScenario {
+    return this.db.transaction(() => {
+      const scenario = this.getScenario(projectId, scenarioId);
+      scenarioFields(input, ['sourceRouteId', 'expectedRevision']);
+      if (scenarioRevision(input.expectedRevision) !== scenario.revision)
+        throw new HttpError(409, '规划方案已被更新，请重新加载后编辑');
+      if (typeof input.sourceRouteId !== 'string' || !input.sourceRouteId)
+        throw new HttpError(400, '请选择来源线路');
+      const route = this.getRoute(input.sourceRouteId, projectId);
+      const cycle: TransportCycle = {
+        id: randomUUID(),
+        name: route.name,
+        strategy: route.strategy,
+        positions: route.points.map((point) => ({
+          id: randomUUID(),
+          point,
+          sourcePointId: point.id,
+        })),
+        source: {
+          routeId: route.id,
+          name: route.name,
+          inputVersion: route.inputVersion,
+          points: route.points,
+          strategy: route.strategy,
+          snapshot: route.snapshot,
+          importedAt: new Date().toISOString(),
+        },
+        roads: [],
+        confirmed: false,
+        confirmedAt: null,
+      };
+      if (route.snapshot?.inputVersion === route.inputVersion) {
+        cycle.roads = route.snapshot.legs.map((leg, index) => ({
+          fromPositionId: cycle.positions[index].id,
+          toPositionId: cycle.positions[index + 1].id,
+          strategy: route.snapshot!.strategy,
+          leg,
+        }));
+      }
+      scenario.context.transportCycles = [...(scenario.context.transportCycles ?? []), cycle];
+      scenario.inputVersion++;
+      scenario.revision++;
+      scenario.updatedAt = new Date().toISOString();
+      this.db
+        .prepare('UPDATE planning_scenarios SET payload = ? WHERE id = ? AND project_id = ?')
+        .run(JSON.stringify(scenario), scenarioId, projectId);
+      return scenario;
+    })();
+  }
+  updateTransportCycle(
+    projectId: string,
+    scenarioId: string,
+    cycleId: string,
+    input: Record<string, unknown>,
+  ): PlanningScenario {
+    return this.db.transaction(() => {
+      const scenario = this.getScenario(projectId, scenarioId);
+      const cycle = scenario.context.transportCycles?.find((candidate) => candidate.id === cycleId);
+      if (!cycle) throw new HttpError(404, '该规划方案下的运输循环不存在');
+      scenarioFields(input, ['name', 'strategy', 'positions', 'confirmed', 'expectedRevision']);
+      if (scenarioRevision(input.expectedRevision) !== scenario.revision)
+        throw new HttpError(409, '规划方案已被更新，请重新加载后编辑');
+      if (input.confirmed !== undefined && typeof input.confirmed !== 'boolean')
+        throw new HttpError(400, '循环确认状态无效');
+      const before = JSON.stringify(cycle);
+      const positions =
+        input.positions === undefined ? cycle.positions : cyclePositions(input.positions, cycle);
+      const strategy = input.strategy === undefined ? cycle.strategy : strategyOf(input.strategy);
+      const businessChanged =
+        strategy !== cycle.strategy || !isDeepStrictEqual(positions, cycle.positions);
+      cycle.name = input.name === undefined ? cycle.name : nameOf(input.name);
+      cycle.positions = positions;
+      cycle.strategy = strategy;
+      if (businessChanged || input.confirmed === false) {
+        cycle.confirmed = false;
+        cycle.confirmedAt = null;
+      }
+      if (input.confirmed === true) {
+        confirmCycle(cycle);
+        cycle.confirmed = true;
+        cycle.confirmedAt ??= new Date().toISOString();
+      }
+      if (before === JSON.stringify(cycle)) return scenario;
+      scenario.inputVersion++;
+      scenario.revision++;
+      scenario.updatedAt = new Date().toISOString();
+      this.db
+        .prepare('UPDATE planning_scenarios SET payload = ? WHERE id = ? AND project_id = ?')
+        .run(JSON.stringify(scenario), scenarioId, projectId);
+      return scenario;
+    })();
+  }
+  deleteTransportCycle(
+    projectId: string,
+    scenarioId: string,
+    cycleId: string,
+    expectedRevision: unknown,
+  ): PlanningScenario {
+    return this.db.transaction(() => {
+      const scenario = this.getScenario(projectId, scenarioId);
+      const cycles = scenario.context.transportCycles ?? [];
+      if (!cycles.some((cycle) => cycle.id === cycleId))
+        throw new HttpError(404, '该规划方案下的运输循环不存在');
+      if (scenarioRevision(expectedRevision) !== scenario.revision)
+        throw new HttpError(409, '规划方案已被更新，请重新加载后删除');
+      scenario.context.transportCycles = cycles.filter((cycle) => cycle.id !== cycleId);
+      scenario.inputVersion++;
+      scenario.revision++;
+      scenario.updatedAt = new Date().toISOString();
+      this.db
+        .prepare('UPDATE planning_scenarios SET payload = ? WHERE id = ? AND project_id = ?')
+        .run(JSON.stringify(scenario), scenarioId, projectId);
+      return scenario;
     })();
   }
   listRoutes(projectId: string): Route[] {

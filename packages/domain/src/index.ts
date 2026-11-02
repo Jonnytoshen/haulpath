@@ -130,6 +130,7 @@ export interface JsonObject {
 export interface PlanningScenarioContext {
   schemaVersion: 1;
   resources: JsonObject;
+  transportCycles?: TransportCycle[];
   annual: JsonObject[];
   results: JsonObject[];
 }
@@ -144,4 +145,82 @@ export interface PlanningScenario {
   context: PlanningScenarioContext;
   createdAt: string;
   updatedAt: string;
+}
+
+/** A position is one occurrence in the business order, including repeated locations. */
+export interface TransportCyclePosition {
+  id: string;
+  point: Point;
+  sourcePointId: string | null;
+}
+
+export interface TransportCycleRoad {
+  fromPositionId: string;
+  toPositionId: string;
+  strategy: Strategy;
+  leg: Leg;
+}
+
+export interface TransportCycle {
+  id: string;
+  name: string;
+  strategy: Strategy;
+  positions: TransportCyclePosition[];
+  source: {
+    routeId: string;
+    name: string;
+    inputVersion: number;
+    points: Point[];
+    strategy: Strategy;
+    snapshot: PlanningSnapshot | null;
+    importedAt: string;
+  };
+  roads: TransportCycleRoad[];
+  confirmed: boolean;
+  confirmedAt: string | null;
+}
+
+export function cycleIsClosed(cycle: TransportCycle): boolean {
+  const first = cycle.positions[0]?.point;
+  const last = cycle.positions.at(-1)?.point;
+  return cycle.positions.length >= 3 && !!first && !!last && sameLocation(first, last);
+}
+
+function sameLocation(a: Point, b: Point): boolean {
+  return a.longitude === b.longitude && a.latitude === b.latitude;
+}
+
+export function cycleHasAdjacentOverlap(cycle: TransportCycle): boolean {
+  return cycle.positions.some(
+    (position, index) =>
+      index > 0 && sameLocation(position.point, cycle.positions[index - 1].point),
+  );
+}
+
+/** Road data remains usable only for the exact directed occurrence and driving preference. */
+export function effectiveCycleRoads(cycle: TransportCycle): TransportCycleRoad[] {
+  return cycle.positions.slice(1).flatMap((to, index) => {
+    const from = cycle.positions[index];
+    const road = cycle.roads.find(
+      (candidate) =>
+        candidate.fromPositionId === from.id &&
+        candidate.toPositionId === to.id &&
+        candidate.strategy === cycle.strategy &&
+        sameLocation(candidate.leg.from, from.point) &&
+        sameLocation(candidate.leg.to, to.point),
+    );
+    return road ? [road] : [];
+  });
+}
+
+export function cycleReadiness(cycle: TransportCycle): string[] {
+  const gaps: string[] = [];
+  if (cycle.positions.length < 3) gaps.push('至少需要两个不同地点并返回起点');
+  if (!cycleIsClosed(cycle)) gaps.push('尚未补齐闭合回程');
+  if (cycleHasAdjacentOverlap(cycle)) gaps.push('相邻点位坐标重合');
+  if (!cycle.confirmed) gaps.push('业务顺序与回程待确认');
+  const missing = Math.max(0, cycle.positions.length - 1 - effectiveCycleRoads(cycle).length);
+  if (missing) gaps.push(`缺少 ${missing} 个有向区间的有效道路资料`);
+  gaps.push('行驶时间待配置（现有路线方案不含时长）');
+  return gaps;
 }
