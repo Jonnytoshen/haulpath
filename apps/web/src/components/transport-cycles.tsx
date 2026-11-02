@@ -613,6 +613,7 @@ export default function TransportCycles({
         <Dialog title="删除运输循环" error={error} onClose={closeDialog}>
           <p className="delete-description">
             确认删除“{deleting.name}”？此循环的方案内资料将被移除，来源线路继续保留。
+            已录入的运输需求继续保留，并显示循环引用失效，需重新关联或删除。
           </p>
           <div className="dialog-actions">
             <Button className="button" disabled={busy} onClick={closeDialog}>

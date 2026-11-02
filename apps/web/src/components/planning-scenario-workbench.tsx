@@ -9,6 +9,7 @@ import { Dialog } from '@/components/app-dialog';
 import { request } from '@/lib/client-request';
 import styles from './planning-scenario-workbench.module.css';
 import TransportCycles from './transport-cycles';
+import TransportDemands from './transport-demands';
 
 type NameEditor = { scenario: PlanningScenario | null; name: string };
 const messageOf = (error: unknown) =>
@@ -283,6 +284,21 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
             </p>
             <TransportCycles
               key={selected.id}
+              scenario={selected}
+              disabled={busy || reading}
+              onChange={(saved) => {
+                setSelected(saved);
+                setScenarios((items) => items.map((item) => (item.id === saved.id ? saved : item)));
+              }}
+              onWritingChange={(value) => {
+                writing.current = value;
+                if (value) generation.current++;
+                setBusy(value);
+                setReading(false);
+              }}
+            />
+            <TransportDemands
+              key={`demands-${selected.id}`}
               scenario={selected}
               disabled={busy || reading}
               onChange={(saved) => {

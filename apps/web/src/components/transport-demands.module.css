@@ -1,0 +1,274 @@
+.section {
+  margin-top: 24px;
+  padding-top: 24px;
+  min-width: 0;
+  border-top: 1px solid var(--border);
+}
+.heading,
+.actions,
+.rowHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.heading {
+  align-items: start;
+}
+.heading h3,
+.flows h4,
+.rowHeading h4 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.heading p,
+.helper,
+.empty,
+.boundary {
+  color: var(--secondary);
+  line-height: 1.6;
+  margin: 8px 0 0;
+}
+.heading button {
+  flex-shrink: 0;
+}
+.helper,
+.boundary {
+  font-size: 13px;
+}
+.summary {
+  margin: 16px 0 8px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.demands {
+  padding: 0;
+  list-style: none;
+  margin: 8px 0 20px;
+  max-height: 300px;
+  overflow: auto;
+}
+.demands li {
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+.demands li > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+.demands strong {
+  font-weight: 500;
+}
+.demands li > div > span {
+  font-size: 13px;
+  color: var(--secondary);
+}
+.demands strong,
+.demands span {
+  overflow-wrap: anywhere;
+}
+.number {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.demands .number {
+  flex-shrink: 0;
+}
+.number small {
+  font-size: 12px;
+  color: var(--secondary);
+}
+.notice {
+  color: var(--primary);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 12px 0;
+  font-size: 13px;
+}
+.notice svg {
+  width: 16px;
+  height: 16px;
+}
+.warning,
+.discard {
+  padding: 12px;
+  margin: 12px 0;
+  background: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.warning p,
+.discard p {
+  margin: 0 0 6px;
+}
+.gap {
+  color: var(--secondary);
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.flows {
+  margin-top: 20px;
+}
+.tableWrap {
+  max-width: 100%;
+  overflow: auto;
+  margin: 16px 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.tableWrap table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  text-align: left;
+}
+.tableWrap caption {
+  text-align: left;
+  color: var(--foreground);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 12px;
+}
+.tableWrap th,
+.tableWrap td {
+  padding: 10px 12px;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+  min-width: 100px;
+}
+.tableWrap thead th {
+  color: var(--secondary);
+  font-weight: 400;
+}
+.tableWrap tbody th {
+  font-weight: 500;
+}
+.tableWrap tbody tr {
+  border-top: 1px solid var(--border);
+}
+.tableWrap td:last-child {
+  max-width: 340px;
+}
+.tableWrap .number {
+  text-align: right;
+}
+.source {
+  white-space: pre-wrap;
+}
+.editorFields {
+  border: 0;
+  padding: 0;
+  min-width: 0;
+}
+.addControls {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  margin: 16px 0;
+}
+.addControls > label {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+.editorRows {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0;
+}
+.editorRows > li {
+  padding: 16px 0;
+  border-top: 1px solid var(--border);
+}
+.rowHeading {
+  margin-bottom: 12px;
+}
+.rowFields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.7fr);
+  gap: 12px;
+}
+.rowFields > label {
+  min-width: 0;
+}
+.paste {
+  margin-top: 20px;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+.evidence summary,
+.paste summary {
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+}
+.evidence summary:focus-visible,
+.paste summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
+}
+.paste textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 100px;
+  font-size: 14px;
+  line-height: 1.6;
+  border: 1px solid var(--border);
+  background: var(--background);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+.paste textarea:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.paste textarea::placeholder {
+  color: var(--secondary);
+}
+.paste .field {
+  margin-top: 12px;
+}
+@media (max-width: 720px) {
+  .heading button {
+    width: 100%;
+    min-height: 44px;
+  }
+  .rowFields {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .addControls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .editorFields button {
+    min-height: 44px;
+  }
+  .demands li {
+    align-items: start;
+  }
+  .demands .number {
+    max-width: 110px;
+  }
+  .tableWrap table {
+    min-width: 460px;
+  }
+}
+
+.evidence ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  max-height: 220px;
+  overflow: auto;
+  line-height: 1.7;
+}
