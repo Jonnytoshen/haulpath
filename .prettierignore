@@ -1,0 +1,20 @@
+# Generated output, dependencies and local data are also excluded by .gitignore.
+node_modules/
+.next/
+.nx/
+out/
+dist/
+coverage/
+playwright-report/
+test-results/
+.scratch/
+data/
+backups/
+*.tsbuildinfo
+*.log
+.env*
+pnpm-lock.yaml
+# Test inputs and generated release notes retain their original representation.
+**/fixtures/**
+/CHANGELOG.md
+/apps/web/public/brand/*.svg

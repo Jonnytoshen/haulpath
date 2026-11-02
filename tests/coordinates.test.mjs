@@ -31,7 +31,12 @@ after(async () => {
 });
 
 const request = (path, method, body) => jsonRequest(application.baseUrl, path, method, body);
-const inputPoint = (name, longitude = 121.471234567, latitude = 31.231234567) => ({ name, longitude, latitude, source: 'manual' });
+const inputPoint = (name, longitude = 121.471234567, latitude = 31.231234567) => ({
+  name,
+  longitude,
+  latitude,
+  source: 'manual',
+});
 
 test('GCJ-02 point entry preserves original coordinates without requesting conversion', async () => {
   const beforeCount = upstreamRequests.length;
@@ -55,15 +60,23 @@ test('WGS84 entry converts in bounded batches and preserves originals and input 
     assert.ok(positions.length <= 40);
     assert.ok(positions.every((position) => /^-?\d+\.\d{6},-?\d+\.\d{6}$/.test(position)));
     response.setHeader('Content-Type', 'application/json');
-    response.end(JSON.stringify({ status: '1', locations: positions.map(() => '121.476,31.236').join(';') }));
+    response.end(
+      JSON.stringify({ status: '1', locations: positions.map(() => '121.476,31.236').join(';') }),
+    );
   };
   const beforeCount = upstreamRequests.length;
-  const points = Array.from({ length: 41 }, (_, index) => ({ ...inputPoint(`GPS ${index}`), coordinateSystem: 'WGS84' }));
+  const points = Array.from({ length: 41 }, (_, index) => ({
+    ...inputPoint(`GPS ${index}`),
+    coordinateSystem: 'WGS84',
+  }));
   points.splice(1, 0, inputPoint('已是高德坐标'));
   const result = await request('/api/coordinates', 'POST', { points });
   assert.equal(result.status, 200);
   assert.equal(result.body.length, 42);
-  assert.deepEqual(result.body.map((point) => point.name), points.map((point) => point.name));
+  assert.deepEqual(
+    result.body.map((point) => point.name),
+    points.map((point) => point.name),
+  );
   assert.equal(result.body[0].longitude, 121.476);
   assert.equal(result.body[0].latitude, 31.236);
   assert.equal(result.body[0].originalLongitude, 121.471234567);
@@ -74,14 +87,24 @@ test('WGS84 entry converts in bounded batches and preserves originals and input 
 
 test('coordinate entry rejects invalid inputs before conversion and never returns a partially converted batch', async () => {
   const beforeCount = upstreamRequests.length;
-  for (const point of [inputPoint(''), inputPoint('越界', 181), inputPoint('无坐标', '121'), { ...inputPoint('未知系'), coordinateSystem: 'BD-09' }]) {
-    const result = await request('/api/coordinates', 'POST', { points: [{ ...inputPoint('有效GPS'), coordinateSystem: 'WGS84' }, point] });
+  for (const point of [
+    inputPoint(''),
+    inputPoint('越界', 181),
+    inputPoint('无坐标', '121'),
+    { ...inputPoint('未知系'), coordinateSystem: 'BD-09' },
+  ]) {
+    const result = await request('/api/coordinates', 'POST', {
+      points: [{ ...inputPoint('有效GPS'), coordinateSystem: 'WGS84' }, point],
+    });
     assert.equal(result.status, 400);
   }
   assert.equal(upstreamRequests.length, beforeCount);
   const gps = { ...inputPoint('GPS'), coordinateSystem: 'WGS84' };
   for (const locations of ['', '181,31', '121,', '121,31;122,32']) {
-    handleUpstream = (_url, response) => { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ status: '1', locations })); };
+    handleUpstream = (_url, response) => {
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({ status: '1', locations }));
+    };
     const result = await request('/api/coordinates', 'POST', { points: [gps] });
     assert.equal(result.status, 502);
     assert.equal(typeof result.body.error, 'string');

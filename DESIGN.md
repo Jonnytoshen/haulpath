@@ -1,219 +1,219 @@
 ---
-"name": "重途 · HaulPath"
-"description": "白色与浅灰绿工作面，以项目资源和当前线路任务组织操作。"
-"colors":
-  "primary": "#176b55"
-  "primary-hover": "#125640"
-  "white": "#ffffff"
-  "ink": "#243b34"
-  "secondary-ink": "#5d6e65"
-  "muted-ink": "#65746d"
-  "canvas": "#fbfcfb"
-  "sidebar": "#f3f6f4"
-  "muted": "#f3f6f4"
-  "accent": "#eaf2ed"
-  "border": "#dfe7e2"
-  "button-ink": "#385247"
-  "button-border": "#d7e1da"
-  "button-hover": "#f1f6f2"
-  "button-hover-border": "#b4c9bc"
-  "danger": "#b43a36"
-  "danger-hover": "#942c29"
-  "planned-bg": "#eaf5ec"
-  "planned-ink": "#276340"
-  "stale-bg": "#faf1dc"
-  "stale-ink": "#825e20"
-  "failed-ink": "#a43a30"
-  "draft-bg": "#f0f3f0"
-  "draft-ink": "#5d6f63"
-  "notice-bg": "#f6f2e7"
-  "notice-ink": "#735d2e"
-  "error-bg": "#fff5f3"
-  "error-ink": "#a2372e"
-  "error-border": "#f1d1cc"
-  "success-bg": "#edf7f0"
-  "success-ink": "#205b3d"
-  "success-border": "#bed8c7"
-  "surface": "#f7f9f7"
-  "selected-surface": "#edf4ef"
-  "context-ink": "#305e46"
-  "row-border": "#edf1ed"
-"typography":
-  "headline":
-    "fontFamily": "-apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif"
-    "fontSize": "24px"
-    "fontWeight": 650
-    "lineHeight": 1.4
-    "letterSpacing": "-0.025em"
-  "title":
-    "fontFamily": "-apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif"
-    "fontSize": "19px"
-    "fontWeight": 600
-    "lineHeight": 1.5
-    "letterSpacing": "-0.02em"
-  "section":
-    "fontFamily": "-apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif"
-    "fontSize": "14px"
-    "fontWeight": 600
-    "lineHeight": 1.5
-  "body":
-    "fontFamily": "-apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif"
-    "fontSize": "14px"
-    "fontWeight": 400
-    "lineHeight": 1.5
-  "control":
-    "fontFamily": "-apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif"
-    "fontSize": "13px"
-    "fontWeight": 550
-    "lineHeight": 1.5
-  "label":
-    "fontFamily": "-apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif"
-    "fontSize": "12px"
-    "fontWeight": 550
-    "lineHeight": 1.5
-  "metadata":
-    "fontFamily": "-apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif"
-    "fontSize": "11px"
-    "fontWeight": 400
-    "lineHeight": 1.5
-  "metric":
-    "fontFamily": "-apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif"
-    "fontSize": "30px"
-    "fontWeight": 600
-    "lineHeight": 1
-    "letterSpacing": "-0.025em"
-  "item-title":
-    "fontFamily": "-apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif"
-    "fontSize": "14px"
-    "fontWeight": 550
-    "lineHeight": 1.5
-"rounded":
-  "text": "3px"
-  "tag": "4px"
-  "control": "6px"
-  "navigation": "6px"
-  "panel": "12px"
-  "circle": "50%"
-  "floating": "7px"
-"spacing":
-  "4": "4px"
-  "6": "6px"
-  "8": "8px"
-  "10": "10px"
-  "12": "12px"
-  "14": "14px"
-  "16": "16px"
-  "18": "18px"
-  "20": "20px"
-  "22": "22px"
-  "24": "24px"
-  "28": "28px"
-"components":
-  "button-primary":
-    "backgroundColor": "{colors.primary}"
-    "textColor": "{colors.white}"
-    "typography": "{typography.control}"
-    "rounded": "{rounded.control}"
-    "padding": "0 13px"
-    "height": "38px"
-  "button-primary-hover":
-    "backgroundColor": "{colors.primary-hover}"
-    "textColor": "{colors.white}"
-  "button-secondary":
-    "backgroundColor": "{colors.white}"
-    "textColor": "{colors.button-ink}"
-    "typography": "{typography.control}"
-    "rounded": "{rounded.control}"
-    "padding": "0 13px"
-    "height": "38px"
-  "button-secondary-hover":
-    "backgroundColor": "{colors.button-hover}"
-  "button-ghost":
-    "backgroundColor": "transparent"
-    "textColor": "{colors.button-ink}"
-    "typography": "{typography.control}"
-    "rounded": "{rounded.control}"
-    "padding": "0 13px"
-    "height": "38px"
-  "button-ghost-hover":
-    "backgroundColor": "{colors.accent}"
-  "button-danger":
-    "backgroundColor": "{colors.danger}"
-    "textColor": "{colors.white}"
-    "typography": "{typography.control}"
-    "rounded": "{rounded.control}"
-    "padding": "0 13px"
-    "height": "38px"
-  "button-danger-hover":
-    "backgroundColor": "{colors.danger-hover}"
-  "button-text":
-    "backgroundColor": "transparent"
-    "textColor": "{colors.primary}"
-    "typography": "{typography.label}"
-    "rounded": "{rounded.text}"
-    "padding": "3px 0"
-  "button-plan":
-    "backgroundColor": "{colors.primary}"
-    "textColor": "{colors.white}"
-    "typography": "{typography.control}"
-    "rounded": "{rounded.control}"
-    "padding": "0 13px"
-    "height": "42px"
-    "width": "100%"
-  "input":
-    "backgroundColor": "transparent"
-    "textColor": "{colors.ink}"
-    "typography": "{typography.body}"
-    "rounded": "{rounded.control}"
-    "padding": "8px 12px"
-    "height": "40px"
-    "width": "100%"
-  "panel":
-    "backgroundColor": "{colors.white}"
-    "textColor": "{colors.ink}"
-    "rounded": "{rounded.panel}"
-  "status-draft":
-    "backgroundColor": "{colors.draft-bg}"
-    "textColor": "{colors.draft-ink}"
-    "rounded": "{rounded.tag}"
-    "padding": "2px 6px"
-  "status-planned":
-    "backgroundColor": "{colors.planned-bg}"
-    "textColor": "{colors.planned-ink}"
-    "rounded": "{rounded.tag}"
-    "padding": "2px 6px"
-  "status-stale":
-    "backgroundColor": "{colors.stale-bg}"
-    "textColor": "{colors.stale-ink}"
-    "rounded": "{rounded.tag}"
-    "padding": "2px 6px"
-  "route-navigation":
-    "backgroundColor": "transparent"
-    "textColor": "#3d584b"
-    "rounded": "{rounded.navigation}"
-    "padding": "13px 10px"
-    "width": "100%"
-  "route-navigation-active":
-    "backgroundColor": "{colors.white}"
-    "textColor": "#184f3c"
-  "point-number":
-    "backgroundColor": "#eef2ef"
-    "textColor": "#536c5e"
-    "rounded": "{rounded.circle}"
-    "size": "27px"
-  "task-navigation":
-    "backgroundColor": "transparent"
-    "textColor": "{colors.secondary-ink}"
-    "padding": "6px 18px 16px"
-    "width": "100%"
-  "task-navigation-active":
-    "backgroundColor": "{colors.selected-surface}"
-    "textColor": "{colors.primary}"
-  "library-selection-context":
-    "backgroundColor": "{colors.selected-surface}"
-    "textColor": "{colors.context-ink}"
-    "padding": "15px 20px"
-    "width": "100%"
+'name': '重途 · HaulPath'
+'description': '白色与浅灰绿工作面，以项目资源和当前线路任务组织操作。'
+'colors':
+  'primary': '#176b55'
+  'primary-hover': '#125640'
+  'white': '#ffffff'
+  'ink': '#243b34'
+  'secondary-ink': '#5d6e65'
+  'muted-ink': '#65746d'
+  'canvas': '#fbfcfb'
+  'sidebar': '#f3f6f4'
+  'muted': '#f3f6f4'
+  'accent': '#eaf2ed'
+  'border': '#dfe7e2'
+  'button-ink': '#385247'
+  'button-border': '#d7e1da'
+  'button-hover': '#f1f6f2'
+  'button-hover-border': '#b4c9bc'
+  'danger': '#b43a36'
+  'danger-hover': '#942c29'
+  'planned-bg': '#eaf5ec'
+  'planned-ink': '#276340'
+  'stale-bg': '#faf1dc'
+  'stale-ink': '#825e20'
+  'failed-ink': '#a43a30'
+  'draft-bg': '#f0f3f0'
+  'draft-ink': '#5d6f63'
+  'notice-bg': '#f6f2e7'
+  'notice-ink': '#735d2e'
+  'error-bg': '#fff5f3'
+  'error-ink': '#a2372e'
+  'error-border': '#f1d1cc'
+  'success-bg': '#edf7f0'
+  'success-ink': '#205b3d'
+  'success-border': '#bed8c7'
+  'surface': '#f7f9f7'
+  'selected-surface': '#edf4ef'
+  'context-ink': '#305e46'
+  'row-border': '#edf1ed'
+'typography':
+  'headline':
+    'fontFamily': '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif'
+    'fontSize': '24px'
+    'fontWeight': 650
+    'lineHeight': 1.4
+    'letterSpacing': '-0.025em'
+  'title':
+    'fontFamily': '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif'
+    'fontSize': '19px'
+    'fontWeight': 600
+    'lineHeight': 1.5
+    'letterSpacing': '-0.02em'
+  'section':
+    'fontFamily': '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif'
+    'fontSize': '14px'
+    'fontWeight': 600
+    'lineHeight': 1.5
+  'body':
+    'fontFamily': '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif'
+    'fontSize': '14px'
+    'fontWeight': 400
+    'lineHeight': 1.5
+  'control':
+    'fontFamily': '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif'
+    'fontSize': '13px'
+    'fontWeight': 550
+    'lineHeight': 1.5
+  'label':
+    'fontFamily': '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif'
+    'fontSize': '12px'
+    'fontWeight': 550
+    'lineHeight': 1.5
+  'metadata':
+    'fontFamily': '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif'
+    'fontSize': '11px'
+    'fontWeight': 400
+    'lineHeight': 1.5
+  'metric':
+    'fontFamily': '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif'
+    'fontSize': '30px'
+    'fontWeight': 600
+    'lineHeight': 1
+    'letterSpacing': '-0.025em'
+  'item-title':
+    'fontFamily': '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif'
+    'fontSize': '14px'
+    'fontWeight': 550
+    'lineHeight': 1.5
+'rounded':
+  'text': '3px'
+  'tag': '4px'
+  'control': '6px'
+  'navigation': '6px'
+  'panel': '12px'
+  'circle': '50%'
+  'floating': '7px'
+'spacing':
+  '4': '4px'
+  '6': '6px'
+  '8': '8px'
+  '10': '10px'
+  '12': '12px'
+  '14': '14px'
+  '16': '16px'
+  '18': '18px'
+  '20': '20px'
+  '22': '22px'
+  '24': '24px'
+  '28': '28px'
+'components':
+  'button-primary':
+    'backgroundColor': '{colors.primary}'
+    'textColor': '{colors.white}'
+    'typography': '{typography.control}'
+    'rounded': '{rounded.control}'
+    'padding': '0 13px'
+    'height': '38px'
+  'button-primary-hover':
+    'backgroundColor': '{colors.primary-hover}'
+    'textColor': '{colors.white}'
+  'button-secondary':
+    'backgroundColor': '{colors.white}'
+    'textColor': '{colors.button-ink}'
+    'typography': '{typography.control}'
+    'rounded': '{rounded.control}'
+    'padding': '0 13px'
+    'height': '38px'
+  'button-secondary-hover':
+    'backgroundColor': '{colors.button-hover}'
+  'button-ghost':
+    'backgroundColor': 'transparent'
+    'textColor': '{colors.button-ink}'
+    'typography': '{typography.control}'
+    'rounded': '{rounded.control}'
+    'padding': '0 13px'
+    'height': '38px'
+  'button-ghost-hover':
+    'backgroundColor': '{colors.accent}'
+  'button-danger':
+    'backgroundColor': '{colors.danger}'
+    'textColor': '{colors.white}'
+    'typography': '{typography.control}'
+    'rounded': '{rounded.control}'
+    'padding': '0 13px'
+    'height': '38px'
+  'button-danger-hover':
+    'backgroundColor': '{colors.danger-hover}'
+  'button-text':
+    'backgroundColor': 'transparent'
+    'textColor': '{colors.primary}'
+    'typography': '{typography.label}'
+    'rounded': '{rounded.text}'
+    'padding': '3px 0'
+  'button-plan':
+    'backgroundColor': '{colors.primary}'
+    'textColor': '{colors.white}'
+    'typography': '{typography.control}'
+    'rounded': '{rounded.control}'
+    'padding': '0 13px'
+    'height': '42px'
+    'width': '100%'
+  'input':
+    'backgroundColor': 'transparent'
+    'textColor': '{colors.ink}'
+    'typography': '{typography.body}'
+    'rounded': '{rounded.control}'
+    'padding': '8px 12px'
+    'height': '40px'
+    'width': '100%'
+  'panel':
+    'backgroundColor': '{colors.white}'
+    'textColor': '{colors.ink}'
+    'rounded': '{rounded.panel}'
+  'status-draft':
+    'backgroundColor': '{colors.draft-bg}'
+    'textColor': '{colors.draft-ink}'
+    'rounded': '{rounded.tag}'
+    'padding': '2px 6px'
+  'status-planned':
+    'backgroundColor': '{colors.planned-bg}'
+    'textColor': '{colors.planned-ink}'
+    'rounded': '{rounded.tag}'
+    'padding': '2px 6px'
+  'status-stale':
+    'backgroundColor': '{colors.stale-bg}'
+    'textColor': '{colors.stale-ink}'
+    'rounded': '{rounded.tag}'
+    'padding': '2px 6px'
+  'route-navigation':
+    'backgroundColor': 'transparent'
+    'textColor': '#3d584b'
+    'rounded': '{rounded.navigation}'
+    'padding': '13px 10px'
+    'width': '100%'
+  'route-navigation-active':
+    'backgroundColor': '{colors.white}'
+    'textColor': '#184f3c'
+  'point-number':
+    'backgroundColor': '#eef2ef'
+    'textColor': '#536c5e'
+    'rounded': '{rounded.circle}'
+    'size': '27px'
+  'task-navigation':
+    'backgroundColor': 'transparent'
+    'textColor': '{colors.secondary-ink}'
+    'padding': '6px 18px 16px'
+    'width': '100%'
+  'task-navigation-active':
+    'backgroundColor': '{colors.selected-surface}'
+    'textColor': '{colors.primary}'
+  'library-selection-context':
+    'backgroundColor': '{colors.selected-surface}'
+    'textColor': '{colors.context-ink}'
+    'padding': '15px 20px'
+    'width': '100%'
 ---
 
 # Design System: 重途 · HaulPath
@@ -227,6 +227,7 @@
 信息优先服务操作与核对。项目资源提供稳定的资料上下文，当前线路在主工作区内展开；名称允许换行，数值用等宽数字对齐，顺序通过连续编号表达，状态同时使用文字与颜色。布局随空间收紧，但当前对象、保存反馈和下一步动作必须可辨认。
 
 **Key Characteristics:**
+
 - 白色内容面与浅灰绿辅助面的温和分层。
 - 深绿主动作、细边界、小幅圆角，常驻区域保持平面。
 - 中文界面与 Lucide 线性功能图标；数字顺序和数值对齐比装饰更醒目。
@@ -390,6 +391,7 @@
 ## Do's and Don'ts
 
 ### Do:
+
 - Do 沿用白色内容面、浅灰绿辅助面与深绿主动作，优先用空间和边界区分区域。
 - Do 保持项目、线路与点位的名称可读；长名称换行，移动端仍呈现完整当前对象与项目归属。
 - Do 将长列表放入所属滚动区，保留本任务的添加入口、测算原因与底部动作；窄屏选择模式保留黏附目标条。
@@ -397,6 +399,7 @@
 - Do 为键盘操作保留焦点环、跳转链接和点位上移／下移按钮，尊重减少动态效果偏好。
 
 ### Don't:
+
 - Don't 为常驻面板添加装饰性投影或背景渐变。
 - Don't 用颜色替代点位编号、起终点角色或状态文字。
 - Don't 把过期方案的折线和里程当作当前结果继续强调。

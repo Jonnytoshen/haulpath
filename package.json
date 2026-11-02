@@ -23,6 +23,9 @@
     "release": "nx release --skip-publish",
     "test:release": "node scripts/workspace.mjs test:release",
     "test:workspace": "node scripts/workspace.mjs test:workspace",
+    "format": "nx format:write --all",
+    "format:check": "nx format:check --all",
+    "format:staged": "node scripts/format-staged.mjs",
     "lint": "node scripts/workspace.mjs lint",
     "lint:fix": "node scripts/workspace.mjs lint:fix"
   },
@@ -42,6 +45,7 @@
     "husky": "^9.1.7",
     "nx": "24.0.0",
     "playwright": "1.62.1",
+    "prettier": "3.9.10",
     "typescript": "^6.0.3",
     "typescript-eslint": "8.72.1"
   },

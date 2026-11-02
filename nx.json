@@ -1,9 +1,7 @@
 {
   "$schema": "./node_modules/nx/schemas/nx-schema.json",
   "release": {
-    "projects": [
-      "haulpath"
-    ],
+    "projects": ["haulpath"],
     "projectsRelationship": "fixed",
     "releaseTag": {
       "pattern": "v{version}",
@@ -135,13 +133,12 @@
   "targetDefaults": {
     "lint": {
       "cache": true,
-      "inputs": [
-        "lint"
-      ],
+      "inputs": ["lint"],
       "outputs": [],
       "options": {
         "max-warnings": 0
       }
     }
-  }
+  },
+  "analytics": false
 }

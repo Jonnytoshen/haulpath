@@ -1,6 +1,17 @@
 import { execFileSync } from 'node:child_process';
 import { constants, createReadStream, createWriteStream } from 'node:fs';
-import { copyFile, link, lstat, mkdir, mkdtemp, open, rename, rm, stat, unlink } from 'node:fs/promises';
+import {
+  copyFile,
+  link,
+  lstat,
+  mkdir,
+  mkdtemp,
+  open,
+  rename,
+  rm,
+  stat,
+  unlink,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -11,7 +22,9 @@ const database = process.env.HAULPATH_DB_PATH || '/app/data/haulpath.sqlite';
 
 function sqlite(arguments_) {
   return execFileSync('sqlite3', ['-batch', '-bail', '-init', '/dev/null', ...arguments_], {
-    encoding: 'utf8', maxBuffer: 16_000_000, stdio: ['ignore', 'pipe', 'pipe'],
+    encoding: 'utf8',
+    maxBuffer: 16_000_000,
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
 }
 
@@ -23,7 +36,9 @@ async function validateSnapshot(snapshot) {
     if (bytesRead !== 16 || header.toString() !== 'SQLite format 3\0') {
       throw new Error('输入不是完整的 SQLite 备份');
     }
-  } finally { await input.close(); }
+  } finally {
+    await input.close();
+  }
   const uri = pathToFileURL(snapshot);
   uri.searchParams.set('immutable', '1');
   if (sqlite(['-readonly', uri.href, 'PRAGMA integrity_check;']).trim() !== 'ok') {
@@ -51,8 +66,12 @@ async function installBackup({ replaceExisting = false } = {}) {
   try {
     if (!replaceExisting) {
       for (const suffix of ['', '-wal', '-shm']) {
-        try { await lstat(`${database}${suffix}`); }
-        catch (error) { if (error.code === 'ENOENT') continue; throw error; }
+        try {
+          await lstat(`${database}${suffix}`);
+        } catch (error) {
+          if (error.code === 'ENOENT') continue;
+          throw error;
+        }
         throw new Error('迁入目标已有数据库或 sidecar，拒绝覆盖');
       }
     }
@@ -67,12 +86,19 @@ async function installBackup({ replaceExisting = false } = {}) {
       console.error('迁入完成，原资料保持不变');
       return;
     }
-    archive = join(dirname(database), `before-restore-${new Date().toISOString().replace(/[:.]/g, '-')}-${randomUUID()}`);
+    archive = join(
+      dirname(database),
+      `before-restore-${new Date().toISOString().replace(/[:.]/g, '-')}-${randomUUID()}`,
+    );
     await mkdir(archive, { mode: 0o700 });
     for (const suffix of ['', '-wal', '-shm']) {
       const previous = `${database}${suffix}`;
-      try { await lstat(previous); }
-      catch (error) { if (error.code === 'ENOENT') continue; throw error; }
+      try {
+        await lstat(previous);
+      } catch (error) {
+        if (error.code === 'ENOENT') continue;
+        throw error;
+      }
       await rename(previous, join(archive, `haulpath.sqlite${suffix}`));
     }
     await rename(prepared, database);
@@ -95,8 +121,12 @@ async function sourceSnapshot(source) {
   try {
     const frozen = join(directory, 'source.sqlite');
     for (const suffix of ['', '-wal', '-shm']) {
-      try { await copyFile(`${source}${suffix}`, `${frozen}${suffix}`, constants.COPYFILE_EXCL); }
-      catch (error) { if (suffix && error.code === 'ENOENT') continue; throw error; }
+      try {
+        await copyFile(`${source}${suffix}`, `${frozen}${suffix}`, constants.COPYFILE_EXCL);
+      } catch (error) {
+        if (suffix && error.code === 'ENOENT') continue;
+        throw error;
+      }
     }
     await backup(frozen);
   } finally {

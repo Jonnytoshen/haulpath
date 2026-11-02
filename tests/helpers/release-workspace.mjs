@@ -3,8 +3,17 @@ import { join } from 'node:path';
 import { callerEnvironment } from '../../scripts/workspace-environment.mjs';
 
 export function copyReleaseWorkspace(root, directory) {
-  for (const file of ['pnpm-lock.yaml', 'tsconfig.base.json', 'eslint.config.mjs', 'eslint.shared.mjs']) cpSync(join(root, file), join(directory, file));
-  writeFileSync(join(directory, 'pnpm-workspace.yaml'), readFileSync(join(root, 'pnpm-workspace.yaml'), 'utf8') + '\nverifyDepsBeforeRun: false\n');
+  for (const file of [
+    'pnpm-lock.yaml',
+    'tsconfig.base.json',
+    'eslint.config.mjs',
+    'eslint.shared.mjs',
+  ])
+    cpSync(join(root, file), join(directory, file));
+  writeFileSync(
+    join(directory, 'pnpm-workspace.yaml'),
+    readFileSync(join(root, 'pnpm-workspace.yaml'), 'utf8') + '\nverifyDepsBeforeRun: false\n',
+  );
   for (const project of ['apps/web', 'packages/domain']) {
     mkdirSync(join(directory, project), { recursive: true });
     cpSync(join(root, project, 'package.json'), join(directory, project, 'package.json'));
@@ -14,6 +23,10 @@ export function copyReleaseWorkspace(root, directory) {
 }
 
 export function releaseFixtureEnvironment(extra = {}, inherited = process.env) {
-  const environment = Object.fromEntries(Object.entries(callerEnvironment(inherited)).filter(([key]) => !key.startsWith('NX_') && key !== 'HAULPATH_INTERNAL_CALLER_ENV'));
+  const environment = Object.fromEntries(
+    Object.entries(callerEnvironment(inherited)).filter(
+      ([key]) => !key.startsWith('NX_') && key !== 'HAULPATH_INTERNAL_CALLER_ENV',
+    ),
+  );
   return { ...environment, NX_DAEMON: 'false', NX_ISOLATE_PLUGINS: 'false', ...extra };
 }

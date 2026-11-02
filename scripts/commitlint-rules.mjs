@@ -1,13 +1,27 @@
 const scopes = new Set([
-  'project', 'route', 'point', 'planning', 'map', 'import', 'export',
-  'storage', 'ui', 'git', 'deps', 'tooling',
+  'project',
+  'route',
+  'point',
+  'planning',
+  'map',
+  'import',
+  'export',
+  'storage',
+  'ui',
+  'git',
+  'deps',
+  'tooling',
 ]);
 
-const metadata = /^(?:(?:Refs?|Signed-off-by|Co-authored-by|Reviewed-by|Acked-by|Tested-by):|(?:Close[sd]?|Fix(?:e[sd])?|Resolve[sd]?)\s+#)/i;
+const metadata =
+  /^(?:(?:Refs?|Signed-off-by|Co-authored-by|Reviewed-by|Acked-by|Tested-by):|(?:Close[sd]?|Fix(?:e[sd])?|Resolve[sd]?)\s+#)/i;
 
 function hasExplanation(lines, parsed) {
   const retained = new Set([parsed.body, parsed.footer].filter(Boolean).join('\n').split(/\r?\n/));
-  return lines.some((line) => retained.has(line) && line.trim() && !/^\s*#/.test(line) && !metadata.test(line.trimStart()));
+  return lines.some(
+    (line) =>
+      retained.has(line) && line.trim() && !/^\s*#/.test(line) && !metadata.test(line.trimStart()),
+  );
 }
 
 export default {
@@ -17,9 +31,15 @@ export default {
       if (type !== 'revert') return [true];
       const lines = raw.split(/\r?\n/).slice(1);
       const record = /^This reverts commit [0-9a-fA-F]{40}\.$/;
-      const retained = new Set([parsed.body, parsed.footer].filter(Boolean).join('\n').split(/\r?\n/));
+      const retained = new Set(
+        [parsed.body, parsed.footer].filter(Boolean).join('\n').split(/\r?\n/),
+      );
       return [
-        lines.some((line) => retained.has(line) && record.test(line)) && hasExplanation(lines.filter((line) => !record.test(line)), parsed),
+        lines.some((line) => retained.has(line) && record.test(line)) &&
+          hasExplanation(
+            lines.filter((line) => !record.test(line)),
+            parsed,
+          ),
         'revert body must contain This reverts commit <40 hexadecimal characters>. on its own line and an actual reason',
       ];
     },
@@ -27,15 +47,22 @@ export default {
       const { raw } = parsed;
       const lines = raw.split(/\r?\n/);
       const markers = lines.flatMap((line, index) =>
-        /^[\s|*]*BREAKING(?: CHANGE|-CHANGE)[:\s]+/i.test(line) ? [index] : []
+        /^[\s|*]*BREAKING(?: CHANGE|-CHANGE)[:\s]+/i.test(line) ? [index] : [],
       );
-      const valid = markers.every((index) =>
-        /^BREAKING CHANGE: \S.*$/.test(lines[index]) &&
-        lines[index - 1]?.trim() === '' &&
-        lines[index + 1]?.trim() === '' &&
-        hasExplanation(lines.slice(index + 2, markers.find((next) => next > index) ?? lines.length), parsed)
+      const valid = markers.every(
+        (index) =>
+          /^BREAKING CHANGE: \S.*$/.test(lines[index]) &&
+          lines[index - 1]?.trim() === '' &&
+          lines[index + 1]?.trim() === '' &&
+          hasExplanation(
+            lines.slice(index + 2, markers.find((next) => next > index) ?? lines.length),
+            parsed,
+          ),
       );
-      return [valid, 'use BREAKING CHANGE: <summary>, a blank line, then actual migration instructions; do not use BREAKING-CHANGE:'];
+      return [
+        valid,
+        'use BREAKING CHANGE: <summary>, a blank line, then actual migration instructions; do not use BREAKING-CHANGE:',
+      ];
     },
     'project-temporary': ({ subject, header }) => [
       ![subject, header].some((text) => /^(?:wip\b|fixup!|squash!|amend!)/i.test(text ?? '')),

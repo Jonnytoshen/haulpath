@@ -45,6 +45,12 @@
 - 每个功能使用 `.scratch/<feature-slug>/spec.md`；实现工单分别放在 `issues/<NN>-<slug>.md`，从 `01` 编号，评论追加到文件末尾的 `## Comments`。
 - 技能要求“发布到 issue tracker”时写入上述本地文件；按编号取工单时，在对应功能目录解析。
 
+## 代码格式
+
+- 根 `pnpm run format` 直接执行 `nx format:write --all`；`pnpm run format:check` 执行 `nx format:check --all`。Prettier 固定单引号、分号、两空格缩进、100 列行宽，其余使用已安装版本默认值。
+- 提交前 hook 通过 `pnpm run format:staged` 只读检查 Git index 实际内容，失败后手动修正并核对暂存范围，尤其不要自动暂存部分暂存文件的全部内容。保留现有提交消息 hook；安装修复遵循 worktree 专属配置规则。
+- 源码、测试源码、常规配置及文档参与格式化；生成产物、本地资料、锁文件、数据夹具、品牌 SVG 和生成的根 CHANGELOG 按根忽略规则排除。使用说明和检查边界见[提交约定](docs/agents/git-commits.md#代码格式检查)。
+
 ## Git 提交
 
 - 严格遵循[项目 Angular 扩展版提交约定](docs/agents/git-commits.md)，使用允许的 type 与可选单一 scope；英文小写祈使句摘要，标题最多 100 字符。合并、撤销和临时消息没有默认豁免。
