@@ -463,13 +463,9 @@ export default function FixedStationLayout({
   }
   function updatePower(key: string, changes: Partial<PowerDraft>) {
     if (!draft) return;
-    const id = draft.powers.find((row) => row.key === key)?.id;
     setDraft({
       ...draft,
       powers: draft.powers.map((row) => (row.key === key ? { ...row, ...changes } : row)),
-      sites: draft.sites.map((row) =>
-        row.powerSourceId === id ? { ...row, connectionConfirmed: false } : row,
-      ),
     });
   }
   function candidate(value: MapCandidate) {

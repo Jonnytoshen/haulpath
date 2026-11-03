@@ -204,6 +204,21 @@ test(
       assert.equal(selected.context.stationNetwork.sites[0].connection.connectionInvestment, null);
       const region = page.getByRole('region', { name: '方案人工固定站网', exact: true });
       assert.match(await region.innerText(), /财务价格待补/);
+      dialog = await edit(page);
+      await tab(dialog, '电源快照');
+      await dialog.getByLabel('电源 1 显式引入更新', { exact: true }).check();
+      await save(dialog);
+      const unchangedRefresh = (await request(path)).body;
+      assert.equal(
+        unchangedRefresh.context.stationNetwork.sites[0].connection.confirmed,
+        true,
+        'refreshing an unchanged power snapshot must preserve its confirmed connection',
+      );
+      assert.deepEqual(
+        unchangedRefresh,
+        selected,
+        'a same-value refresh must not create a new scenario input version or revision',
+      );
       const source = power.points[0];
       await request(`/api/projects/${project.id}/power-connection-points`, 'PUT', {
         expectedRevision: power.revision,
