@@ -35,6 +35,7 @@ import {
   TableProperties,
   LayoutList,
   ClipboardList,
+  PlugZap,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -64,6 +65,7 @@ import MapPanel, { type MapCandidate, type MapConfig } from './map-panel';
 import ImportDialog from './import-dialog';
 import RouteOverview, { emptyOverviewBrowsing, type OverviewBrowsing } from './route-overview';
 import ProjectLibrary from './project-library';
+import PowerConnectionPoints from './power-connection-points';
 import PlanningScenarioWorkbench from './planning-scenario-workbench';
 import { request } from '@/lib/client-request';
 import { useProjectRoutes, type ProjectRouteRead } from './use-project-routes';
@@ -121,12 +123,22 @@ export default function Workbench() {
   } = routeCache;
   const [projectView, setProjectView] = useState<{
     projectId: string;
-    view: 'overview' | 'workbench' | 'library' | 'scenarios';
+    view: 'overview' | 'workbench' | 'library' | 'scenarios' | 'power';
   }>({ projectId: '', view: 'overview' });
   const view = projectView.projectId === projectId ? projectView.view : 'overview';
+  const powerLeaveGuard = useRef<((discardConfirmed?: boolean) => boolean) | null>(null);
+  const registerPowerLeaveGuard = useCallback(
+    (guard: ((discardConfirmed?: boolean) => boolean) | null) => {
+      powerLeaveGuard.current = guard;
+    },
+    [],
+  );
   const setView = useCallback(
-    (next: 'overview' | 'workbench' | 'library' | 'scenarios') =>
-      setProjectView({ projectId, view: next }),
+    (next: 'overview' | 'workbench' | 'library' | 'scenarios' | 'power') => {
+      if (next !== 'power' && powerLeaveGuard.current && !powerLeaveGuard.current()) return false;
+      setProjectView({ projectId, view: next });
+      return true;
+    },
     [projectId],
   );
   const [task, setTask] = useState<'edit' | 'plan' | 'results'>('edit');
@@ -200,6 +212,7 @@ export default function Workbench() {
   const changeProject = useCallback(
     (nextId: string) => {
       if (projectRef.current === nextId) return;
+      if (powerLeaveGuard.current && !powerLeaveGuard.current()) return;
       projectRef.current = nextId;
       selection.current++;
       setProjectId(nextId);
@@ -285,15 +298,17 @@ export default function Workbench() {
             ? 'point-library'
             : view === 'scenarios'
               ? 'planning-scenarios'
-              : 'line-editor',
+              : view === 'power'
+                ? 'power-connection-points'
+                : 'line-editor',
       )
       ?.focus({ preventScroll: true });
   }, [focusRequest, view, task]);
 
   function openRoute(item: Route) {
     if (busy) return;
+    if (!setView('workbench')) return;
     selectRoute(item);
-    setView('workbench');
     setTask('edit');
     setChoosingPoints(false);
     setError('');
@@ -425,11 +440,15 @@ export default function Workbench() {
   }
 
   async function deleteSelected() {
+    // The project deletion dialog already confirms discarding all its resources; a pending save must finish first.
+    if (confirmDelete === 'project' && powerLeaveGuard.current && !powerLeaveGuard.current(true))
+      return;
     await perform(async () => {
       if (confirmDelete === 'project' && project) {
         await request(`/api/projects/${project.id}`, 'DELETE');
         const remaining = projects.filter((item) => item.id !== project.id);
         setProjects(remaining);
+        powerLeaveGuard.current = null;
         changeProject(remaining[0]?.id ?? '');
       } else if (confirmDelete === 'route' && route) {
         const write = beginWrite();
@@ -836,7 +855,9 @@ export default function Workbench() {
                 ? '#point-library'
                 : view === 'scenarios'
                   ? '#planning-scenarios'
-                  : '#line-editor'
+                  : view === 'power'
+                    ? '#power-connection-points'
+                    : '#line-editor'
             : '#workspace-content'
         }
       >
@@ -847,7 +868,9 @@ export default function Workbench() {
               ? '跳到项目点位库'
               : view === 'scenarios'
                 ? '跳到规划方案'
-                : '跳到线路编辑'
+                : view === 'power'
+                  ? '跳到电源接入点'
+                  : '跳到线路编辑'
           : '跳到主内容'}
       </a>
       <aside
@@ -881,7 +904,13 @@ export default function Workbench() {
           <ChevronDown aria-hidden="true" />
           <span>
             {activeRoute?.name ??
-              (view === 'library' ? '项目点位库' : view === 'scenarios' ? '规划方案' : '线路总览')}
+              (view === 'library'
+                ? '项目点位库'
+                : view === 'scenarios'
+                  ? '规划方案'
+                  : view === 'power'
+                    ? '电源接入点'
+                    : '线路总览')}
           </span>
         </div>
         <div id="workspace-navigation" className="sidebar-content">
@@ -959,6 +988,23 @@ export default function Workbench() {
                 >
                   <MapPin />
                   项目点位库<span>{library.length}</span>
+                </Button>
+                <Button
+                  className={view === 'power' ? 'active' : ''}
+                  aria-pressed={view === 'power'}
+                  aria-label="电源接入点"
+                  onClick={() => {
+                    if (busy) return;
+                    setView('power');
+                    setChoosingPoints(false);
+                    setNavigationOpen(false);
+                    setError('');
+                    setNotice('');
+                    requestFocus((current) => current + 1);
+                  }}
+                >
+                  <PlugZap />
+                  电源接入点
                 </Button>
               </nav>
               <section className="route-sidebar" aria-label="项目线路">
@@ -1108,7 +1154,9 @@ export default function Workbench() {
                     : '项目点位库'
                   : view === 'scenarios'
                     ? '规划方案'
-                    : (project?.name ?? '从一个项目，规划下一程'))}
+                    : view === 'power'
+                      ? '电源接入点'
+                      : (project?.name ?? '从一个项目，规划下一程'))}
             </h1>
             <p>
               {view === 'workbench' && route ? (
@@ -1128,6 +1176,8 @@ export default function Workbench() {
                 )
               ) : view === 'scenarios' ? (
                 '保存方案草案，持续整理运输与换电站规划。'
+              ) : view === 'power' ? (
+                '维护项目电源位置、可用容量与来源，供站址确认使用。'
               ) : project ? (
                 '查看行驶安排与测算状态，打开一条线路继续处理。'
               ) : (
@@ -1263,6 +1313,13 @@ export default function Workbench() {
             onOpen={openRoute}
             onCreate={createRoute}
             createDisabled={busy || loading}
+          />
+        ) : view === 'power' ? (
+          <PowerConnectionPoints
+            key={project.id}
+            projectId={project.id}
+            config={config}
+            registerLeaveGuard={registerPowerLeaveGuard}
           />
         ) : view === 'scenarios' ? (
           <PlanningScenarioWorkbench key={project.id} project={project} />

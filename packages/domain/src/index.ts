@@ -4,6 +4,7 @@ import { measuredSegmentIssue } from './fleet-operations';
 
 export * from './transport-demands';
 export * from './fleet-operations';
+export * from './power-connection-points';
 
 export type CoordinateSystem = 'GCJ-02' | 'WGS84';
 export const strategyGroups = [

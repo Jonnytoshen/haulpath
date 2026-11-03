@@ -4,6 +4,8 @@ import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import type {
+  PowerConnectionPoint,
+  PowerConnectionPointSet,
   PlanningScenario,
   PlanningSnapshot,
   Point,
@@ -19,6 +21,7 @@ import { scenarioContext, scenarioFields, scenarioRevision } from './scenario-va
 import { cyclePositions, confirmCycle } from './transport-cycle-validation';
 import { transportDemandsOf } from './transport-demand-validation';
 import { fleetOperationsOf } from './fleet-operations-validation';
+import { powerResourceRevision } from './power-connection-points-validation';
 
 class Storage {
   private db: Database.Database;
@@ -29,7 +32,7 @@ class Storage {
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('busy_timeout = 5000');
     const version = this.db.pragma('user_version', { simple: true }) as number;
-    if (version > 3) throw new Error('本机数据库版本比当前应用更新，请使用匹配的应用版本');
+    if (version > 4) throw new Error('本机数据库版本比当前应用更新，请使用匹配的应用版本');
     if (version === 0)
       this.db.transaction(() => {
         this.db
@@ -54,6 +57,14 @@ class Storage {
         );
         CREATE INDEX planning_scenarios_project ON planning_scenarios(project_id);`);
         this.db.pragma('user_version = 3');
+      })();
+    if (version < 4)
+      this.db.transaction(() => {
+        this.db.exec(`CREATE TABLE project_power_connection_points (
+          project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+          payload TEXT NOT NULL
+        );`);
+        this.db.pragma('user_version = 4');
       })();
     // The process-global storage instance survives route reloads; only an initial open recovers abandoned work.
     this.db.transaction(() => {
@@ -107,6 +118,38 @@ class Storage {
   deleteProject(id: string): void {
     this.getProject(id);
     this.db.prepare('DELETE FROM projects WHERE id = ?').run(id);
+  }
+  getPowerConnectionPoints(projectId: string): PowerConnectionPointSet {
+    this.getProject(projectId);
+    const row = this.db
+      .prepare('SELECT payload FROM project_power_connection_points WHERE project_id = ?')
+      .get(projectId) as { payload: string } | undefined;
+    return row
+      ? (JSON.parse(row.payload) as PowerConnectionPointSet)
+      : { projectId, revision: 1, points: [] };
+  }
+  replacePowerConnectionPoints(
+    projectId: string,
+    expectedRevision: number,
+    points: PowerConnectionPoint[],
+  ): PowerConnectionPointSet {
+    return this.db.transaction(() => {
+      const current = this.getPowerConnectionPoints(projectId);
+      if (powerResourceRevision(expectedRevision) !== current.revision)
+        throw new HttpError(409, '电源接入点已被更新，请重新加载后编辑');
+      // The asynchronous coordinate boundary has finished; recheck the exact project revision here.
+      if (points.some((point) => point.projectId !== projectId))
+        throw new HttpError(400, '电源接入点不属于当前项目');
+      if (isDeepStrictEqual(points, current.points)) return current;
+      const updated = { projectId, revision: current.revision + 1, points };
+      this.db
+        .prepare(
+          `INSERT INTO project_power_connection_points (project_id, payload) VALUES (?, ?)
+          ON CONFLICT(project_id) DO UPDATE SET payload = excluded.payload`,
+        )
+        .run(projectId, JSON.stringify(updated));
+      return updated;
+    })();
   }
   listScenarios(projectId: string): PlanningScenario[] {
     this.getProject(projectId);
