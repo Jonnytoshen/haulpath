@@ -76,9 +76,7 @@ export default function ScenarioVersionComparison({
       error={error}
       onClose={onClose}
     >
-      <p className="helper">
-        比较当前保存的输入。草案后续可继续变化；冻结版本保留决策依据。尚无运营或财务计算结果。
-      </p>
+      <p className={styles.intro}>核对已保存输入；草案可变，冻结版本保留依据。</p>
       <form onSubmit={(event) => void compare(event)}>
         <div className={styles.controls}>
           {(['left', 'right'] as const).map((side) => (
@@ -98,7 +96,7 @@ export default function ScenarioVersionComparison({
             </label>
           ))}
         </div>
-        <div className="dialog-actions">
+        <div className={styles.compareActions}>
           <Button
             className="button primary"
             type="submit"
@@ -176,6 +174,7 @@ export default function ScenarioVersionComparison({
           </div>
         </div>
       )}
+      <p className={styles.boundary}>当前仅比较输入，运营与财务结果尚未生成。</p>
       <div className="dialog-actions">
         <Button className="button" onClick={onClose}>
           关闭比较

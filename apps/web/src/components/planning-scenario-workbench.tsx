@@ -334,42 +334,31 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
               </div>
               <span className={styles.draft}>{frozen ? '已冻结' : '草案'}</span>
             </div>
-            <p className={styles.version}>输入版本 {selected.inputVersion}</p>
-            <dl className={styles.facts}>
-              {selected.copiedFrom && (
-                <div>
-                  <dt>复制来源</dt>
-                  <dd>
-                    {selected.copiedFrom.name} · 输入版本 {selected.copiedFrom.inputVersion} · 修订{' '}
-                    {selected.copiedFrom.revision}
-                  </dd>
-                </div>
-              )}
-              <div>
-                <dt>版本归属</dt>
-                <dd>{selected.lineageId === selected.id ? '本方案首份版本' : '同源方案版本'}</dd>
-              </div>
-              {selected.frozenAt && (
-                <div>
-                  <dt>冻结时间</dt>
-                  <dd>
-                    <time dateTime={selected.frozenAt}>{savedTime(selected.frozenAt)}</time>
-                  </dd>
-                </div>
-              )}
-              <div>
-                <dt>最近保存</dt>
-                <dd>
-                  <time dateTime={selected.updatedAt}>{savedTime(selected.updatedAt)}</time>
-                </dd>
-              </div>
-              <div>
-                <dt>创建时间</dt>
-                <dd>
-                  <time dateTime={selected.createdAt}>{savedTime(selected.createdAt)}</time>
-                </dd>
-              </div>
-            </dl>
+            <p className={styles.version}>
+              输入版本 {selected.inputVersion} ·{' '}
+              {selected.lineageId === selected.id ? '首份版本' : '同源版本'}
+            </p>
+            {(selected.copiedFrom || selected.frozenAt) && (
+              <dl className={styles.facts}>
+                {selected.copiedFrom && (
+                  <div>
+                    <dt>复制来源</dt>
+                    <dd>
+                      {selected.copiedFrom.name} · 输入版本 {selected.copiedFrom.inputVersion} ·
+                      修订 {selected.copiedFrom.revision}
+                    </dd>
+                  </div>
+                )}
+                {selected.frozenAt && (
+                  <div>
+                    <dt>冻结时间</dt>
+                    <dd>
+                      <time dateTime={selected.frozenAt}>{savedTime(selected.frozenAt)}</time>
+                    </dd>
+                  </div>
+                )}
+              </dl>
+            )}
             <p className={styles.description}>
               {frozen
                 ? '此版本已冻结，输入、名称和状态均不可改写。复制为新草案后可继续调整。'
@@ -404,6 +393,23 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
                 复制为新草案
               </Button>
             </div>
+            <details className={styles.saveRecord}>
+              <summary>保存记录</summary>
+              <dl className={styles.facts}>
+                <div>
+                  <dt>最近保存</dt>
+                  <dd>
+                    <time dateTime={selected.updatedAt}>{savedTime(selected.updatedAt)}</time>
+                  </dd>
+                </div>
+                <div>
+                  <dt>创建时间</dt>
+                  <dd>
+                    <time dateTime={selected.createdAt}>{savedTime(selected.createdAt)}</time>
+                  </dd>
+                </div>
+              </dl>
+            </details>
             {frozen && (
               <details className={comparisonStyles.frozen}>
                 <summary>查看已冻结输入</summary>

@@ -7,7 +7,7 @@ import {
 import styles from './scenario-version-comparison.module.css';
 
 export function scenarioInputNames(context: PlanningScenarioContext): Record<string, string> {
-  const names: Record<string, string> = {};
+  const names = Object.create(null) as Record<string, string>;
   function visit(value: unknown) {
     if (!value || typeof value !== 'object') return;
     if (Array.isArray(value)) return value.forEach(visit);
@@ -29,9 +29,13 @@ export function scenarioInputNames(context: PlanningScenarioContext): Record<str
   return names;
 }
 
+function inputName(names: Record<string, string>, id: string, fallback = id): string {
+  return Object.hasOwn(names, id) && typeof names[id] === 'string' ? names[id] : fallback;
+}
+
 export default function ScenarioInputValue({
   value,
-  names = {},
+  names = Object.create(null) as Record<string, string>,
   field = '',
   path = field,
 }: {
@@ -40,28 +44,36 @@ export default function ScenarioInputValue({
   field?: string;
   path?: string;
 }) {
+  const genericInput = ['resources', 'annual'].some(
+    (section) =>
+      path === section || path.startsWith(`${section}.`) || path.startsWith(`${section}[`),
+  );
   if (value == null || value === '') return <span className={styles.missing}>—</span>;
   if (typeof value === 'boolean') return <span>{value ? '是' : '否'}</span>;
   if (typeof value === 'number')
     return (
       <span className={styles.number}>
-        {field === 'strategy' && isStrategy(value)
+        {!genericInput && field === 'strategy' && isStrategy(value)
           ? strategyLabels[value]
           : new Intl.NumberFormat('zh-CN', { maximumSignificantDigits: 17 }).format(value)}
       </span>
     );
   if (typeof value === 'string')
-    return <span>{field.endsWith('Id') ? (names[value] ?? value) : value}</span>;
+    return <span>{!genericInput && field.endsWith('Id') ? inputName(names, value) : value}</span>;
   if (Array.isArray(value)) {
     if (!value.length) return <span className={styles.missing}>无</span>;
     return (
       <ol className={styles.values}>
         {value.map((item, index) => (
           <li key={index}>
-            {field === 'order' && item && typeof item === 'object' && 'name' in item ? (
+            {!genericInput &&
+            field === 'order' &&
+            item &&
+            typeof item === 'object' &&
+            'name' in item ? (
               <span>
                 {'id' in item && typeof item.id === 'string'
-                  ? (names[item.id] ?? String(item.name))
+                  ? inputName(names, item.id, String(item.name))
                   : String(item.name)}
               </span>
             ) : (
@@ -78,15 +90,22 @@ export default function ScenarioInputValue({
     );
   }
   if (typeof value === 'object') {
-    const entries = Object.entries(value).filter(([key]) => key !== 'schemaVersion');
+    const entries = Object.entries(value).filter(
+      ([key]) => genericInput || (key !== 'schemaVersion' && key !== 'id'),
+    );
     if (!entries.length) return <span className={styles.missing}>无</span>;
     return (
       <dl className={styles.valueFields}>
         {entries.map(([key, item]) => (
           <div key={key}>
-            <dt>{scenarioInputFieldLabel(key, path)}</dt>
+            <dt>{genericInput ? key : scenarioInputFieldLabel(key, path)}</dt>
             <dd>
-              <ScenarioInputValue value={item} names={names} field={key} path={`${path}.${key}`} />
+              <ScenarioInputValue
+                value={item}
+                names={names}
+                field={key}
+                path={path ? `${path}.${key}` : key}
+              />
             </dd>
           </div>
         ))}

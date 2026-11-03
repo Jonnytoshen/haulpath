@@ -1,25 +1,40 @@
+.intro {
+  color: var(--secondary);
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 8px 0 12px;
+}
 .controls {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-  margin-top: 16px;
+  gap: 12px;
 }
 .controls label {
   min-width: 0;
+  margin-bottom: 0;
+}
+.controls select {
+  width: 100%;
+  min-width: 0;
+}
+.compareActions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
 }
 .summary {
-  margin: 16px 0;
+  margin: 12px 0;
   color: var(--secondary);
 }
 .versions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-  margin: 20px 0;
+  gap: 12px;
+  margin: 12px 0;
 }
 .versions div {
   min-width: 0;
-  padding: 12px;
+  padding: 8px;
   background: var(--muted);
   border-radius: 6px;
 }
@@ -28,10 +43,13 @@
   display: block;
   overflow-wrap: anywhere;
 }
+.versions strong {
+  font-size: 13px;
+}
 .versions span {
   margin-top: 4px;
   color: var(--secondary);
-  font-size: 13px;
+  font-size: 12px;
 }
 .sections {
   display: grid;
@@ -113,10 +131,18 @@
 .frozen > .valueFields {
   margin-top: 12px;
 }
+.boundary {
+  color: var(--secondary);
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 16px 0 0;
+}
 @media (max-width: 640px) {
-  .controls,
+  .controls {
+    gap: 8px;
+  }
   .versions {
-    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
   }
   .pair {
     grid-template-columns: minmax(0, 1fr);

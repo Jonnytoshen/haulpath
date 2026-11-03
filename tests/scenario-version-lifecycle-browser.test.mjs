@@ -275,6 +275,90 @@ test(
 );
 
 test(
+  'user source strings that match object prototype names remain readable in frozen inputs and version comparison',
+  { timeout: 120000 },
+  async () => {
+    const app = await startApplication(environment);
+    const browser = await launch();
+    const errors = [];
+    try {
+      const request = (path, method, body) => jsonRequest(app.baseUrl, path, method, body);
+      const project = (await request('/api/projects', 'POST', { name: '自定义来源字符串验收' }))
+        .body;
+      const created = (await request(collectionPath(project), 'POST', { name: '特殊来源冻结依据' }))
+        .body;
+      const path = `${collectionPath(project)}/${created.id}`;
+      const original = (
+        await request(path, 'PATCH', {
+          expectedRevision: created.revision,
+          context: {
+            ...created.context,
+            resources: {
+              externalId: '__proto__',
+              constructorId: 'constructor',
+              toStringId: 'toString',
+            },
+          },
+        })
+      ).body;
+      const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+      page.on('pageerror', (failure) => errors.push(failure.message));
+      await openScenario(page, app.baseUrl, project, original);
+      await freeze(page);
+      const current = page.getByRole('region', { name: '当前规划方案', exact: true });
+      const frozenInputs = current.locator('details').filter({ hasText: '查看已冻结输入' });
+      await frozenInputs.locator('summary').click();
+      for (const text of ['__proto__', 'constructor', 'toString']) {
+        await frozenInputs.getByText(text, { exact: true }).waitFor({ timeout: 10000 });
+      }
+      assert.deepEqual(errors, []);
+      await frozenInputs.locator('summary').click();
+      await copyDraft(page, '特殊来源调整草案');
+      const copied = (await request(collectionPath(project))).body.find(
+        (item) => item.name === '特殊来源调整草案',
+      );
+      const changed = await request(`${collectionPath(project)}/${copied.id}`, 'PATCH', {
+        expectedRevision: copied.revision,
+        context: {
+          ...copied.context,
+          resources: {
+            externalId: '新外部来源',
+            constructorId: '新构造来源',
+            toStringId: '新文本来源',
+          },
+        },
+      });
+      assert.equal(changed.status, 200);
+      await page.getByRole('button', { name: '刷新规划方案', exact: true }).click();
+      await page.getByRole('button', { name: '比较输入版本', exact: true }).click();
+      const comparison = page.getByRole('dialog', { name: '比较输入版本', exact: true });
+      await comparison.getByLabel('左侧版本', { exact: true }).selectOption(original.id);
+      await comparison.getByLabel('右侧版本', { exact: true }).selectOption(copied.id);
+      await comparison.getByRole('button', { name: '查看输入差异', exact: true }).click();
+      const differences = comparison.locator('[aria-label="输入差异结果"]');
+      for (const text of [
+        '__proto__',
+        'constructor',
+        'toString',
+        '新外部来源',
+        '新构造来源',
+        '新文本来源',
+      ]) {
+        await differences.getByText(text, { exact: true }).waitFor({ timeout: 10000 });
+      }
+      assert.deepEqual(errors, []);
+    } catch (error) {
+      assert.deepEqual(errors, [], 'user-provided source strings cannot crash the page');
+      throw error;
+    } finally {
+      await browser.close();
+      await app.stop();
+      await app.cleanup();
+    }
+  },
+);
+
+test(
   'unsaved and pending edits lock version operations and late comparison responses cannot replace the new selection',
   { timeout: 180000 },
   async () => {
