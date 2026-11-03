@@ -102,7 +102,9 @@ export default function MapPanel({
   library,
   onCandidate,
   onLibraryPoint,
+  purpose = 'route',
 }: {
+  purpose?: 'route' | 'power';
   config: MapConfig | null;
   route: Route | null;
   library: Point[];
@@ -295,7 +297,7 @@ export default function MapPanel({
           position: [point.longitude, point.latitude],
           content: markerContent(point, '', 'marker-library'),
           offset: new api.Pixel(-11, -20),
-          title: `${point.name} · 点击选入线路`,
+          title: `${point.name} · ${purpose === 'power' ? '点击编辑电源点' : '点击选入线路'}`,
           zIndex: 90,
         });
         const handler = () => {
@@ -314,7 +316,7 @@ export default function MapPanel({
       cluster?.setMap(null);
       if (map.current === instance) instance.remove(overlays);
     };
-  }, [ready, overlayKey]);
+  }, [ready, overlayKey, purpose]);
 
   useEffect(() => {
     const version = ++searchVersion.current;
@@ -409,7 +411,7 @@ export default function MapPanel({
                 setCandidates([]);
                 setSearching(!!event.target.value.trim());
               }}
-              placeholder="搜索地点，确认后加入线路"
+              placeholder={purpose === 'power' ? '搜索电源点所在地点' : '搜索地点，确认后加入线路'}
               autoComplete="off"
             />
             <Button type="submit" disabled={!query.trim()}>
@@ -454,14 +456,20 @@ export default function MapPanel({
               : config === null
                 ? '正在读取地图配置'
                 : !config.mapKey
-                  ? '配置高德地图，查看真实线路'
+                  ? purpose === 'power'
+                    ? '配置地图后可点选电源位置'
+                    : '配置高德地图，查看真实线路'
                   : '正在加载高德地图'}
           </h3>
           <p>
             {failure ||
               (!config?.mapKey
-                ? '也可以先编排点位，保存线路草稿；配置完成后再预览地图。'
-                : '地图将显示编号点位与完整路线方案。')}
+                ? purpose === 'power'
+                  ? '可先通过表单或粘贴维护电源点，保存后仍可核对列表。'
+                  : '也可以先编排点位，保存线路草稿；配置完成后再预览地图。'
+                : purpose === 'power'
+                  ? '地图显示电源位置；点击地图后填写容量与来源。'
+                  : '地图将显示编号点位与完整路线方案。')}
           </p>
           {config && !config.mapKey && (
             <details className="map-config-help">
