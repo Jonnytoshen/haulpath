@@ -12,6 +12,7 @@ import type {
   Project,
   Route,
   Strategy,
+  StationNetwork,
   TransportCycle,
 } from '@haulpath/domain';
 import { HttpError } from './http';
@@ -208,6 +209,8 @@ class Storage {
         throw new HttpError(400, '运输需求须通过专用接口维护，不能直接覆盖');
       if (!isDeepStrictEqual(context.operations, scenario.context.operations))
         throw new HttpError(400, '车辆与运营资料须通过专用接口维护，不能直接覆盖');
+      if (!isDeepStrictEqual(context.stationNetwork, scenario.context.stationNetwork))
+        throw new HttpError(400, '站网资料须通过专用接口维护，不能直接覆盖');
       const inputChanged = !isDeepStrictEqual(context, scenario.context);
       if (name === scenario.name && !inputChanged) return scenario;
       if (inputChanged) scenario.inputVersion++;
@@ -385,6 +388,33 @@ class Storage {
       const operations = fleetOperationsOf(input.operations, scenario);
       if (isDeepStrictEqual(operations, scenario.context.operations)) return scenario;
       scenario.context.operations = operations;
+      scenario.inputVersion++;
+      scenario.revision++;
+      scenario.updatedAt = new Date().toISOString();
+      this.db
+        .prepare('UPDATE planning_scenarios SET payload = ? WHERE id = ? AND project_id = ?')
+        .run(JSON.stringify(scenario), scenarioId, projectId);
+      return scenario;
+    })();
+  }
+  replaceStationNetwork(
+    projectId: string,
+    scenarioId: string,
+    expectedRevision: number,
+    network: StationNetwork,
+    importedPowerRevision: number | null,
+  ): PlanningScenario {
+    return this.db.transaction(() => {
+      const scenario = this.getScenario(projectId, scenarioId);
+      if (expectedRevision !== scenario.revision)
+        throw new HttpError(409, '规划方案已被更新，请重新加载后编辑');
+      if (
+        importedPowerRevision !== null &&
+        this.getPowerConnectionPoints(projectId).revision !== importedPowerRevision
+      )
+        throw new HttpError(409, '项目电源接入点已被更新，请重新引入');
+      if (isDeepStrictEqual(network, scenario.context.stationNetwork)) return scenario;
+      scenario.context.stationNetwork = network;
       scenario.inputVersion++;
       scenario.revision++;
       scenario.updatedAt = new Date().toISOString();

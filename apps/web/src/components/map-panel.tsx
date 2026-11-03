@@ -103,8 +103,10 @@ export default function MapPanel({
   onCandidate,
   onLibraryPoint,
   purpose = 'route',
+  markerLabels = {},
 }: {
-  purpose?: 'route' | 'power';
+  purpose?: 'route' | 'power' | 'station';
+  markerLabels?: Record<string, string>;
   config: MapConfig | null;
   route: Route | null;
   library: Point[];
@@ -213,6 +215,7 @@ export default function MapPanel({
         ? (route?.snapshot?.legs.map(({ polyline }) => ({ polyline })) ?? [])
         : [],
     library,
+    markerLabels,
   });
   useEffect(() => {
     if (!ready || !map.current || !sdk.current) return;
@@ -234,10 +237,12 @@ export default function MapPanel({
       points,
       legs,
       library: overlayLibrary,
+      markerLabels: labels,
     } = JSON.parse(overlayKey) as {
       points: Point[];
       legs: Pick<Leg, 'polyline'>[];
       library: Point[];
+      markerLabels: Record<string, string>;
     };
     points.forEach((point, index) => {
       const content = markerContent(
@@ -295,9 +300,9 @@ export default function MapPanel({
       overlayLibrary.forEach((point) => {
         const marker = new api.Marker({
           position: [point.longitude, point.latitude],
-          content: markerContent(point, '', 'marker-library'),
+          content: markerContent(point, labels[point.id] ?? '', 'marker-library'),
           offset: new api.Pixel(-11, -20),
-          title: `${point.name} · ${purpose === 'power' ? '点击编辑电源点' : '点击选入线路'}`,
+          title: `${point.name} · ${purpose === 'power' ? '点击编辑电源点' : purpose === 'station' ? '点击后选择新位置移动站址' : '点击选入线路'}`,
           zIndex: 90,
         });
         const handler = () => {
@@ -411,7 +416,13 @@ export default function MapPanel({
                 setCandidates([]);
                 setSearching(!!event.target.value.trim());
               }}
-              placeholder={purpose === 'power' ? '搜索电源点所在地点' : '搜索地点，确认后加入线路'}
+              placeholder={
+                purpose === 'power'
+                  ? '搜索电源点所在地点'
+                  : purpose === 'station'
+                    ? '搜索候选站址所在地点'
+                    : '搜索地点，确认后加入线路'
+              }
               autoComplete="off"
             />
             <Button type="submit" disabled={!query.trim()}>
@@ -456,20 +467,26 @@ export default function MapPanel({
               : config === null
                 ? '正在读取地图配置'
                 : !config.mapKey
-                  ? purpose === 'power'
-                    ? '配置地图后可点选电源位置'
-                    : '配置高德地图，查看真实线路'
+                  ? purpose === 'station'
+                    ? '配置地图后可补点与移动站址'
+                    : purpose === 'power'
+                      ? '配置地图后可点选电源位置'
+                      : '配置高德地图，查看真实线路'
                   : '正在加载高德地图'}
           </h3>
           <p>
             {failure ||
               (!config?.mapKey
-                ? purpose === 'power'
-                  ? '可先通过表单或粘贴维护电源点，保存后仍可核对列表。'
-                  : '也可以先编排点位，保存线路草稿；配置完成后再预览地图。'
-                : purpose === 'power'
-                  ? '地图显示电源位置；点击地图后填写容量与来源。'
-                  : '地图将显示编号点位与完整路线方案。')}
+                ? purpose === 'station'
+                  ? '可先通过表单或粘贴维护候选站址，确认场地与接电后选择固定布局。'
+                  : purpose === 'power'
+                    ? '可先通过表单或粘贴维护电源点，保存后仍可核对列表。'
+                    : '也可以先编排点位，保存线路草稿；配置完成后再预览地图。'
+                : purpose === 'station'
+                  ? '地图显示候选站址；待表示待确认位置，已表示已确认场地。'
+                  : purpose === 'power'
+                    ? '地图显示电源位置；点击地图后填写容量与来源。'
+                    : '地图将显示编号点位与完整路线方案。')}
           </p>
           {config && !config.mapKey && (
             <details className="map-config-help">
