@@ -790,3 +790,145 @@ test('freezing during delayed coordinate conversion prevents a late station save
     await new Promise((resolve) => upstream.close(resolve));
   }
 });
+
+test('identical road replanning changes only source capture time and cannot replace independent cycle edits', async () => {
+  let distance = 1234;
+  const upstream = createServer((_request, response) => {
+    response.setHeader('Content-Type', 'application/json');
+    response.end(
+      JSON.stringify({
+        status: '1',
+        route: {
+          paths: [{ distance: String(distance), steps: [{ polyline: '121.47,31.23;121.6,31.3' }] }],
+        },
+      }),
+    );
+  });
+  await new Promise((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+  let application;
+  try {
+    application = await startApplication({
+      HAULPATH_TEST_MODE: '1',
+      AMAP_API_BASE_URL: `http://127.0.0.1:${upstream.address().port}`,
+      AMAP_WEB_SERVICE_KEY: 'road-refresh-test-key',
+    });
+    const request = (path, method, body) => jsonRequest(application.baseUrl, path, method, body);
+    const { project, path, created } = await setup(request);
+    const route = (
+      await request(`/api/projects/${project.id}/routes`, 'POST', {
+        name: '独立回程依据',
+        strategy: 34,
+        points: [point('a', '港区', 121.47, 31.23), point('b', '堆场', 121.6, 31.3)],
+      })
+    ).body;
+    const planPath = `/api/routes/${route.id}/plan?projectId=${project.id}`;
+    const first = (await request(planPath, 'POST')).body;
+    let saved = (
+      await request(`${path}/cycles`, 'POST', {
+        sourceRouteId: route.id,
+        expectedRevision: created.revision,
+      })
+    ).body;
+    const cycle = saved.context.transportCycles[0];
+    saved = (
+      await request(`${path}/cycles/${cycle.id}`, 'PATCH', {
+        expectedRevision: saved.revision,
+        confirmed: true,
+        positions: [
+          ...cycle.positions.map(({ id, point }) => ({ id, point })),
+          { point: cycle.positions[0].point },
+        ],
+      })
+    ).body;
+    const replanned = (await request(planPath, 'POST')).body;
+    assert.equal(replanned.inputVersion, first.inputVersion);
+    assert.notEqual(replanned.snapshot.calculatedAt, first.snapshot.calculatedAt);
+    assert.deepEqual(replanned.snapshot.legs, first.snapshot.legs);
+    const refreshed = await request(`${path}/cycles/${cycle.id}/source`, 'POST', {
+      expectedRevision: saved.revision,
+    });
+    assert.equal(refreshed.status, 200);
+    assert.deepEqual(
+      refreshed.body,
+      saved,
+      'capture time alone is not changed input and must preserve manual return and confirmation',
+    );
+    distance = 1500;
+    await request(planPath, 'POST');
+    const changed = await request(`${path}/cycles/${cycle.id}/source`, 'POST', {
+      expectedRevision: saved.revision,
+    });
+    assert.equal(changed.status, 200);
+    assert.equal(changed.body.inputVersion, saved.inputVersion + 1);
+    assert.equal(changed.body.context.transportCycles[0].source.snapshot.totalDistanceMeters, 1500);
+    assert.equal(changed.body.context.transportCycles[0].confirmed, false);
+  } finally {
+    await application?.stop();
+    await application?.cleanup();
+    await new Promise((resolve) => upstream.close(resolve));
+  }
+});
+
+test('source refresh preserves separate cycle occurrences when the same source point identity appears twice', async () => {
+  const application = await startApplication();
+  const request = (path, method, body) => jsonRequest(application.baseUrl, path, method, body);
+  try {
+    const { project, path, created } = await setup(request);
+    const a = point('repeated-a', '港区', 121.47, 31.23);
+    const b = point('b', '堆场', 121.6, 31.3);
+    const routeResponse = await request(`/api/projects/${project.id}/routes`, 'POST', {
+      name: '往返重复来源身份',
+      points: [a, b, a],
+    });
+    assert.equal(routeResponse.status, 201);
+    const route = routeResponse.body;
+    let saved = (
+      await request(`${path}/cycles`, 'POST', {
+        expectedRevision: created.revision,
+        sourceRouteId: route.id,
+      })
+    ).body;
+    const cycle = saved.context.transportCycles[0];
+    assert.notEqual(cycle.positions[0].id, cycle.positions[2].id);
+    const demands = [
+      {
+        cycleId: cycle.id,
+        loadingPositionId: cycle.positions[0].id,
+        unloadingPositionId: cycle.positions[1].id,
+        dailyTonnes: 100,
+      },
+      {
+        cycleId: cycle.id,
+        loadingPositionId: cycle.positions[1].id,
+        unloadingPositionId: cycle.positions[2].id,
+        dailyTonnes: 50,
+      },
+    ];
+    saved = (await request(`${path}/demands`, 'PUT', { expectedRevision: saved.revision, demands }))
+      .body;
+    await request(`/api/routes/${route.id}?projectId=${project.id}`, 'PATCH', {
+      name: '已更新来源名称',
+    });
+    const refreshed = await request(`${path}/cycles/${cycle.id}/source`, 'POST', {
+      expectedRevision: saved.revision,
+    });
+    assert.equal(refreshed.status, 200);
+    const updated = refreshed.body.context.transportCycles[0];
+    assert.deepEqual(
+      updated.positions.map(({ id }) => id),
+      cycle.positions.map(({ id }) => id),
+      'each repeated occurrence retains its own stable identity',
+    );
+    assert.deepEqual(refreshed.body.context.transportDemands, saved.context.transportDemands);
+    const confirmed = await request(`${path}/cycles/${cycle.id}`, 'PATCH', {
+      expectedRevision: refreshed.body.revision,
+      confirmed: true,
+      positions: updated.positions.map(({ id, point }) => ({ id, point })),
+    });
+    assert.equal(confirmed.status, 200, JSON.stringify(confirmed.body));
+    assert.equal(confirmed.body.context.transportCycles[0].confirmed, true);
+  } finally {
+    await application.stop();
+    await application.cleanup();
+  }
+});

@@ -41,6 +41,14 @@ function readScenario(payload: string): PlanningScenario {
   };
 }
 
+function cycleSourceInputs(source: TransportCycle['source']) {
+  return {
+    ...source,
+    importedAt: null,
+    snapshot: source.snapshot ? { ...source.snapshot, calculatedAt: null } : null,
+  };
+}
+
 class Storage {
   private db: Database.Database;
   constructor(path: string) {
@@ -402,16 +410,19 @@ class Storage {
         importedAt: cycle.source.importedAt,
       };
       // An unchanged source must never discard independent edits in the scenario.
-      if (isDeepStrictEqual(latestSource, cycle.source)) return scenario;
-      const positionsBySource = new Map(
-        cycle.positions
-          .filter((position) => position.sourcePointId !== null)
-          .map((position) => [position.sourcePointId, position.id]),
-      );
+      if (isDeepStrictEqual(cycleSourceInputs(latestSource), cycleSourceInputs(cycle.source)))
+        return scenario;
+      const positionsBySource = new Map<string, string[]>();
+      for (const position of cycle.positions) {
+        if (position.sourcePointId === null) continue;
+        const occurrences = positionsBySource.get(position.sourcePointId) ?? [];
+        occurrences.push(position.id);
+        positionsBySource.set(position.sourcePointId, occurrences);
+      }
       cycle.name = route.name;
       cycle.strategy = route.strategy;
       cycle.positions = route.points.map((point) => ({
-        id: positionsBySource.get(point.id) ?? randomUUID(),
+        id: positionsBySource.get(point.id)?.shift() ?? randomUUID(),
         point,
         sourcePointId: point.id,
       }));
