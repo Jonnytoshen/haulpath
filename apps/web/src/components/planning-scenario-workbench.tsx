@@ -10,6 +10,7 @@ import { request } from '@/lib/client-request';
 import styles from './planning-scenario-workbench.module.css';
 import TransportCycles from './transport-cycles';
 import TransportDemands from './transport-demands';
+import FleetOperations from './fleet-operations';
 
 type NameEditor = { scenario: PlanningScenario | null; name: string };
 const messageOf = (error: unknown) =>
@@ -299,6 +300,21 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
             />
             <TransportDemands
               key={`demands-${selected.id}`}
+              scenario={selected}
+              disabled={busy || reading}
+              onChange={(saved) => {
+                setSelected(saved);
+                setScenarios((items) => items.map((item) => (item.id === saved.id ? saved : item)));
+              }}
+              onWritingChange={(value) => {
+                writing.current = value;
+                if (value) generation.current++;
+                setBusy(value);
+                setReading(false);
+              }}
+            />
+            <FleetOperations
+              key={`operations-${selected.id}`}
               scenario={selected}
               disabled={busy || reading}
               onChange={(saved) => {
