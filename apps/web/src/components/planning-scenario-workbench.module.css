@@ -30,6 +30,12 @@
   flex-wrap: wrap;
   gap: 8px;
 }
+.lifecycleActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
 .content {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -218,6 +224,7 @@
     justify-content: space-between;
   }
   .actions button,
+  .lifecycleActions button,
   .detailActions button,
   .back {
     min-height: 44px;

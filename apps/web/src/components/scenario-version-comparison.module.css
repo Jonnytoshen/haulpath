@@ -1,0 +1,125 @@
+.controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+.controls label {
+  min-width: 0;
+}
+.summary {
+  margin: 16px 0;
+  color: var(--secondary);
+}
+.versions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 20px 0;
+}
+.versions div {
+  min-width: 0;
+  padding: 12px;
+  background: var(--muted);
+  border-radius: 6px;
+}
+.versions strong,
+.versions span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.versions span {
+  margin-top: 4px;
+  color: var(--secondary);
+  font-size: 13px;
+}
+.sections {
+  display: grid;
+  gap: 24px;
+}
+.section h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 600;
+}
+.difference {
+  border-top: 1px solid var(--border);
+  padding: 12px 0;
+}
+.difference h4 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+.pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.pair > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.side {
+  display: block;
+  color: var(--secondary);
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.values {
+  margin: 0;
+  padding-left: 20px;
+}
+.values li + li {
+  margin-top: 8px;
+}
+.valueFields {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+.valueFields > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+.valueFields dt {
+  color: var(--secondary);
+  font-size: 12px;
+}
+.valueFields dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.valueFields .valueFields {
+  padding-left: 12px;
+  border-left: 1px solid var(--border);
+}
+.missing {
+  color: var(--secondary);
+}
+.number {
+  font-variant-numeric: tabular-nums;
+}
+.frozen {
+  margin-top: 24px;
+}
+.frozen > summary {
+  cursor: pointer;
+  font-weight: 550;
+  padding: 12px 0;
+}
+.frozen > .valueFields {
+  margin-top: 12px;
+}
+@media (max-width: 640px) {
+  .controls,
+  .versions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .pair {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+}

@@ -333,11 +333,13 @@ export default function FixedStationLayout({
   disabled,
   onChange,
   onWritingChange,
+  onEditingChange,
 }: {
   scenario: PlanningScenario;
   disabled: boolean;
   onChange: (scenario: PlanningScenario) => void;
   onWritingChange: (writing: boolean) => void;
+  onEditingChange?: (editing: boolean) => void;
 }) {
   const network = scenario.context.stationNetwork ?? emptyStationNetwork();
   const physical = stationNetworkReadiness(scenario.context);
@@ -364,6 +366,10 @@ export default function FixedStationLayout({
   const writing = useRef(false);
   const alive = useRef(true);
   const editorOpen = draft !== null;
+  useEffect(() => {
+    onEditingChange?.(editorOpen);
+    return () => onEditingChange?.(false);
+  }, [editorOpen, onEditingChange]);
   const dirty = !!draft && (JSON.stringify(draft) !== baseline || !!paste.trim());
   useEffect(() => {
     alive.current = true;

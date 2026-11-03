@@ -258,11 +258,13 @@ export default function FleetOperations({
   disabled,
   onChange,
   onWritingChange,
+  onEditingChange,
 }: {
   scenario: PlanningScenario;
   disabled: boolean;
   onChange: (scenario: PlanningScenario) => void;
   onWritingChange: (writing: boolean) => void;
+  onEditingChange?: (editing: boolean) => void;
 }) {
   const operations = scenario.context.operations ?? emptyFleetOperations();
   const cycles = scenario.context.transportCycles ?? [];
@@ -278,6 +280,11 @@ export default function FleetOperations({
   const [discarding, setDiscarding] = useState(false);
   const alive = useRef(true);
   const writing = useRef(false);
+  const editorOpen = editor !== null;
+  useEffect(() => {
+    onEditingChange?.(editorOpen);
+    return () => onEditingChange?.(false);
+  }, [editorOpen, onEditingChange]);
   useEffect(() => {
     alive.current = true;
     return () => {

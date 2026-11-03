@@ -1,5 +1,9 @@
 import { api, HttpError, readJson } from '@/server/http';
-import { scenarioFields, scenarioRevision } from '@/server/scenario-validation';
+import {
+  assertScenarioEditable,
+  scenarioFields,
+  scenarioRevision,
+} from '@/server/scenario-validation';
 import { stationNetworkOf } from '@/server/station-network-validation';
 import { storage } from '@/server/storage';
 
@@ -14,6 +18,7 @@ export function PUT(request: Request, context: Context) {
     scenarioFields(body, ['expectedRevision', 'network']);
     const revision = scenarioRevision(body.expectedRevision);
     const scenario = storage.getScenario(projectId, scenarioId);
+    assertScenarioEditable(scenario);
     if (revision !== scenario.revision)
       throw new HttpError(409, '规划方案已被更新，请重新加载后编辑');
     const powers = storage.getPowerConnectionPoints(projectId);
