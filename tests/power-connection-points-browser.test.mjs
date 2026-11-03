@@ -274,3 +274,169 @@ test(
     }
   },
 );
+
+test(
+  'resource, project and route navigation preserve unconfirmed power drafts and wait for real saves',
+  { timeout: 180000 },
+  async () => {
+    const app = await startApplication(noMap);
+    const browser = await launch();
+    const request = (path, method, body) => jsonRequest(app.baseUrl, path, method, body);
+    let releasePut = () => {};
+    try {
+      const project = (await request('/api/projects', 'POST', { name: '电源离开保护项目' })).body;
+      const otherProject = (await request('/api/projects', 'POST', { name: '另一项目' })).body;
+      const route = (
+        await request(`/api/projects/${project.id}/routes`, 'POST', {
+          name: '可打开的独立线路',
+          points: [],
+        })
+      ).body;
+      const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+      const prompts = [];
+      let acceptPrompt = false;
+      page.on('dialog', async (dialog) => {
+        prompts.push({ type: dialog.type(), message: dialog.message() });
+        if (acceptPrompt) await dialog.accept();
+        else await dialog.dismiss();
+      });
+      await openResources(page, app.baseUrl, project);
+      const scenarios = () => page.getByRole('button', { name: '规划方案', exact: true });
+      const projectButton = (item) => page.getByRole('button', { name: item.name, exact: true });
+      const routeButton = () =>
+        page
+          .getByRole('region', { name: '项目线路', exact: true })
+          .locator('.route-item')
+          .filter({ has: page.getByText(route.name, { exact: true }) });
+      async function assertDraftRetained(name) {
+        assert.equal(await regionOf(page).isVisible(), true);
+        assert.match(await regionOf(page).innerText(), new RegExp(name));
+        assert.equal(await projectButton(project).getAttribute('aria-pressed'), 'true');
+        assert.equal(
+          await page
+            .getByRole('button', { name: '电源接入点', exact: true })
+            .getAttribute('aria-pressed'),
+          'true',
+        );
+        assert.equal(await page.getByRole('region', { name: '线路编辑', exact: true }).count(), 0);
+        assert.deepEqual((await request(powerPath(project))).body.points, []);
+      }
+      await addForm(page, '取消离开后仍在的草稿');
+      for (const action of [
+        () => scenarios().click(),
+        () => projectButton(otherProject).click(),
+        () => routeButton().click(),
+      ]) {
+        const before = prompts.length;
+        await action();
+        assert.equal(prompts.length, before + 1);
+        assert.equal(prompts.at(-1).type, 'confirm');
+        assert.match(prompts.at(-1).message, /未保存|放弃/);
+        await assertDraftRetained('取消离开后仍在的草稿');
+      }
+
+      acceptPrompt = true;
+      await scenarios().click();
+      await regionOf(page).waitFor({ state: 'hidden' });
+      assert.equal(await scenarios().getAttribute('aria-pressed'), 'true');
+      await page.getByRole('button', { name: '电源接入点', exact: true }).click();
+      await regionOf(page)
+        .getByRole('heading', { name: '还没有电源接入点', exact: true })
+        .waitFor();
+      await addForm(page, '明确放弃再切项目');
+      const beforeProjectLeave = prompts.length;
+      await projectButton(otherProject).click();
+      await regionOf(page).waitFor({ state: 'hidden' });
+      assert.equal(prompts.length, beforeProjectLeave + 1);
+      assert.equal(await projectButton(otherProject).getAttribute('aria-pressed'), 'true');
+      await projectButton(project).click();
+      await page.getByRole('button', { name: '电源接入点', exact: true }).click();
+      await regionOf(page)
+        .getByRole('heading', { name: '还没有电源接入点', exact: true })
+        .waitFor();
+      await addForm(page, '明确放弃再打开线路');
+      const beforeRouteLeave = prompts.length;
+      await routeButton().click();
+      await page.getByRole('region', { name: '线路编辑', exact: true }).waitFor();
+      await page.getByRole('heading', { name: route.name, exact: true }).waitFor();
+      assert.equal(prompts.length, beforeRouteLeave + 1);
+      assert.deepEqual((await request(powerPath(project))).body.points, []);
+
+      await page.getByRole('button', { name: '电源接入点', exact: true }).click();
+      await regionOf(page)
+        .getByRole('heading', { name: '还没有电源接入点', exact: true })
+        .waitFor();
+      await addForm(page, '等待真实保存的电源', { capacity: '725', source: '供电方容量确认资料' });
+      let markPaused;
+      const paused = new Promise((resolve) => {
+        markPaused = resolve;
+      });
+      const putGate = new Promise((resolve) => {
+        releasePut = resolve;
+      });
+      await page.route(`**${powerPath(project)}`, async (intercepted) => {
+        if (intercepted.request().method() === 'PUT') {
+          markPaused();
+          await putGate;
+        }
+        await intercepted.continue();
+      });
+      const saveResponse = page.waitForResponse(
+        (response) =>
+          response.url().endsWith(powerPath(project)) && response.request().method() === 'PUT',
+      );
+      await regionOf(page).getByRole('button', { name: '保存电源资料', exact: true }).click();
+      await paused;
+      const beforeSavingNavigation = prompts.length;
+      for (const action of [
+        () => scenarios().click(),
+        () => projectButton(otherProject).click(),
+        () => routeButton().click(),
+      ]) {
+        await action();
+        await assertDraftRetained('等待真实保存的电源');
+        assert.match(await regionOf(page).getByRole('status').innerText(), /正在保存/);
+      }
+      assert.equal(
+        prompts.length,
+        beforeSavingNavigation,
+        'saving cannot be discarded through a navigation prompt',
+      );
+      releasePut();
+      const response = await saveResponse;
+      assert.equal(response.status(), 200);
+      const saved = await response.json();
+      await regionOf(page)
+        .getByRole('status')
+        .filter({ hasText: /已保存/ })
+        .waitFor();
+      assert.equal(saved.points.length, 1);
+      assert.equal(saved.points[0].name, '等待真实保存的电源');
+      assert.equal(saved.points[0].availableCapacityKw, 725);
+      assert.deepEqual((await request(powerPath(project))).body, saved);
+      const database = new Database(join(app.directory, 'test.sqlite'), { readonly: true });
+      try {
+        const persisted = database
+          .prepare('SELECT payload FROM project_power_connection_points WHERE project_id = ?')
+          .get(project.id);
+        assert.deepEqual(JSON.parse(persisted.payload), saved);
+      } finally {
+        database.close();
+      }
+      await page.unroute(`**${powerPath(project)}`);
+      await scenarios().click();
+      await regionOf(page).waitFor({ state: 'hidden' });
+      assert.equal(await scenarios().getAttribute('aria-pressed'), 'true');
+      assert.equal(
+        prompts.length,
+        beforeSavingNavigation,
+        'a successful save permits leaving without confirmation',
+      );
+    } finally {
+      releasePut();
+      await browser.close();
+      await app.stop();
+      await app.cleanup();
+    }
+  },
+);

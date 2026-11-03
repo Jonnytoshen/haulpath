@@ -117,9 +117,11 @@ function gapsOf(point: Draft): string[] {
 export default function PowerConnectionPoints({
   projectId,
   config,
+  registerLeaveGuard,
 }: {
   projectId: string;
   config: MapConfig | null;
+  registerLeaveGuard: (guard: ((discardConfirmed?: boolean) => boolean) | null) => void;
 }) {
   const [data, setData] = useState<PowerConnectionPointSet | null>(null);
   const [draft, setDraft] = useState<Draft[]>([]);
@@ -136,6 +138,19 @@ export default function PowerConnectionPoints({
   const [paste, setPaste] = useState('');
   const [preview, setPreview] = useState<Preview[] | null>(null);
   const [mapOpen, setMapOpen] = useState(false);
+
+  useEffect(() => {
+    registerLeaveGuard((discardConfirmed = false) => {
+      if (saving) {
+        setNotice('正在保存电源资料，请稍候再切换。');
+        return false;
+      }
+      return (
+        discardConfirmed || !dirty || window.confirm('电源资料尚未保存，离开将放弃草稿，是否继续？')
+      );
+    });
+    return () => registerLeaveGuard(null);
+  }, [dirty, saving, registerLeaveGuard]);
 
   useEffect(() => {
     const controller = new AbortController();

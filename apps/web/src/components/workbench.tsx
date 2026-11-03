@@ -126,9 +126,19 @@ export default function Workbench() {
     view: 'overview' | 'workbench' | 'library' | 'scenarios' | 'power';
   }>({ projectId: '', view: 'overview' });
   const view = projectView.projectId === projectId ? projectView.view : 'overview';
+  const powerLeaveGuard = useRef<((discardConfirmed?: boolean) => boolean) | null>(null);
+  const registerPowerLeaveGuard = useCallback(
+    (guard: ((discardConfirmed?: boolean) => boolean) | null) => {
+      powerLeaveGuard.current = guard;
+    },
+    [],
+  );
   const setView = useCallback(
-    (next: 'overview' | 'workbench' | 'library' | 'scenarios' | 'power') =>
-      setProjectView({ projectId, view: next }),
+    (next: 'overview' | 'workbench' | 'library' | 'scenarios' | 'power') => {
+      if (next !== 'power' && powerLeaveGuard.current && !powerLeaveGuard.current()) return false;
+      setProjectView({ projectId, view: next });
+      return true;
+    },
     [projectId],
   );
   const [task, setTask] = useState<'edit' | 'plan' | 'results'>('edit');
@@ -202,6 +212,7 @@ export default function Workbench() {
   const changeProject = useCallback(
     (nextId: string) => {
       if (projectRef.current === nextId) return;
+      if (powerLeaveGuard.current && !powerLeaveGuard.current()) return;
       projectRef.current = nextId;
       selection.current++;
       setProjectId(nextId);
@@ -296,8 +307,8 @@ export default function Workbench() {
 
   function openRoute(item: Route) {
     if (busy) return;
+    if (!setView('workbench')) return;
     selectRoute(item);
-    setView('workbench');
     setTask('edit');
     setChoosingPoints(false);
     setError('');
@@ -429,11 +440,15 @@ export default function Workbench() {
   }
 
   async function deleteSelected() {
+    // The project deletion dialog already confirms discarding all its resources; a pending save must finish first.
+    if (confirmDelete === 'project' && powerLeaveGuard.current && !powerLeaveGuard.current(true))
+      return;
     await perform(async () => {
       if (confirmDelete === 'project' && project) {
         await request(`/api/projects/${project.id}`, 'DELETE');
         const remaining = projects.filter((item) => item.id !== project.id);
         setProjects(remaining);
+        powerLeaveGuard.current = null;
         changeProject(remaining[0]?.id ?? '');
       } else if (confirmDelete === 'route' && route) {
         const write = beginWrite();
@@ -1300,7 +1315,12 @@ export default function Workbench() {
             createDisabled={busy || loading}
           />
         ) : view === 'power' ? (
-          <PowerConnectionPoints key={project.id} projectId={project.id} config={config} />
+          <PowerConnectionPoints
+            key={project.id}
+            projectId={project.id}
+            config={config}
+            registerLeaveGuard={registerPowerLeaveGuard}
+          />
         ) : view === 'scenarios' ? (
           <PlanningScenarioWorkbench key={project.id} project={project} />
         ) : view === 'library' ? (
