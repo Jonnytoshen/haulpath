@@ -1,3 +1,7 @@
+import type { TransportDemand } from './transport-demands';
+
+export * from './transport-demands';
+
 export type CoordinateSystem = 'GCJ-02' | 'WGS84';
 export const strategyGroups = [
   {
@@ -131,6 +135,7 @@ export interface PlanningScenarioContext {
   schemaVersion: 1;
   resources: JsonObject;
   transportCycles?: TransportCycle[];
+  transportDemands?: TransportDemand[];
   annual: JsonObject[];
   results: JsonObject[];
 }

@@ -3,6 +3,7 @@ import type {
   JsonValue,
   PlanningScenarioContext,
   TransportCycle,
+  TransportDemand,
 } from '@haulpath/domain';
 import { HttpError } from './http';
 
@@ -38,12 +39,21 @@ export function scenarioContext(input: unknown): PlanningScenarioContext {
   if (!input || typeof input !== 'object' || Array.isArray(input))
     throw new HttpError(400, '规划方案上下文无效');
   const context = input as Record<string, unknown>;
-  scenarioFields(context, ['schemaVersion', 'resources', 'transportCycles', 'annual', 'results']);
+  scenarioFields(context, [
+    'schemaVersion',
+    'resources',
+    'transportCycles',
+    'transportDemands',
+    'annual',
+    'results',
+  ]);
   if (
     context.schemaVersion !== 1 ||
     !jsonObject(context.resources) ||
     (context.transportCycles !== undefined &&
       (!Array.isArray(context.transportCycles) || !jsonValue(context.transportCycles))) ||
+    (context.transportDemands !== undefined &&
+      (!Array.isArray(context.transportDemands) || !jsonValue(context.transportDemands))) ||
     !Array.isArray(context.annual) ||
     !context.annual.every((year) => jsonObject(year)) ||
     !Array.isArray(context.results) ||
@@ -56,6 +66,9 @@ export function scenarioContext(input: unknown): PlanningScenarioContext {
     ...(context.transportCycles === undefined
       ? {}
       : { transportCycles: context.transportCycles as unknown as TransportCycle[] }),
+    ...(context.transportDemands === undefined
+      ? {}
+      : { transportDemands: context.transportDemands as unknown as TransportDemand[] }),
     annual: context.annual,
     results: context.results,
   };
