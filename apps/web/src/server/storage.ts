@@ -18,6 +18,7 @@ import { nameOf, pointOf, pointsOf, strategyOf } from './validation';
 import { scenarioContext, scenarioFields, scenarioRevision } from './scenario-validation';
 import { cyclePositions, confirmCycle } from './transport-cycle-validation';
 import { transportDemandsOf } from './transport-demand-validation';
+import { fleetOperationsOf } from './fleet-operations-validation';
 
 class Storage {
   private db: Database.Database;
@@ -162,6 +163,8 @@ class Storage {
         throw new HttpError(400, '运输循环须通过专用接口维护，不能直接覆盖');
       if (!isDeepStrictEqual(context.transportDemands, scenario.context.transportDemands))
         throw new HttpError(400, '运输需求须通过专用接口维护，不能直接覆盖');
+      if (!isDeepStrictEqual(context.operations, scenario.context.operations))
+        throw new HttpError(400, '车辆与运营资料须通过专用接口维护，不能直接覆盖');
       const inputChanged = !isDeepStrictEqual(context, scenario.context);
       if (name === scenario.name && !inputChanged) return scenario;
       if (inputChanged) scenario.inputVersion++;
@@ -317,6 +320,28 @@ class Storage {
       const demands = transportDemandsOf(input.demands, scenario);
       if (isDeepStrictEqual(demands, scenario.context.transportDemands ?? [])) return scenario;
       scenario.context.transportDemands = demands;
+      scenario.inputVersion++;
+      scenario.revision++;
+      scenario.updatedAt = new Date().toISOString();
+      this.db
+        .prepare('UPDATE planning_scenarios SET payload = ? WHERE id = ? AND project_id = ?')
+        .run(JSON.stringify(scenario), scenarioId, projectId);
+      return scenario;
+    })();
+  }
+  replaceFleetOperations(
+    projectId: string,
+    scenarioId: string,
+    input: Record<string, unknown>,
+  ): PlanningScenario {
+    return this.db.transaction(() => {
+      const scenario = this.getScenario(projectId, scenarioId);
+      scenarioFields(input, ['expectedRevision', 'operations']);
+      if (scenarioRevision(input.expectedRevision) !== scenario.revision)
+        throw new HttpError(409, '规划方案已被更新，请重新加载后编辑');
+      const operations = fleetOperationsOf(input.operations, scenario);
+      if (isDeepStrictEqual(operations, scenario.context.operations)) return scenario;
+      scenario.context.operations = operations;
       scenario.inputVersion++;
       scenario.revision++;
       scenario.updatedAt = new Date().toISOString();

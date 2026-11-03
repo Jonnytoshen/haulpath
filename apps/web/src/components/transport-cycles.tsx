@@ -228,7 +228,7 @@ export default function TransportCycles({
         <div className={styles.cycles}>
           {cycles.map((cycle) => {
             const roads = effectiveCycleRoads(cycle);
-            const gaps = cycleReadiness(cycle);
+            const gaps = cycleReadiness(cycle, scenario.context.operations);
             return (
               <section
                 className={styles.cycle}

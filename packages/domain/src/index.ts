@@ -1,6 +1,9 @@
 import type { TransportDemand } from './transport-demands';
+import type { FleetOperations } from './fleet-operations';
+import { measuredSegmentIssue } from './fleet-operations';
 
 export * from './transport-demands';
+export * from './fleet-operations';
 
 export type CoordinateSystem = 'GCJ-02' | 'WGS84';
 export const strategyGroups = [
@@ -136,6 +139,7 @@ export interface PlanningScenarioContext {
   resources: JsonObject;
   transportCycles?: TransportCycle[];
   transportDemands?: TransportDemand[];
+  operations?: FleetOperations;
   annual: JsonObject[];
   results: JsonObject[];
 }
@@ -218,7 +222,7 @@ export function effectiveCycleRoads(cycle: TransportCycle): TransportCycleRoad[]
   });
 }
 
-export function cycleReadiness(cycle: TransportCycle): string[] {
+export function cycleReadiness(cycle: TransportCycle, operations?: FleetOperations): string[] {
   const gaps: string[] = [];
   if (cycle.positions.length < 3) gaps.push('至少需要两个不同地点并返回起点');
   if (!cycleIsClosed(cycle)) gaps.push('尚未补齐闭合回程');
@@ -226,6 +230,26 @@ export function cycleReadiness(cycle: TransportCycle): string[] {
   if (!cycle.confirmed) gaps.push('业务顺序与回程待确认');
   const missing = Math.max(0, cycle.positions.length - 1 - effectiveCycleRoads(cycle).length);
   if (missing) gaps.push(`缺少 ${missing} 个有向区间的有效道路资料`);
-  gaps.push('行驶时间待配置（现有路线方案不含时长）');
+  const groups = operations?.vehicleGroups.filter((group) => group.count > 0) ?? [];
+  if (!operations || !groups.length) {
+    gaps.push('行驶时间待配置（现有路线方案不含时长）');
+  } else {
+    for (const group of groups) {
+      if (group.speedKph !== null) continue;
+      const missingTimes = cycle.positions.slice(1).filter((to, index) => {
+        const from = cycle.positions[index];
+        return !operations.measuredSegments.some(
+          (measured) =>
+            measured.vehicleGroupId === group.id &&
+            measured.cycleId === cycle.id &&
+            measured.fromPositionId === from.id &&
+            measured.toPositionId === to.id &&
+            measured.durationMinutes !== null &&
+            measuredSegmentIssue(measured, operations, [cycle]) === null,
+        );
+      }).length;
+      if (missingTimes) gaps.push(`车辆组“${group.name}”缺少 ${missingTimes} 个区间的行驶时间`);
+    }
+  }
   return gaps;
 }

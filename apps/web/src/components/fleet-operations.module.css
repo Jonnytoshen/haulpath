@@ -1,0 +1,275 @@
+.section {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+  min-width: 0;
+}
+.heading,
+.rowHeading,
+.actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.heading {
+  align-items: start;
+}
+.heading h3,
+.measuredSummary h4,
+.editorSection h4,
+.rowHeading h5 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.rowHeading h5 {
+  font-size: 14px;
+}
+.heading > button {
+  flex-shrink: 0;
+}
+.heading p,
+.helper,
+.empty,
+.boundary,
+.groups p {
+  margin: 8px 0 0;
+  color: var(--secondary);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.helper,
+.boundary {
+  font-size: 13px;
+}
+.summary {
+  margin: 16px 0;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+/* Three equal measures and two 16px gutters fill the available content width. */
+.batterySummary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin: 16px 0 0;
+}
+.batterySummary dt {
+  font-size: 13px;
+  color: var(--secondary);
+}
+.batterySummary dd {
+  margin: 6px 0 0;
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+.batterySummary small {
+  font-size: 12px;
+  color: var(--secondary);
+}
+.groups,
+.editorRows {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0;
+}
+.groups {
+  max-height: 340px;
+  overflow: auto;
+}
+.groups > li,
+.editorRows > li {
+  padding: 16px 0;
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+}
+.groups strong {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.groups details {
+  margin-top: 8px;
+}
+.number {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.measuredSummary {
+  margin-top: 24px;
+}
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--primary);
+  font-size: 13px;
+  margin: 12px 0;
+}
+.notice svg {
+  width: 16px;
+  height: 16px;
+}
+.readiness {
+  margin-top: 16px;
+}
+.readiness ul {
+  font-size: 13px;
+  color: var(--secondary);
+  line-height: 1.7;
+  padding-left: 20px;
+  max-height: 220px;
+  overflow: auto;
+}
+.section summary,
+.paste summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+}
+.section summary:focus-visible,
+.paste summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
+}
+.ids {
+  padding-left: 20px;
+  overflow-wrap: anywhere;
+  max-height: 180px;
+  overflow: auto;
+  line-height: 1.7;
+}
+.editorFields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.editorSection {
+  margin-top: 24px;
+}
+.editorSection > h4,
+.editorSection > .rowHeading {
+  margin-bottom: 16px;
+}
+.fieldGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0 16px;
+}
+.fieldGrid > label {
+  min-width: 0;
+}
+.warning {
+  margin: 12px 0;
+  padding: 12px;
+  background: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.warning p {
+  margin: 0 0 8px;
+}
+.gap {
+  color: var(--secondary);
+  line-height: 1.6;
+  font-size: 13px;
+}
+.confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  cursor: pointer;
+}
+.confirm input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+}
+.paste {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.paste textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 100px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--background);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.paste textarea:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.tableWrap {
+  max-width: 100%;
+  overflow: auto;
+  margin: 16px 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.tableWrap table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  text-align: left;
+}
+.tableWrap caption {
+  padding: 12px;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 500;
+}
+.tableWrap th,
+.tableWrap td {
+  padding: 10px 12px;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.tableWrap thead th {
+  color: var(--secondary);
+  font-weight: 400;
+}
+.tableWrap tbody tr {
+  border-top: 1px solid var(--border);
+}
+.source {
+  white-space: pre-wrap;
+  min-width: 240px;
+  max-width: 480px;
+}
+@media (max-width: 720px) {
+  .heading > button {
+    width: 100%;
+  }
+  .fieldGrid {
+    grid-template-columns: 1fr;
+  }
+  .editorFields button,
+  .heading > button {
+    min-height: 44px;
+  }
+  .batterySummary {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .batterySummary > div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .batterySummary dd {
+    margin: 0;
+    text-align: right;
+    font-size: 16px;
+  }
+}
