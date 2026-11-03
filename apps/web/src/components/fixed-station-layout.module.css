@@ -224,11 +224,23 @@
 }
 .footer {
   position: sticky;
+  z-index: 1;
   bottom: 0;
   padding-block: 14px;
   background: white;
   border-top: 1px solid var(--border);
   margin-top: 18px;
+}
+/* Cover the dialog's 24px bottom padding while the action bar is sticky. */
+.footer::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: -24px;
+  right: -24px;
+  height: 24px;
+  background: white;
+  pointer-events: none;
 }
 @media (max-width: 1100px) {
   .grid {
