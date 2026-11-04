@@ -53,7 +53,7 @@ export default function ScenarioInputValue({
   if (typeof value === 'number')
     return (
       <span className={styles.number}>
-        {!genericInput && field === 'strategy' && isStrategy(value)
+        {!genericInput && ['strategy', 'continuationStrategy'].includes(field) && isStrategy(value)
           ? strategyLabels[value]
           : new Intl.NumberFormat('zh-CN', { maximumSignificantDigits: 17 }).format(value)}
       </span>

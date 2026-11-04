@@ -24,6 +24,8 @@ const fieldLabels: Record<string, string> = {
   transportDemands: '运输需求',
   operations: '车辆与运营',
   stationNetwork: '站网配置',
+  roadSettings: '道路准备',
+  continuationStrategy: '跨线接续驾车偏好',
   positions: '业务点位顺序',
   point: '点位资料',
   source: '来源',
@@ -140,6 +142,7 @@ const sections: [keyof PlanningScenarioContext, string][] = [
   ['transportDemands', '运输需求'],
   ['operations', '车辆与运营'],
   ['stationNetwork', '站网配置'],
+  ['roadSettings', '道路准备'],
   ['resources', '其他资源'],
   ['annual', '年度参数'],
 ];

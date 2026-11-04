@@ -7,7 +7,9 @@ import type {
   TransportDemand,
   FleetOperations,
   StationNetwork,
+  RoadSettings,
 } from '@haulpath/domain';
+import { isStrategy } from '@haulpath/domain';
 import { HttpError } from './http';
 
 export function scenarioFields(input: Record<string, unknown>, allowed: string[]): void {
@@ -49,6 +51,7 @@ export function scenarioContext(input: unknown): PlanningScenarioContext {
     'transportDemands',
     'operations',
     'stationNetwork',
+    'roadSettings',
     'annual',
     'results',
   ]);
@@ -67,6 +70,12 @@ export function scenarioContext(input: unknown): PlanningScenarioContext {
     !context.results.every((result) => jsonObject(result))
   )
     throw new HttpError(400, '规划方案上下文版本或内容无效');
+  if (context.roadSettings !== undefined) {
+    if (!jsonObject(context.roadSettings)) throw new HttpError(400, '道路准备偏好无效');
+    scenarioFields(context.roadSettings, ['continuationStrategy']);
+    if (!isStrategy(context.roadSettings.continuationStrategy))
+      throw new HttpError(400, '接续道路规划偏好无效');
+  }
   return {
     schemaVersion: 1,
     resources: context.resources,
@@ -82,6 +91,9 @@ export function scenarioContext(input: unknown): PlanningScenarioContext {
     ...(context.stationNetwork === undefined
       ? {}
       : { stationNetwork: context.stationNetwork as unknown as StationNetwork }),
+    ...(context.roadSettings === undefined
+      ? {}
+      : { roadSettings: context.roadSettings as unknown as RoadSettings }),
     annual: context.annual,
     results: context.results,
   };

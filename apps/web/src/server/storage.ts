@@ -30,6 +30,7 @@ import { cyclePositions, confirmCycle } from './transport-cycle-validation';
 import { transportDemandsOf } from './transport-demand-validation';
 import { fleetOperationsOf } from './fleet-operations-validation';
 import { powerResourceRevision } from './power-connection-points-validation';
+import { DirectedRoadStorage } from './directed-road-storage';
 
 function readScenario(payload: string): PlanningScenario {
   const scenario = JSON.parse(payload) as PlanningScenario;
@@ -51,6 +52,7 @@ function cycleSourceInputs(source: TransportCycle['source']) {
 
 class Storage {
   private db: Database.Database;
+  readonly directedRoads: DirectedRoadStorage;
   constructor(path: string) {
     mkdirSync(dirname(path), { recursive: true });
     this.db = new Database(path);
@@ -58,7 +60,7 @@ class Storage {
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('busy_timeout = 5000');
     const version = this.db.pragma('user_version', { simple: true }) as number;
-    if (version > 4) throw new Error('本机数据库版本比当前应用更新，请使用匹配的应用版本');
+    if (version > 5) throw new Error('本机数据库版本比当前应用更新，请使用匹配的应用版本');
     if (version === 0)
       this.db.transaction(() => {
         this.db
@@ -92,6 +94,26 @@ class Storage {
         );`);
         this.db.pragma('user_version = 4');
       })();
+    if (version < 5)
+      this.db.transaction(() => {
+        this.db.exec(`CREATE TABLE road_preparation_tasks (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+          scenario_id TEXT NOT NULL REFERENCES planning_scenarios(id) ON DELETE CASCADE,
+          payload TEXT NOT NULL
+        );
+        CREATE INDEX road_preparation_tasks_scenario ON road_preparation_tasks(project_id, scenario_id);
+        CREATE TABLE directed_roads (
+          project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+          road_key TEXT NOT NULL,
+          payload TEXT NOT NULL,
+          PRIMARY KEY (project_id, road_key)
+        );`);
+        this.db.pragma('user_version = 5');
+      })();
+    this.directedRoads = new DirectedRoadStorage(this.db, (projectId, scenarioId) =>
+      this.getScenario(projectId, scenarioId),
+    );
     // The process-global storage instance survives route reloads; only an initial open recovers abandoned work.
     this.db.transaction(() => {
       const rows = this.db.prepare('SELECT payload FROM routes').all() as { payload: string }[];
@@ -307,11 +329,37 @@ class Storage {
         throw new HttpError(400, '车辆与运营资料须通过专用接口维护，不能直接覆盖');
       if (!isDeepStrictEqual(context.stationNetwork, scenario.context.stationNetwork))
         throw new HttpError(400, '站网资料须通过专用接口维护，不能直接覆盖');
+      if (!isDeepStrictEqual(context.roadSettings, scenario.context.roadSettings))
+        throw new HttpError(400, '道路准备偏好须通过专用接口维护，不能直接覆盖');
       const inputChanged = !isDeepStrictEqual(context, scenario.context);
       if (name === scenario.name && !inputChanged) return scenario;
       if (inputChanged) scenario.inputVersion++;
       scenario.name = name;
       scenario.context = context;
+      scenario.revision++;
+      scenario.updatedAt = new Date().toISOString();
+      this.db
+        .prepare('UPDATE planning_scenarios SET payload = ? WHERE id = ? AND project_id = ?')
+        .run(JSON.stringify(scenario), scenarioId, projectId);
+      return scenario;
+    })();
+  }
+  replaceRoadSettings(
+    projectId: string,
+    scenarioId: string,
+    input: Record<string, unknown>,
+  ): PlanningScenario {
+    return this.db.transaction(() => {
+      const scenario = this.getScenario(projectId, scenarioId);
+      assertScenarioEditable(scenario);
+      scenarioFields(input, ['expectedRevision', 'continuationStrategy']);
+      if (scenarioRevision(input.expectedRevision) !== scenario.revision)
+        throw new HttpError(409, '规划方案已被更新，请重新加载后编辑');
+      const continuationStrategy = strategyOf(input.continuationStrategy);
+      if (continuationStrategy === (scenario.context.roadSettings?.continuationStrategy ?? 32))
+        return scenario;
+      scenario.context.roadSettings = { continuationStrategy };
+      scenario.inputVersion++;
       scenario.revision++;
       scenario.updatedAt = new Date().toISOString();
       this.db

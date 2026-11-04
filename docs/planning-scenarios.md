@@ -1,6 +1,6 @@
 # 规划方案与版本
 
-规划方案是项目内用于组织选址资料和分析结果的整体，与线路测算得到的“路线方案”分开。当前提供草案的创建、选择、改名、删除和重开，以及冻结、复制、显式引入资料与输入比较；支持从本项目线路建立并确认[运输循环](transport-cycles.md)，维护[运输需求与区间日货流](transport-demands.md)及[车辆组、电池与运营模板](fleet-operations.md)；项目级[电源接入点](power-connection-points.md)独立维护，方案内支持[候选站址、站型及人工固定布局](fixed-station-layout.md)；道路准备、车辆排程及财务结果由后续功能逐步交付。
+规划方案是项目内用于组织选址资料和分析结果的整体，与线路测算得到的“路线方案”分开。当前提供草案的创建、选择、改名、删除和重开，以及冻结、复制、显式引入资料与输入比较；支持从本项目线路建立并确认[运输循环](transport-cycles.md)，维护[运输需求与区间日货流](transport-demands.md)及[车辆组、电池与运营模板](fleet-operations.md)；项目级[电源接入点](power-connection-points.md)独立维护，方案内支持[候选站址、站型及人工固定布局](fixed-station-layout.md)；已提供[有向道路异步准备及复用](directed-road-data.md)，车辆排程及财务结果由后续功能逐步交付。
 
 ## 页面与保存
 
@@ -22,7 +22,7 @@
 
 创建成功返回 `201`，更新和读取返回 `200`，删除返回 `204`。无效输入返回 `400`，修订号冲突返回 `409`。稳定标识、项目归属、状态和版本由服务端维护，不接受客户端改写。
 
-草案初始 `status` 为 `draft`，`inputVersion`、`revision` 均为 `1`。版本化 `context` 包含 `schemaVersion: 1`、`resources: {}`、`annual: []`、`results: []`；运输循环和运输需求分别使用可选 `transportCycles`、`transportDemands` 数组，车辆与运营资料使用可选 `operations` 对象，站网资料使用可选 `stationNetwork` 对象，旧草案缺省这些字段；其他具体模型由后续工单引入。当前 `PATCH context` 保存整份草案上下文，任何上下文变更均产生新输入版本；`transportCycles`、`transportDemands`、`operations` 与 `stationNetwork` 由专用接口维护，通用上下文保存必须原样保留这四个字段；`results` 仅为扩展资料容器，不是可信计算结果发布入口，后续计算功能须单独校验及绑定结果版本。上下文容器的版本与 SQLite schema 版本分别维护；未知上下文版本不会被当前应用静默改写，空资源及空结果不表示物理或财务分析已经就绪。
+草案初始 `status` 为 `draft`，`inputVersion`、`revision` 均为 `1`。版本化 `context` 包含 `schemaVersion: 1`、`resources: {}`、`annual: []`、`results: []`；运输循环和运输需求分别使用可选 `transportCycles`、`transportDemands` 数组，车辆与运营资料使用可选 `operations` 对象，站网资料使用可选 `stationNetwork` 对象，道路偏好使用可选 `roadSettings` 对象，旧草案缺省这些字段；其他具体模型由后续工单引入。当前 `PATCH context` 保存整份草案上下文，任何上下文变更均产生新输入版本；`transportCycles`、`transportDemands`、`operations`、`stationNetwork` 与 `roadSettings` 由专用接口维护，通用上下文保存必须原样保留这五个字段；`results` 仅为扩展资料容器，不是可信计算结果发布入口，后续计算功能须单独校验及绑定结果版本。上下文容器的版本与 SQLite schema 版本分别维护；未知上下文版本不会被当前应用静默改写，空资源及空结果不表示物理或财务分析已经就绪。
 
 ## 冻结、复制与比较
 
@@ -42,6 +42,6 @@
 
 ## 升级与边界
 
-SQLite schema 3 新增草案存储，schema 4 新增独立项目电源资源。升级保留项目、线路、点库、成功路线方案、规划草案及偏好记忆；删除项目时同时删除所属草案和电源资源。数据库中出现未来版本时拒绝打开，不降低版本号。备份和回退遵循[运行维护](operations.md)。
+SQLite schema 3 新增草案存储，schema 4 新增独立项目电源资源，schema 5 新增独立道路任务及项目缓存。升级保留项目、线路、点库、成功路线方案、规划草案及偏好记忆；删除项目时同时删除所属草案和电源资源。数据库中出现未来版本时拒绝打开，不降低版本号。备份和回退遵循[运行维护](operations.md)。
 
-规划方案、运输循环、需求核对、运营及固定布局输入未新增道路测算请求或车辆排程、站网可行性、财务计算；补充点位复用既有坐标转换接口。既有普通驾车测算继续遵守：**未校验重卡限高、限重及货车限行**。
+道路准备由用户显式启动，不提供车辆排程、站网可行性或财务计算；补充点位复用既有坐标转换接口。既有普通驾车测算继续遵守：**未校验重卡限高、限重及货车限行**。

@@ -101,7 +101,7 @@ test('transport demands preserve repeated position identities, input order and t
     await application.stop();
     const database = new Database(join(directory, 'test.sqlite'), { readonly: true });
     try {
-      assert.equal(database.pragma('user_version', { simple: true }), 4);
+      assert.equal(database.pragma('user_version', { simple: true }), 5);
       const persisted = database
         .prepare('SELECT payload FROM planning_scenarios WHERE id = ?')
         .get(saved.id);
