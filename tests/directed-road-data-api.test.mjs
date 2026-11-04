@@ -811,3 +811,75 @@ test(
     );
   },
 );
+
+test(
+  'unprepared and partially prepared frozen versions cannot adopt roads from another draft implicitly',
+  { timeout: 120000 },
+  async () => {
+    let holdReturn = false;
+    const pending = [];
+    await withRoadApplication(
+      (url, response) => {
+        if (holdReturn && url.searchParams.get('origin') === '121.600000,31.230000')
+          pending.push([url, response]);
+        else roadResponse(url, response, '1001');
+      },
+      async (request) => {
+        for (const partial of [false, true]) {
+          const { scenario, path, project } = await roadFixture(
+            request,
+            partial ? '冻结部分资料' : '冻结未准备资料',
+          );
+          let taskId;
+          if (partial) {
+            holdReturn = true;
+            const launched = await request(`${path}/roads`, 'POST', {
+              expectedRevision: scenario.revision,
+            });
+            taskId = launched.body.task.taskId;
+            await until(
+              async () => (await request(`${path}/roads/${taskId}`)).body.completed === 1,
+              '首条道路没有持久保存',
+            );
+          }
+          const frozenResponse = await request(`${path}/freeze`, 'POST', {
+            expectedRevision: scenario.revision,
+          });
+          assert.equal(frozenResponse.status, 200);
+          const frozen = frozenResponse.body;
+          const before = (await request(`${path}/roads`)).body;
+          assert.equal(before.completed, partial ? 1 : 0);
+          assert.equal(before.currentReady, false);
+          const copy = (
+            await request(`${path}/copy`, 'POST', {
+              expectedRevision: frozen.revision,
+              name: '独立补齐道路',
+            })
+          ).body;
+          const copyPath = `/api/projects/${project.id}/scenarios/${copy.id}`;
+          const launchedCopy = await request(`${copyPath}/roads`, 'POST', {
+            expectedRevision: copy.revision,
+          });
+          holdReturn = false;
+          for (const [url, response] of pending)
+            if (!response.writableEnded) roadResponse(url, response, '7777');
+          await waitRoadTask(request, copyPath, launchedCopy.body.task.taskId, 'completed');
+          const after = (await request(`${path}/roads`)).body;
+          assert.equal(
+            after.completed,
+            before.completed,
+            'shared cache growth must not change the frozen road basis',
+          );
+          assert.deepEqual(after.roads, before.roads);
+          assert.equal(after.currentReady, false);
+          assert.deepEqual((await request(path)).body, frozen);
+          if (taskId) {
+            const task = (await request(`${path}/roads/${taskId}`)).body;
+            assert.equal(task.status, 'superseded');
+            assert.equal(task.roads.length, 1);
+          }
+        }
+      },
+    );
+  },
+);

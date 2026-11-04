@@ -126,18 +126,20 @@ export class DirectedRoadStorage {
     requirements: RoadRequirement[],
     tasks = this.list(scenario),
   ): PreparedRoad[] {
-    const completed = tasks.find(
-      (task) => task.inputVersion === scenario.inputVersion && task.status === 'completed',
+    const adoptedTask = tasks.find(
+      (task) =>
+        task.inputVersion === scenario.inputVersion &&
+        (scenario.status === 'frozen' || task.status === 'completed'),
     );
-    const adopted = new Map(completed?.roads.map((road) => [road.key, road]) ?? []);
+    const adopted = new Map(adoptedTask?.roads.map((road) => [road.key, road]) ?? []);
     const imported = new Map(reusableCycleRoads(scenario.context).map((road) => [road.key, road]));
     return requirements.flatMap((requirement) => {
-      // A completed version keeps its adopted roads. For a new input version, explicitly
-      // imported cycle snapshots take precedence over geographic reuse from other scenarios.
+      // Frozen versions retain only roads already adopted by their latest task or source
+      // snapshots. A shared cache cannot fill or change their preserved partial matrix.
       const road =
         adopted.get(requirement.key) ??
         imported.get(requirement.key) ??
-        this.cached(scenario.projectId, requirement);
+        (scenario.status === 'draft' ? this.cached(scenario.projectId, requirement) : null);
       if (road) return [{ ...road, from: requirement.from, to: requirement.to }];
       if (
         requirement.from.longitude === requirement.to.longitude &&
