@@ -23,6 +23,12 @@
   font-weight: 600;
   overflow-wrap: anywhere;
 }
+.editorFields {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
 .heading p,
 .boundary,
 .empty {

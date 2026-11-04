@@ -1,7 +1,18 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { ArrowLeft, ArrowRight, Check, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  Copy,
+  GitCompareArrows,
+  LockKeyhole,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Trash2,
+} from 'lucide-react';
 import type { PlanningScenario, Project } from '@haulpath/domain';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,8 +23,11 @@ import TransportCycles from './transport-cycles';
 import TransportDemands from './transport-demands';
 import FleetOperations from './fleet-operations';
 import FixedStationLayout from './fixed-station-layout';
+import ScenarioVersionComparison from './scenario-version-comparison';
+import ScenarioInputValue, { scenarioInputNames } from './scenario-input-value';
+import comparisonStyles from './scenario-version-comparison.module.css';
 
-type NameEditor = { scenario: PlanningScenario | null; name: string };
+type NameEditor = { scenario: PlanningScenario | null; name: string; copy?: boolean };
 const messageOf = (error: unknown) =>
   error instanceof Error ? error.message : '操作失败，请重试。';
 const savedTime = (time: string) =>
@@ -30,12 +44,17 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
   const [notice, setNotice] = useState('');
   const [editor, setEditor] = useState<NameEditor | null>(null);
   const [deleting, setDeleting] = useState<PlanningScenario | null>(null);
+  const [freezing, setFreezing] = useState<PlanningScenario | null>(null);
+  const [comparing, setComparing] = useState(false);
+  const [editing, setEditing] = useState(false);
   const alive = useRef(false);
   const generation = useRef(0);
   const writing = useRef(false);
+  const locked = busy || reading || editing;
+  const frozen = selected?.status === 'frozen';
 
   const refresh = useCallback(async () => {
-    if (writing.current) return;
+    if (writing.current || editing) return;
     const read = ++generation.current;
     setReading(true);
     setError('');
@@ -50,7 +69,7 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
     } finally {
       if (alive.current && read === generation.current) setReading(false);
     }
-  }, [path]);
+  }, [path, editing]);
 
   useEffect(() => {
     const lifecycle = generation;
@@ -76,7 +95,7 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
   }, [path]);
 
   async function openScenario(scenario: PlanningScenario) {
-    if (writing.current) return;
+    if (writing.current || editing) return;
     const read = ++generation.current;
     setReading(true);
     setError('');
@@ -105,18 +124,51 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
     try {
       const current = editor.scenario;
       const saved = await request<PlanningScenario>(
-        current ? `${path}/${current.id}` : path,
-        current ? 'PATCH' : 'POST',
+        current ? `${path}/${current.id}${editor.copy ? '/copy' : ''}` : path,
+        current && !editor.copy ? 'PATCH' : 'POST',
         current ? { name: editor.name, expectedRevision: current.revision } : { name: editor.name },
       );
       if (!alive.current) return;
       setScenarios((items) =>
-        current ? items.map((item) => (item.id === saved.id ? saved : item)) : [...items, saved],
+        current && !editor.copy
+          ? items.map((item) => (item.id === saved.id ? saved : item))
+          : [...items, saved],
       );
       setSelected(saved);
       setLoaded(true);
       setEditor(null);
-      setNotice(current ? '方案名称已保存' : '规划方案草案已保存');
+      setNotice(
+        editor.copy
+          ? '独立草案已复制保存，原版本资料继续保留'
+          : current
+            ? '方案名称已保存'
+            : '规划方案草案已保存',
+      );
+    } catch (failure) {
+      if (alive.current) setError(messageOf(failure));
+    } finally {
+      writing.current = false;
+      if (alive.current) setBusy(false);
+    }
+  }
+
+  async function freezeScenario() {
+    if (!freezing || writing.current || editing) return;
+    writing.current = true;
+    generation.current++;
+    setBusy(true);
+    setReading(false);
+    setError('');
+    setNotice('');
+    try {
+      const saved = await request<PlanningScenario>(`${path}/${freezing.id}/freeze`, 'POST', {
+        expectedRevision: freezing.revision,
+      });
+      if (!alive.current) return;
+      setSelected(saved);
+      setScenarios((items) => items.map((item) => (item.id === saved.id ? saved : item)));
+      setFreezing(null);
+      setNotice('版本已冻结。需要调整时可复制为新草案。');
     } catch (failure) {
       if (alive.current) setError(messageOf(failure));
     } finally {
@@ -152,6 +204,7 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
     if (writing.current) return;
     setEditor(null);
     setDeleting(null);
+    setFreezing(null);
     setError('');
   }
 
@@ -165,12 +218,12 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
       <header className={styles.heading}>
         <div>
           <h2>方案草案</h2>
-          <p>围绕同一业务目标，保存独立的运输与选址规划资料。</p>
+          <p>保存运输与选址资料，冻结决策依据并比较版本。</p>
         </div>
         <div className={styles.actions}>
           <Button
             className="button"
-            disabled={busy || reading}
+            disabled={locked}
             onClick={() => void refresh()}
             aria-label="刷新规划方案"
           >
@@ -178,8 +231,19 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
             刷新
           </Button>
           <Button
+            className="button"
+            disabled={locked || scenarios.length < 2}
+            onClick={() => {
+              setError('');
+              setComparing(true);
+            }}
+          >
+            <GitCompareArrows aria-hidden="true" />
+            比较输入版本
+          </Button>
+          <Button
             className="button primary"
-            disabled={busy || reading || !loaded}
+            disabled={locked || !loaded}
             onClick={() => {
               setError('');
               setNotice('');
@@ -191,10 +255,10 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
           </Button>
         </div>
       </header>
-      {error && !editor && !deleting && (
+      {error && !editor && !deleting && !freezing && (
         <div className={styles.feedback} role="alert">
           <span>读取或保存规划方案失败：{error}</span>
-          <Button className="text-button" disabled={busy || reading} onClick={() => void refresh()}>
+          <Button className="text-button" disabled={locked} onClick={() => void refresh()}>
             重新读取方案
           </Button>
         </div>
@@ -210,7 +274,7 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
           <div className={styles.listHeading}>
             <h3>本项目方案</h3>
             <span aria-live="polite">
-              {reading ? '正在读取…' : loaded ? `${scenarios.length} 个草案` : '尚未读取'}
+              {reading ? '正在读取…' : loaded ? `${scenarios.length} 个版本` : '尚未读取'}
             </span>
           </div>
           {!loaded && reading ? (
@@ -232,12 +296,16 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
                     className={`${styles.row} ${selected?.id === scenario.id ? styles.selected : ''}`}
                     aria-label={`打开规划方案 ${scenario.name}`}
                     aria-pressed={selected?.id === scenario.id}
-                    disabled={busy || reading}
+                    disabled={locked}
                     onClick={() => void openScenario(scenario)}
                   >
                     <span className={styles.rowCopy}>
                       <strong>{scenario.name}</strong>
-                      <span>草案 · 输入版本 {scenario.inputVersion}</span>
+                      <span>
+                        {scenario.status === 'frozen' ? '已冻结' : '草案'} · 输入版本{' '}
+                        {scenario.inputVersion}
+                      </span>
+                      {scenario.copiedFrom && <span>复制自：{scenario.copiedFrom.name}</span>}
                     </span>
                     <ArrowRight aria-hidden="true" />
                   </Button>
@@ -250,7 +318,7 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
           <section className={styles.detail} aria-label="当前规划方案">
             <Button
               className={`text-button ${styles.back}`}
-              disabled={busy || reading}
+              disabled={locked}
               onClick={() => {
                 setSelected(null);
                 setNotice('');
@@ -264,30 +332,102 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
                 <p className={styles.project}>项目：{project.name}</p>
                 <h2>{selected.name}</h2>
               </div>
-              <span className={styles.draft}>草案</span>
+              <span className={styles.draft}>{frozen ? '已冻结' : '草案'}</span>
             </div>
-            <p className={styles.version}>输入版本 {selected.inputVersion}</p>
-            <dl className={styles.facts}>
-              <div>
-                <dt>最近保存</dt>
-                <dd>
-                  <time dateTime={selected.updatedAt}>{savedTime(selected.updatedAt)}</time>
-                </dd>
-              </div>
-              <div>
-                <dt>创建时间</dt>
-                <dd>
-                  <time dateTime={selected.createdAt}>{savedTime(selected.createdAt)}</time>
-                </dd>
-              </div>
-            </dl>
-            <p className={styles.description}>
-              草案已保存在本机。关闭页面或重启服务后，可从本项目重新打开。
+            <p className={styles.version}>
+              输入版本 {selected.inputVersion} ·{' '}
+              {selected.lineageId === selected.id ? '首份版本' : '同源版本'}
             </p>
+            {(selected.copiedFrom || selected.frozenAt) && (
+              <dl className={styles.facts}>
+                {selected.copiedFrom && (
+                  <div>
+                    <dt>复制来源</dt>
+                    <dd>
+                      {selected.copiedFrom.name} · 输入版本 {selected.copiedFrom.inputVersion} ·
+                      修订 {selected.copiedFrom.revision}
+                    </dd>
+                  </div>
+                )}
+                {selected.frozenAt && (
+                  <div>
+                    <dt>冻结时间</dt>
+                    <dd>
+                      <time dateTime={selected.frozenAt}>{savedTime(selected.frozenAt)}</time>
+                    </dd>
+                  </div>
+                )}
+              </dl>
+            )}
+            <p className={styles.description}>
+              {frozen
+                ? '此版本已冻结，输入、名称和状态均不可改写。复制为新草案后可继续调整。'
+                : '草案已保存在本机。关闭页面或重启服务后，可从本项目重新打开。共享资料变化不会自动引入。'}
+            </p>
+            <div className={styles.lifecycleActions}>
+              <Button
+                className="button"
+                disabled={locked || frozen}
+                onClick={() => {
+                  setError('');
+                  setFreezing(selected);
+                }}
+                aria-label="冻结规划方案"
+              >
+                <LockKeyhole aria-hidden="true" />
+                冻结规划方案
+              </Button>
+              <Button
+                className="button"
+                disabled={locked}
+                onClick={() => {
+                  setError('');
+                  setEditor({
+                    scenario: selected,
+                    name: `${selected.name.slice(0, 192)} · 新草案`,
+                    copy: true,
+                  });
+                }}
+              >
+                <Copy aria-hidden="true" />
+                复制为新草案
+              </Button>
+            </div>
+            <details className={styles.saveRecord}>
+              <summary>保存记录</summary>
+              <dl className={styles.facts}>
+                <div>
+                  <dt>最近保存</dt>
+                  <dd>
+                    <time dateTime={selected.updatedAt}>{savedTime(selected.updatedAt)}</time>
+                  </dd>
+                </div>
+                <div>
+                  <dt>创建时间</dt>
+                  <dd>
+                    <time dateTime={selected.createdAt}>{savedTime(selected.createdAt)}</time>
+                  </dd>
+                </div>
+              </dl>
+            </details>
+            {frozen && (
+              <details className={comparisonStyles.frozen}>
+                <summary>查看已冻结输入</summary>
+                <ScenarioInputValue
+                  value={Object.fromEntries(
+                    Object.entries(selected.context).filter(
+                      ([key]) => key !== 'results' && key !== 'schemaVersion',
+                    ),
+                  )}
+                  names={scenarioInputNames(selected.context)}
+                />
+              </details>
+            )}
             <TransportCycles
               key={selected.id}
               scenario={selected}
-              disabled={busy || reading}
+              disabled={busy || reading || frozen}
+              onEditingChange={setEditing}
               onChange={(saved) => {
                 setSelected(saved);
                 setScenarios((items) => items.map((item) => (item.id === saved.id ? saved : item)));
@@ -302,7 +442,8 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
             <TransportDemands
               key={`demands-${selected.id}`}
               scenario={selected}
-              disabled={busy || reading}
+              disabled={busy || reading || frozen}
+              onEditingChange={setEditing}
               onChange={(saved) => {
                 setSelected(saved);
                 setScenarios((items) => items.map((item) => (item.id === saved.id ? saved : item)));
@@ -317,7 +458,8 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
             <FleetOperations
               key={`operations-${selected.id}`}
               scenario={selected}
-              disabled={busy || reading}
+              disabled={busy || reading || frozen}
+              onEditingChange={setEditing}
               onChange={(saved) => {
                 setSelected(saved);
                 setScenarios((items) => items.map((item) => (item.id === saved.id ? saved : item)));
@@ -332,7 +474,8 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
             <FixedStationLayout
               key={`station-network-${selected.id}`}
               scenario={selected}
-              disabled={busy || reading}
+              disabled={busy || reading || frozen}
+              onEditingChange={setEditing}
               onChange={(saved) => {
                 setSelected(saved);
                 setScenarios((items) => items.map((item) => (item.id === saved.id ? saved : item)));
@@ -347,7 +490,7 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
             <div className={styles.detailActions}>
               <Button
                 className="button"
-                disabled={busy || reading}
+                disabled={locked || frozen}
                 onClick={() => {
                   setError('');
                   setEditor({ scenario: selected, name: selected.name });
@@ -359,7 +502,7 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
               </Button>
               <Button
                 className="text-button danger-text"
-                disabled={busy || reading}
+                disabled={locked || frozen}
                 onClick={() => {
                   setError('');
                   setDeleting(selected);
@@ -373,30 +516,37 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
           </section>
         ) : scenarios.length > 0 ? (
           <div className={styles.unselected}>
-            <h3>选择一个草案继续</h3>
+            <h3>选择一个方案版本</h3>
             <p>打开后核对方案名称、输入版本与保存时间。</p>
           </div>
         ) : null}
       </div>
       {editor && (
         <Dialog
-          title={editor.scenario ? '重命名规划方案' : '新建规划方案'}
+          title={editor.copy ? '复制为新草案' : editor.scenario ? '重命名规划方案' : '新建规划方案'}
           error={error}
           onClose={closeDialog}
         >
           <form onSubmit={saveName}>
             <label className="field">
-              方案名称
+              {editor.copy ? '草案名称' : '方案名称'}
               <Input
                 autoFocus
                 required
                 maxLength={200}
                 value={editor.name}
+                disabled={busy}
                 onChange={(event) => setEditor({ ...editor, name: event.target.value })}
                 placeholder="例如：港区倒短换电规划"
               />
             </label>
             <p className="helper">所属项目：{project.name}</p>
+            {editor.copy && editor.scenario && (
+              <p className="helper">
+                复制来源：{editor.scenario.name} · 输入版本 {editor.scenario.inputVersion}
+                。输入独立保存；原版本保留，计算结果不作为副本结论。
+              </p>
+            )}
             <div className="dialog-actions">
               <Button className="button" disabled={busy} onClick={closeDialog}>
                 取消
@@ -406,11 +556,53 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
                 className="button primary"
                 disabled={busy || !editor.name.trim()}
               >
-                {busy ? '保存中…' : editor.scenario ? '保存名称' : '创建方案'}
+                {busy
+                  ? '保存中…'
+                  : editor.copy
+                    ? '复制草案'
+                    : editor.scenario
+                      ? '保存名称'
+                      : '创建方案'}
               </Button>
             </div>
           </form>
         </Dialog>
+      )}
+      {freezing && (
+        <Dialog
+          title="冻结规划方案"
+          description="冻结后不可修改、删除或解冻，可复制为新草案继续调整。"
+          error={error}
+          onClose={closeDialog}
+        >
+          <p className="delete-description">
+            冻结“{freezing.name}”的输入版本 {freezing.inputVersion}
+            ？冻结后保留当前全部输入与来源，名称和资料不可再编辑，也不能删除或解冻。
+          </p>
+          <p className="helper">
+            冻结只保存当前决策依据，不表示资料已完整或已经通过运营、共享供电与财务校核。
+          </p>
+          <div className="dialog-actions">
+            <Button className="button" disabled={busy} onClick={closeDialog}>
+              取消
+            </Button>
+            <Button
+              className="button primary"
+              disabled={busy}
+              onClick={() => void freezeScenario()}
+            >
+              {busy ? '冻结中…' : '冻结版本'}
+            </Button>
+          </div>
+        </Dialog>
+      )}
+      {comparing && (
+        <ScenarioVersionComparison
+          scenarios={scenarios}
+          selectedId={selected?.id}
+          projectId={project.id}
+          onClose={() => setComparing(false)}
+        />
       )}
       {deleting && (
         <Dialog

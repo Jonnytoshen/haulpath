@@ -7,6 +7,7 @@ import type {
   PowerConnectionPoint,
   PowerConnectionPointSet,
   PlanningScenario,
+  ScenarioComparison,
   PlanningSnapshot,
   Point,
   Project,
@@ -15,14 +16,38 @@ import type {
   StationNetwork,
   TransportCycle,
 } from '@haulpath/domain';
+import { scenarioInputDifferences } from '@haulpath/domain';
 import { HttpError } from './http';
 
 import { nameOf, pointOf, pointsOf, strategyOf } from './validation';
-import { scenarioContext, scenarioFields, scenarioRevision } from './scenario-validation';
+import {
+  assertScenarioEditable,
+  scenarioContext,
+  scenarioFields,
+  scenarioRevision,
+} from './scenario-validation';
 import { cyclePositions, confirmCycle } from './transport-cycle-validation';
 import { transportDemandsOf } from './transport-demand-validation';
 import { fleetOperationsOf } from './fleet-operations-validation';
 import { powerResourceRevision } from './power-connection-points-validation';
+
+function readScenario(payload: string): PlanningScenario {
+  const scenario = JSON.parse(payload) as PlanningScenario;
+  return {
+    ...scenario,
+    lineageId: scenario.lineageId ?? scenario.id,
+    copiedFrom: scenario.copiedFrom ?? null,
+    frozenAt: scenario.frozenAt ?? null,
+  };
+}
+
+function cycleSourceInputs(source: TransportCycle['source']) {
+  return {
+    ...source,
+    importedAt: null,
+    snapshot: source.snapshot ? { ...source.snapshot, calculatedAt: null } : null,
+  };
+}
 
 class Storage {
   private db: Database.Database;
@@ -158,7 +183,7 @@ class Storage {
       this.db
         .prepare('SELECT payload FROM planning_scenarios WHERE project_id = ? ORDER BY rowid')
         .all(projectId) as { payload: string }[]
-    ).map((row) => JSON.parse(row.payload) as PlanningScenario);
+    ).map((row) => readScenario(row.payload));
   }
   getScenario(projectId: string, scenarioId: string): PlanningScenario {
     this.getProject(projectId);
@@ -166,18 +191,29 @@ class Storage {
       .prepare('SELECT payload FROM planning_scenarios WHERE id = ? AND project_id = ?')
       .get(scenarioId, projectId) as { payload: string } | undefined;
     if (!row) throw new HttpError(404, '该项目下的规划方案不存在');
-    return JSON.parse(row.payload) as PlanningScenario;
+    return readScenario(row.payload);
+  }
+  compareScenarios(projectId: string, leftId: string, rightId: string): ScenarioComparison {
+    return this.db.transaction(() => {
+      const left = this.getScenario(projectId, leftId);
+      const right = this.getScenario(projectId, rightId);
+      return { left, right, differences: scenarioInputDifferences(left.context, right.context) };
+    })();
   }
   createScenario(projectId: string, input: Record<string, unknown>): PlanningScenario {
     return this.db.transaction(() => {
       this.getProject(projectId);
       scenarioFields(input, ['name']);
       const time = new Date().toISOString();
+      const id = randomUUID();
       const scenario: PlanningScenario = {
-        id: randomUUID(),
+        id,
         projectId,
         name: nameOf(input.name),
         status: 'draft',
+        lineageId: id,
+        copiedFrom: null,
+        frozenAt: null,
         inputVersion: 1,
         revision: 1,
         context: { schemaVersion: 1, resources: {}, annual: [], results: [] },
@@ -190,6 +226,65 @@ class Storage {
       return scenario;
     })();
   }
+  freezeScenario(
+    projectId: string,
+    scenarioId: string,
+    input: Record<string, unknown>,
+  ): PlanningScenario {
+    return this.db.transaction(() => {
+      const scenario = this.getScenario(projectId, scenarioId);
+      scenarioFields(input, ['expectedRevision']);
+      if (scenarioRevision(input.expectedRevision) !== scenario.revision)
+        throw new HttpError(409, '规划方案已被更新，请重新加载后冻结');
+      assertScenarioEditable(scenario);
+      scenario.status = 'frozen';
+      scenario.frozenAt = new Date().toISOString();
+      scenario.updatedAt = scenario.frozenAt;
+      scenario.revision++;
+      this.db
+        .prepare('UPDATE planning_scenarios SET payload = ? WHERE id = ? AND project_id = ?')
+        .run(JSON.stringify(scenario), scenarioId, projectId);
+      return scenario;
+    })();
+  }
+  copyScenario(
+    projectId: string,
+    scenarioId: string,
+    input: Record<string, unknown>,
+  ): PlanningScenario {
+    return this.db.transaction(() => {
+      const source = this.getScenario(projectId, scenarioId);
+      scenarioFields(input, ['expectedRevision', 'name']);
+      if (scenarioRevision(input.expectedRevision) !== source.revision)
+        throw new HttpError(409, '规划方案已被更新，请重新加载后复制');
+      const time = new Date().toISOString();
+      const context = scenarioContext(structuredClone(source.context));
+      context.results = [];
+      const copied: PlanningScenario = {
+        id: randomUUID(),
+        projectId,
+        name: nameOf(input.name),
+        status: 'draft',
+        lineageId: source.lineageId,
+        copiedFrom: {
+          scenarioId: source.id,
+          name: source.name,
+          inputVersion: source.inputVersion,
+          revision: source.revision,
+        },
+        frozenAt: null,
+        inputVersion: 1,
+        revision: 1,
+        context,
+        createdAt: time,
+        updatedAt: time,
+      };
+      this.db
+        .prepare('INSERT INTO planning_scenarios VALUES (?, ?, ?)')
+        .run(copied.id, projectId, JSON.stringify(copied));
+      return copied;
+    })();
+  }
   updateScenario(
     projectId: string,
     scenarioId: string,
@@ -197,6 +292,7 @@ class Storage {
   ): PlanningScenario {
     return this.db.transaction(() => {
       const scenario = this.getScenario(projectId, scenarioId);
+      assertScenarioEditable(scenario);
       scenarioFields(input, ['name', 'context', 'expectedRevision']);
       if (scenarioRevision(input.expectedRevision) !== scenario.revision)
         throw new HttpError(409, '规划方案已被更新，请重新加载后编辑');
@@ -227,6 +323,7 @@ class Storage {
   deleteScenario(projectId: string, scenarioId: string, expectedRevision: unknown): void {
     this.db.transaction(() => {
       const scenario = this.getScenario(projectId, scenarioId);
+      assertScenarioEditable(scenario);
       if (scenarioRevision(expectedRevision) !== scenario.revision)
         throw new HttpError(409, '规划方案已被更新，请重新加载后删除');
       this.db
@@ -241,6 +338,7 @@ class Storage {
   ): PlanningScenario {
     return this.db.transaction(() => {
       const scenario = this.getScenario(projectId, scenarioId);
+      assertScenarioEditable(scenario);
       scenarioFields(input, ['sourceRouteId', 'expectedRevision']);
       if (scenarioRevision(input.expectedRevision) !== scenario.revision)
         throw new HttpError(409, '规划方案已被更新，请重新加载后编辑');
@@ -287,6 +385,69 @@ class Storage {
       return scenario;
     })();
   }
+  refreshTransportCycleSource(
+    projectId: string,
+    scenarioId: string,
+    cycleId: string,
+    input: Record<string, unknown>,
+  ): PlanningScenario {
+    return this.db.transaction(() => {
+      const scenario = this.getScenario(projectId, scenarioId);
+      assertScenarioEditable(scenario);
+      scenarioFields(input, ['expectedRevision']);
+      if (scenarioRevision(input.expectedRevision) !== scenario.revision)
+        throw new HttpError(409, '规划方案已被更新，请重新加载后引入资料');
+      const cycle = scenario.context.transportCycles?.find((candidate) => candidate.id === cycleId);
+      if (!cycle) throw new HttpError(404, '该规划方案下的运输循环不存在');
+      const route = this.getRoute(cycle.source.routeId, projectId);
+      const latestSource: TransportCycle['source'] = {
+        routeId: route.id,
+        name: route.name,
+        inputVersion: route.inputVersion,
+        points: route.points,
+        strategy: route.strategy,
+        snapshot: route.snapshot,
+        importedAt: cycle.source.importedAt,
+      };
+      // An unchanged source must never discard independent edits in the scenario.
+      if (isDeepStrictEqual(cycleSourceInputs(latestSource), cycleSourceInputs(cycle.source)))
+        return scenario;
+      const positionsBySource = new Map<string, string[]>();
+      for (const position of cycle.positions) {
+        if (position.sourcePointId === null) continue;
+        const occurrences = positionsBySource.get(position.sourcePointId) ?? [];
+        occurrences.push(position.id);
+        positionsBySource.set(position.sourcePointId, occurrences);
+      }
+      cycle.name = route.name;
+      cycle.strategy = route.strategy;
+      cycle.positions = route.points.map((point) => ({
+        id: positionsBySource.get(point.id)?.shift() ?? randomUUID(),
+        point,
+        sourcePointId: point.id,
+      }));
+      cycle.source = { ...latestSource, importedAt: new Date().toISOString() };
+      cycle.roads = [];
+      if (route.snapshot?.inputVersion === route.inputVersion) {
+        cycle.roads = route.snapshot.legs.map((leg, index) => ({
+          fromPositionId: cycle.positions[index].id,
+          toPositionId: cycle.positions[index + 1].id,
+          strategy: route.snapshot!.strategy,
+          leg,
+        }));
+      }
+      cycle.confirmed = false;
+      cycle.confirmedAt = null;
+      // Demands, measured segments and base-start evidence retain their identities for explicit repair.
+      scenario.inputVersion++;
+      scenario.revision++;
+      scenario.updatedAt = new Date().toISOString();
+      this.db
+        .prepare('UPDATE planning_scenarios SET payload = ? WHERE id = ? AND project_id = ?')
+        .run(JSON.stringify(scenario), scenarioId, projectId);
+      return scenario;
+    })();
+  }
   updateTransportCycle(
     projectId: string,
     scenarioId: string,
@@ -295,6 +456,7 @@ class Storage {
   ): PlanningScenario {
     return this.db.transaction(() => {
       const scenario = this.getScenario(projectId, scenarioId);
+      assertScenarioEditable(scenario);
       const cycle = scenario.context.transportCycles?.find((candidate) => candidate.id === cycleId);
       if (!cycle) throw new HttpError(404, '该规划方案下的运输循环不存在');
       scenarioFields(input, ['name', 'strategy', 'positions', 'confirmed', 'expectedRevision']);
@@ -338,6 +500,7 @@ class Storage {
   ): PlanningScenario {
     return this.db.transaction(() => {
       const scenario = this.getScenario(projectId, scenarioId);
+      assertScenarioEditable(scenario);
       const cycles = scenario.context.transportCycles ?? [];
       if (!cycles.some((cycle) => cycle.id === cycleId))
         throw new HttpError(404, '该规划方案下的运输循环不存在');
@@ -360,6 +523,7 @@ class Storage {
   ): PlanningScenario {
     return this.db.transaction(() => {
       const scenario = this.getScenario(projectId, scenarioId);
+      assertScenarioEditable(scenario);
       scenarioFields(input, ['expectedRevision', 'demands']);
       if (scenarioRevision(input.expectedRevision) !== scenario.revision)
         throw new HttpError(409, '规划方案已被更新，请重新加载后编辑');
@@ -382,6 +546,7 @@ class Storage {
   ): PlanningScenario {
     return this.db.transaction(() => {
       const scenario = this.getScenario(projectId, scenarioId);
+      assertScenarioEditable(scenario);
       scenarioFields(input, ['expectedRevision', 'operations']);
       if (scenarioRevision(input.expectedRevision) !== scenario.revision)
         throw new HttpError(409, '规划方案已被更新，请重新加载后编辑');
@@ -406,6 +571,7 @@ class Storage {
   ): PlanningScenario {
     return this.db.transaction(() => {
       const scenario = this.getScenario(projectId, scenarioId);
+      assertScenarioEditable(scenario);
       if (expectedRevision !== scenario.revision)
         throw new HttpError(409, '规划方案已被更新，请重新加载后编辑');
       if (

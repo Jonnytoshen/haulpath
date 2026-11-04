@@ -2,6 +2,7 @@ import type {
   JsonObject,
   JsonValue,
   PlanningScenarioContext,
+  PlanningScenario,
   TransportCycle,
   TransportDemand,
   FleetOperations,
@@ -84,4 +85,9 @@ export function scenarioContext(input: unknown): PlanningScenarioContext {
     annual: context.annual,
     results: context.results,
   };
+}
+
+export function assertScenarioEditable(scenario: PlanningScenario): void {
+  if (scenario.status !== 'draft')
+    throw new HttpError(409, '冻结版本不可修改，请复制为新草案后继续编辑');
 }

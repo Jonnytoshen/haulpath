@@ -7,6 +7,7 @@ export * from './transport-demands';
 export * from './fleet-operations';
 export * from './power-connection-points';
 export * from './station-network';
+export * from './scenario-comparison';
 
 export type CoordinateSystem = 'GCJ-02' | 'WGS84';
 export const strategyGroups = [
@@ -152,7 +153,16 @@ export interface PlanningScenario {
   id: string;
   projectId: string;
   name: string;
-  status: 'draft';
+  status: 'draft' | 'frozen';
+  /** Stable root of the copy lineage; each version still has its own id. */
+  lineageId: string;
+  copiedFrom: {
+    scenarioId: string;
+    name: string;
+    inputVersion: number;
+    revision: number;
+  } | null;
+  frozenAt: string | null;
   inputVersion: number;
   revision: number;
   context: PlanningScenarioContext;
