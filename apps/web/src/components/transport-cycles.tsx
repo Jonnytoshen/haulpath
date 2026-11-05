@@ -15,6 +15,7 @@ import {
 import {
   cycleIsClosed,
   cycleReadiness,
+  directedRoadKey,
   effectiveCycleRoads,
   formatKilometers,
   PLANNING_NOTICE,
@@ -27,6 +28,7 @@ import {
   type Point,
   type Route,
   type TransportCycle,
+  type PreparedRoad,
 } from '@haulpath/domain';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -56,12 +58,14 @@ export default function TransportCycles({
   onChange,
   onWritingChange,
   onEditingChange,
+  preparedRoads = [],
 }: {
   scenario: PlanningScenario;
   disabled: boolean;
   onChange: (scenario: PlanningScenario) => void;
   onWritingChange: (writing: boolean) => void;
   onEditingChange?: (editing: boolean) => void;
+  preparedRoads?: PreparedRoad[];
 }) {
   const path = `/api/projects/${encodeURIComponent(scenario.projectId)}/scenarios/${encodeURIComponent(scenario.id)}/cycles`;
   const cycles = scenario.context.transportCycles ?? [];
@@ -266,8 +270,34 @@ export default function TransportCycles({
       ) : (
         <div className={styles.cycles}>
           {cycles.map((cycle) => {
-            const roads = effectiveCycleRoads(cycle);
-            const gaps = cycleReadiness(cycle, scenario.context.operations);
+            const importedRoads = effectiveCycleRoads(cycle);
+            const roads = cycle.positions.slice(1).flatMap((to, index) => {
+              const from = cycle.positions[index];
+              const imported = importedRoads.find(
+                (road) => road.fromPositionId === from.id && road.toPositionId === to.id,
+              );
+              if (imported) return [imported];
+              const prepared = preparedRoads.find(
+                (road) => road.key === directedRoadKey(from.point, to.point, cycle.strategy),
+              );
+              return prepared
+                ? [
+                    {
+                      fromPositionId: from.id,
+                      toPositionId: to.id,
+                      strategy: cycle.strategy,
+                      leg: {
+                        index: index + 1,
+                        from: from.point,
+                        to: to.point,
+                        distanceMeters: prepared.distanceMeters,
+                        polyline: prepared.polyline,
+                      },
+                    },
+                  ]
+                : [];
+            });
+            const gaps = cycleReadiness({ ...cycle, roads }, scenario.context.operations);
             return (
               <section
                 className={styles.cycle}

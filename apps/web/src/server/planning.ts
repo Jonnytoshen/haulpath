@@ -3,31 +3,65 @@ import { amapJson, coordinateText, parsePosition } from './amap';
 import { HttpError } from './http';
 import { storage } from './storage';
 
-type PlanningSlots = { active: number; waiting: (() => void)[] };
+type PlanningWaiter = {
+  resolve: () => void;
+  reject: (error: unknown) => void;
+  signal?: AbortSignal;
+  onAbort: () => void;
+};
+type PlanningSlots = { active: number; waiting: PlanningWaiter[] };
 const planningGlobal = globalThis as typeof globalThis & { haulpathPlanningSlots?: PlanningSlots };
-async function withPlanningSlot<T>(operation: () => Promise<T>): Promise<T> {
+export async function withPlanningSlot<T>(
+  operation: () => Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
+  signal?.throwIfAborted();
   const slots = (planningGlobal.haulpathPlanningSlots ??= { active: 0, waiting: [] });
   if (slots.active >= 2)
-    await new Promise<void>((resolve) => {
-      slots.waiting.push(resolve);
+    await new Promise<void>((resolve, reject) => {
+      const waiter: PlanningWaiter = {
+        resolve,
+        reject,
+        signal,
+        onAbort: () => {
+          const index = slots.waiting.indexOf(waiter);
+          if (index >= 0) slots.waiting.splice(index, 1);
+          reject(signal?.reason);
+        },
+      };
+      signal?.addEventListener('abort', waiter.onAbort, { once: true });
+      slots.waiting.push(waiter);
     });
   else slots.active++;
   try {
+    signal?.throwIfAborted();
     return await operation();
   } finally {
     const next = slots.waiting.shift();
-    if (next) next();
-    else slots.active--;
+    if (next) {
+      next.signal?.removeEventListener('abort', next.onAbort);
+      next.resolve();
+    } else slots.active--;
   }
 }
 
-async function planLeg(from: Point, to: Point, index: number, strategy: Strategy): Promise<Leg> {
-  const data = await amapJson('/v5/direction/driving', {
-    origin: coordinateText(from.longitude, from.latitude),
-    destination: coordinateText(to.longitude, to.latitude),
-    strategy: String(strategy),
-    show_fields: 'polyline',
-  });
+export async function planLeg(
+  from: Point,
+  to: Point,
+  index: number,
+  strategy: Strategy,
+  signal?: AbortSignal,
+): Promise<Leg> {
+  const data = await amapJson(
+    '/v5/direction/driving',
+    {
+      origin: coordinateText(from.longitude, from.latitude),
+      destination: coordinateText(to.longitude, to.latitude),
+      strategy: String(strategy),
+      show_fields: 'polyline',
+    },
+    signal,
+  );
   const route = data.route as
     { paths?: { distance?: unknown; steps?: { polyline?: unknown }[] }[] } | undefined;
   const path = route?.paths?.[0];

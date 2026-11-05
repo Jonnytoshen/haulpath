@@ -1,0 +1,202 @@
+.section {
+  margin-top: 24px;
+  padding-top: 24px;
+  min-width: 0;
+}
+.heading,
+.statusHeading,
+.roadHeading,
+.actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.heading {
+  align-items: start;
+}
+.heading h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+.heading p,
+.settings p,
+.status p,
+.task p,
+.boundary,
+.list p {
+  margin: 8px 0 0;
+  color: var(--secondary);
+  line-height: 1.6;
+}
+.heading svg,
+.actions svg {
+  width: 16px;
+  height: 16px;
+}
+.settings {
+  display: grid;
+  gap: 8px;
+  margin-top: 20px;
+}
+.settings label {
+  display: grid;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.settings p {
+  margin: 0;
+  font-size: 13px;
+}
+.status,
+.task {
+  padding: 16px;
+  margin-top: 16px;
+  border-radius: 6px;
+  background: var(--muted);
+}
+.statusHeading {
+  font-size: 14px;
+}
+.statusHeading strong {
+  font-weight: 600;
+}
+.statusHeading > span,
+.count,
+.distance {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.statusHeading > span {
+  color: var(--secondary);
+}
+.ready {
+  color: var(--primary);
+}
+.progress {
+  display: block;
+  width: 100%;
+  height: 8px;
+  margin: 12px 0 16px;
+  border: 0;
+  border-radius: 4px;
+  overflow: hidden;
+  appearance: none;
+  background: var(--border);
+}
+.progress::-webkit-progress-bar {
+  background: var(--border);
+}
+.progress::-webkit-progress-value {
+  background: var(--primary);
+}
+.progress::-moz-progress-bar {
+  background: var(--primary);
+}
+.actions {
+  justify-content: start;
+  margin-top: 12px;
+  align-items: center;
+}
+.status p,
+.task p,
+.error {
+  font-size: 13px;
+}
+.error,
+.task .error {
+  color: #a2372e;
+  overflow-wrap: anywhere;
+}
+.record,
+.roads {
+  margin-top: 12px;
+  font-size: 13px;
+}
+.record summary,
+.roads summary,
+.basis summary {
+  cursor: pointer;
+  padding: 8px 0;
+}
+.record dl {
+  margin: 4px 0 0;
+  display: grid;
+  gap: 8px;
+}
+.record dl > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+.record dt {
+  flex: none;
+  color: var(--secondary);
+}
+.record dd {
+  margin: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+}
+.list li {
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+.roadHeading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.roadHeading strong {
+  font-size: 14px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.distance {
+  text-align: right;
+  white-space: nowrap;
+}
+.basis {
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.basis p {
+  overflow-wrap: anywhere;
+}
+.boundary {
+  margin-top: 16px;
+  font-size: 12px;
+}
+@media (max-width: 720px) {
+  .heading button,
+  .actions button,
+  .record summary,
+  .roads > summary {
+    min-height: 44px;
+  }
+  .settings select {
+    min-height: 44px;
+  }
+  .status,
+  .task {
+    padding: 12px;
+  }
+  .statusHeading {
+    gap: 6px;
+  }
+  .record dl > div {
+    align-items: start;
+  }
+  .roadHeading {
+    gap: 8px;
+  }
+}

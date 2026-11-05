@@ -13,7 +13,7 @@ import {
   RefreshCw,
   Trash2,
 } from 'lucide-react';
-import type { PlanningScenario, Project } from '@haulpath/domain';
+import type { PlanningScenario, Project, RoadPreparationView } from '@haulpath/domain';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog } from '@/components/app-dialog';
@@ -24,6 +24,7 @@ import TransportDemands from './transport-demands';
 import FleetOperations from './fleet-operations';
 import FixedStationLayout from './fixed-station-layout';
 import ScenarioVersionComparison from './scenario-version-comparison';
+import DirectedRoadData from './directed-road-data';
 import ScenarioInputValue, { scenarioInputNames } from './scenario-input-value';
 import comparisonStyles from './scenario-version-comparison.module.css';
 
@@ -37,6 +38,7 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
   const path = `/api/projects/${encodeURIComponent(project.id)}/scenarios`;
   const [scenarios, setScenarios] = useState<PlanningScenario[]>([]);
   const [selected, setSelected] = useState<PlanningScenario | null>(null);
+  const [roadView, setRoadView] = useState<RoadPreparationView | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [reading, setReading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -423,9 +425,31 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
                 />
               </details>
             )}
+            <DirectedRoadData
+              key={`roads-${selected.id}`}
+              scenario={selected}
+              disabled={busy || reading || editing || frozen}
+              onViewChange={setRoadView}
+              onChange={(saved) => {
+                setSelected(saved);
+                setScenarios((items) => items.map((item) => (item.id === saved.id ? saved : item)));
+              }}
+              onWritingChange={(value) => {
+                writing.current = value;
+                if (value) generation.current++;
+                setBusy(value);
+                setReading(false);
+              }}
+            />
             <TransportCycles
               key={selected.id}
               scenario={selected}
+              preparedRoads={
+                roadView?.scenarioId === selected.id &&
+                roadView.inputVersion === selected.inputVersion
+                  ? roadView.roads
+                  : []
+              }
               disabled={busy || reading || frozen}
               onEditingChange={setEditing}
               onChange={(saved) => {

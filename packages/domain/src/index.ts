@@ -1,6 +1,7 @@
 import type { TransportDemand } from './transport-demands';
 import type { FleetOperations } from './fleet-operations';
 import type { StationNetwork } from './station-network';
+import type { RoadSettings } from './directed-roads';
 import { measuredSegmentIssue } from './fleet-operations';
 
 export * from './transport-demands';
@@ -8,6 +9,7 @@ export * from './fleet-operations';
 export * from './power-connection-points';
 export * from './station-network';
 export * from './scenario-comparison';
+export * from './directed-roads';
 
 export type CoordinateSystem = 'GCJ-02' | 'WGS84';
 export const strategyGroups = [
@@ -145,6 +147,7 @@ export interface PlanningScenarioContext {
   transportDemands?: TransportDemand[];
   operations?: FleetOperations;
   stationNetwork?: StationNetwork;
+  roadSettings?: RoadSettings;
   annual: JsonObject[];
   results: JsonObject[];
 }

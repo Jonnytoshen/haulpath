@@ -41,14 +41,17 @@ export function parsePosition(value: unknown): [number, number] {
   return [longitude, latitude];
 }
 
-export async function amapFetch(url: URL): Promise<Response> {
+export async function amapFetch(url: URL, signal?: AbortSignal): Promise<Response> {
   try {
     return await fetch(url, {
       cache: 'no-store',
       redirect: 'error',
-      signal: AbortSignal.timeout(15_000),
+      signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(15_000)])
+        : AbortSignal.timeout(15_000),
     });
   } catch (error) {
+    if (signal?.aborted) throw signal.reason;
     if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
       throw new HttpError(504, '高德服务请求超时，请重试');
     }
@@ -59,6 +62,7 @@ export async function amapFetch(url: URL): Promise<Response> {
 export async function amapJson(
   path: string,
   parameters: Record<string, string>,
+  signal?: AbortSignal,
 ): Promise<Record<string, unknown>> {
   const key = process.env.AMAP_WEB_SERVICE_KEY;
   if (!key) throw new HttpError(503, '缺少高德 Web 服务 Key，请配置 AMAP_WEB_SERVICE_KEY');
@@ -66,12 +70,15 @@ export async function amapJson(
   for (const [name, value] of Object.entries(parameters)) url.searchParams.set(name, value);
   url.searchParams.set('key', key);
   url.searchParams.set('output', 'JSON');
-  const response = await amapFetch(url);
+  const response = await amapFetch(url, signal);
   if (!response.ok) throw new HttpError(502, '高德服务暂时不可用，请稍后重试');
   let result: unknown;
   try {
     result = await response.json();
-  } catch {
+  } catch (error) {
+    if (signal?.aborted) throw signal.reason;
+    if (error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name))
+      throw new HttpError(504, '高德服务请求超时，请重试');
     throw new HttpError(502, '高德返回的数据无效，请重试');
   }
   if (!result || typeof result !== 'object' || Array.isArray(result))
