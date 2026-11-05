@@ -1,6 +1,6 @@
 import type { PlanningScenarioContext, Point, TransportCycle } from './index';
 import { cycleHasAdjacentOverlap, cycleIsClosed } from './index';
-import type { OperatingShift, VehicleGroup } from './fleet-operations';
+import type { FleetOperations, OperatingShift, VehicleGroup } from './fleet-operations';
 import { measuredSegmentIssue, vehicleGroupIssue } from './fleet-operations';
 import { transportDemandIssue } from './transport-demands';
 import type { PreparedRoad, RoadTaskStatus } from './directed-roads';
@@ -135,7 +135,7 @@ export interface DailyTransportView {
   scenarioId: string;
   inputVersion: number;
   gaps: string[];
-  task: DailyTransportTask | null;
+  task: DailyTransportTaskSummary | null;
   tasks: DailyTransportTaskSummary[];
   resultTask: DailyTransportTask | null;
 }
@@ -146,6 +146,13 @@ function close(a: number, b: number): boolean {
     Number.isFinite(a) &&
     Number.isFinite(b) &&
     Math.abs(a - b) <= 1e-8 + Number.EPSILON * 32 * Math.max(1, Math.abs(a), Math.abs(b))
+  );
+}
+function closeTonnes(a: number, b: number): boolean {
+  return (
+    Number.isFinite(a) &&
+    Number.isFinite(b) &&
+    Math.abs(a - b) <= Number.EPSILON * 32 * Math.max(Math.abs(a), Math.abs(b))
   );
 }
 function samePoint(a: Point, b: Point): boolean {
@@ -174,11 +181,32 @@ function nonnegative(value: number | null): value is number {
   return value !== null && Number.isFinite(value) && value >= 0;
 }
 
+function measuredTravelTime(
+  operations: FleetOperations | undefined,
+  groupId: string,
+  cycle: TransportCycle,
+  positionIndex: number,
+) {
+  const fromId = cycle.positions[positionIndex].id;
+  const toId = cycle.positions[positionIndex + 1].id;
+  return operations?.measuredSegments.find(
+    (entry) =>
+      entry.vehicleGroupId === groupId &&
+      entry.cycleId === cycle.id &&
+      entry.fromPositionId === fromId &&
+      entry.toPositionId === toId &&
+      entry.durationMinutes !== null &&
+      measuredSegmentIssue(entry, operations, [cycle], 'travel-time') === null,
+  );
+}
+
 /** Only transportation inputs are required here. Energy and finance remain separate checks. */
 export function dailyTransportReadiness(snapshot: DailyTransportSnapshot): string[] {
   const { context } = snapshot;
   const cycles = context.transportCycles ?? [];
   const demands = context.transportDemands ?? [];
+  const demandedCycleIds = new Set(demands.map((demand) => demand.cycleId));
+  const demandedCycles = cycles.filter((cycle) => demandedCycleIds.has(cycle.id));
   const operations = context.operations;
   const groups = operations?.vehicleGroups.filter((group) => group.count > 0) ?? [];
   const gaps: string[] = [];
@@ -233,18 +261,10 @@ export function dailyTransportReadiness(snapshot: DailyTransportSnapshot): strin
       )
     )
       gaps.push(`${prefix}：班次作业窗口无效或待配置`);
-    for (const cycle of cycles) {
+    for (const cycle of demandedCycles) {
       let drivingMinutes = 0;
       for (let index = 1; index < cycle.positions.length; index++) {
-        const measured = operations?.measuredSegments.find(
-          (entry) =>
-            entry.vehicleGroupId === group.id &&
-            entry.cycleId === cycle.id &&
-            entry.fromPositionId === cycle.positions[index - 1].id &&
-            entry.toPositionId === cycle.positions[index].id &&
-            entry.durationMinutes !== null &&
-            measuredSegmentIssue(entry, operations, cycles, 'travel-time') === null,
-        );
+        const measured = measuredTravelTime(operations, group.id, cycle, index - 1);
         if (!measured && !positive(group.speedKph))
           gaps.push(`${prefix}：循环“${cycle.name}”缺少业务速度或有效实测时间`);
         const key = directedRoadKey(
@@ -256,16 +276,14 @@ export function dailyTransportReadiness(snapshot: DailyTransportSnapshot): strin
           measured?.durationMinutes ??
           ((roads.get(key)?.distanceMeters ?? NaN) / 1000 / (group.speedKph ?? NaN)) * 60;
       }
-      if (
-        demands.some((demand) => demand.cycleId === cycle.id) &&
-        drivingMinutes === 0 &&
-        group.loadingMinutes === 0 &&
-        group.unloadingMinutes === 0
-      )
+      if (drivingMinutes === 0 && group.loadingMinutes === 0 && group.unloadingMinutes === 0)
         gaps.push(`${prefix}：循环“${cycle.name}”的全程及装卸耗时为零，无法生成有界逐车日计划`);
     }
-    for (const from of cycles)
-      for (const to of cycles) {
+    const transferableCycles = cycles.filter(
+      (cycle) => cycle.id === group.baseCycleId || demandedCycleIds.has(cycle.id),
+    );
+    for (const from of transferableCycles)
+      for (const to of transferableCycles) {
         if (from.id === to.id || !from.positions[0] || !to.positions[0]) continue;
         const a = from.positions[0].point;
         const b = to.positions[0].point;
@@ -279,6 +297,7 @@ export function dailyTransportReadiness(snapshot: DailyTransportSnapshot): strin
     for (const measured of operations.measuredSegments) {
       if (
         measured.durationMinutes === null ||
+        !demandedCycleIds.has(measured.cycleId) ||
         !groups.some((group) => group.id === measured.vehicleGroupId)
       )
         continue;
@@ -300,21 +319,7 @@ function businessSegment(
   const to = cycle.positions[index + 1];
   const key = directedRoadKey(from.point, to.point, cycle.strategy);
   const road = snapshot.roads.find((entry) => entry.key === key)!;
-  const operations = snapshot.context.operations!;
-  const measured = operations.measuredSegments.find(
-    (entry) =>
-      entry.vehicleGroupId === group.id &&
-      entry.cycleId === cycle.id &&
-      entry.fromPositionId === from.id &&
-      entry.toPositionId === to.id &&
-      entry.durationMinutes !== null &&
-      measuredSegmentIssue(
-        entry,
-        operations,
-        snapshot.context.transportCycles ?? [],
-        'travel-time',
-      ) === null,
-  );
+  const measured = measuredTravelTime(snapshot.context.operations, group.id, cycle, index);
   return {
     fromPositionId: from.id,
     toPositionId: to.id,
@@ -492,9 +497,9 @@ export function generateDailyTransport(
   const remaining = new Map(targets);
   const delivered = new Map<string, TonnageSum>();
   const totalTonnes = snapshot.context.transportDemands!.reduce(
-    (total, demand) => total + demand.dailyTonnes,
-    0,
-  );
+    (sum, demand) => addTonnes(sum, demand.dailyTonnes),
+    emptyTonnage(),
+  ).total;
   const vehicles: DailyTransportVehicle[] = [];
   const states = groups.flatMap((group) =>
     group.vehicleIds.slice(0, group.count).map((vehicleId) => {
@@ -519,7 +524,7 @@ export function generateDailyTransport(
     }),
   );
   const trips: DailyTransportTrip[] = [];
-  let completedTonnes = 0;
+  let completedTonnes = emptyTonnage();
   let eventNumber = 0;
   const begun = Date.now();
   const offset = (((config.seed - 1) % cycles.length) + cycles.length) % cycles.length;
@@ -611,9 +616,13 @@ export function generateDailyTransport(
       const sum = addTonnes(delivered.get(demandId) ?? emptyTonnage(), tonnes);
       delivered.set(demandId, sum);
       remaining.set(demandId, remainingTonnes(targets.get(demandId)!, sum.total));
-      completedTonnes += tonnes;
+      completedTonnes = addTonnes(completedTonnes, tonnes);
     }
-    onProgress?.({ completedTrips: trips.length, completedTonnes, totalTonnes });
+    onProgress?.({
+      completedTrips: trips.length,
+      completedTonnes: Math.min(completedTonnes.total, totalTonnes),
+      totalTonnes,
+    });
   }
   for (const vehicle of vehicles) {
     vehicle.workingMinutes = vehicle.events.reduce(
@@ -632,6 +641,8 @@ export function generateDailyTransport(
       );
   }
   function shortfallReason(cycle: TransportCycle, allocation: DailyTransportAllocation): string {
+    const unfinished = '给定车队与班次下，本次构造未安排完成；未证明无解';
+    if ((delivered.get(allocation.demandId)?.total ?? 0) > 0) return unfinished;
     const fitsAnyShift = groups.some((group) => {
       const base = cycles.find((candidate) => candidate.id === group.baseCycleId)!;
       const departure = transfer(snapshot, group, base, cycle, 0, 'continuation');
@@ -648,9 +659,7 @@ export function generateDailyTransport(
           (home?.endMinute ?? trip.endMinute) <= shift.endMinute - shift.startMinute + tolerance,
       );
     });
-    return fitsAnyShift
-      ? '给定车队与班次下，本次构造未安排完成；未证明无解'
-      : '现有车辆的班次均不足以完成一次该需求的循环及必要的接续、归位';
+    return fitsAnyShift ? unfinished : '从基准直接往返的单趟安排放不进现有班次';
   }
   const demands: DailyTransportDemandResult[] = snapshot.context.transportDemands!.map(
     (demand) => ({
@@ -659,7 +668,10 @@ export function generateDailyTransport(
       loadingPositionId: demand.loadingPositionId,
       unloadingPositionId: demand.unloadingPositionId,
       requestedTonnes: demand.dailyTonnes,
-      completedTonnes: demand.dailyTonnes - remaining.get(demand.id)!,
+      completedTonnes:
+        remaining.get(demand.id) === 0
+          ? demand.dailyTonnes
+          : (delivered.get(demand.id)?.total ?? 0),
       missingTonnes: remaining.get(demand.id)!,
       reason:
         remaining.get(demand.id)! > 0
@@ -679,8 +691,14 @@ export function generateDailyTransport(
     vehicles,
     trips,
     demands,
-    totalCompletedTonnes: demands.reduce((total, demand) => total + demand.completedTonnes, 0),
-    totalMissingTonnes: demands.reduce((total, demand) => total + demand.missingTonnes, 0),
+    totalCompletedTonnes: demands.reduce(
+      (sum, demand) => addTonnes(sum, demand.completedTonnes),
+      emptyTonnage(),
+    ).total,
+    totalMissingTonnes: demands.reduce(
+      (sum, demand) => addTonnes(sum, demand.missingTonnes),
+      emptyTonnage(),
+    ).total,
     totalDistanceMeters: vehicles.reduce(
       (total, vehicle) => total + vehicle.totalDistanceMeters,
       0,
@@ -720,7 +738,7 @@ export function validateDailyTransport(
   const roads = new Map(snapshot.roads.map((road) => [road.key, road]));
   const trips = new Map(result.trips.map((trip) => [trip.id, trip]));
   const vehicleMap = new Map(result.vehicles.map((vehicle) => [vehicle.vehicleId, vehicle]));
-  const totals = new Map<string, number>();
+  const totals = new Map<string, TonnageSum>();
   const eventIds = new Set<string>();
   function check(ok: boolean, message: string) {
     if (!ok) issues.push(message);
@@ -734,7 +752,7 @@ export function validateDailyTransport(
       new Set(actual.map((entry) => entry.demandId)).size === actual.length &&
       expected.every((entry) =>
         actual.some(
-          (other) => other.demandId === entry.demandId && close(other.tonnes, entry.tonnes),
+          (other) => other.demandId === entry.demandId && closeTonnes(other.tonnes, entry.tonnes),
         ),
       )
     );
@@ -772,7 +790,10 @@ export function validateDailyTransport(
         transportDemandIssue(input, [...cycles.values()]) === null;
       check(valid, `车次 ${trip.id} 需求身份或装卸顺序无效`);
       if (valid)
-        totals.set(allocation.demandId, (totals.get(allocation.demandId) ?? 0) + allocation.tonnes);
+        totals.set(
+          allocation.demandId,
+          addTonnes(totals.get(allocation.demandId) ?? emptyTonnage(), allocation.tonnes),
+        );
       return valid;
     });
     check(
@@ -820,7 +841,7 @@ export function validateDailyTransport(
             event.measuredSegmentId === null &&
             close(event.endMinute - event.startMinute, duration ?? NaN) &&
             allocationsEqual(event.allocations, expected) &&
-            close(event.loadTonnes, sumTonnes(expected)),
+            closeTonnes(event.loadTonnes, sumTonnes(expected)),
           `车次 ${trip.id} 装卸事件或耗时不完整`,
         );
       }
@@ -833,22 +854,15 @@ export function validateDailyTransport(
         return first <= positionIndex && positionIndex < last;
       });
       const load = sumTonnes(expected);
-      check(load <= (group.payloadTonnes ?? 0) + tolerance, `车次 ${trip.id} 区间超载`);
+      const capacity = group.payloadTonnes ?? 0;
+      check(load <= capacity || closeTonnes(load, capacity), `车次 ${trip.id} 区间超载`);
       const key = directedRoadKey(position.point, to.point, cycle.strategy);
       const road = roads.get(key);
-      const measured = snapshot.context.operations?.measuredSegments.find(
-        (entry) =>
-          entry.vehicleGroupId === group.id &&
-          entry.cycleId === cycle.id &&
-          entry.fromPositionId === position.id &&
-          entry.toPositionId === to.id &&
-          entry.durationMinutes !== null &&
-          measuredSegmentIssue(
-            entry,
-            snapshot.context.operations!,
-            [...cycles.values()],
-            'travel-time',
-          ) === null,
+      const measured = measuredTravelTime(
+        snapshot.context.operations,
+        group.id,
+        cycle,
+        positionIndex,
       );
       const duration =
         measured?.durationMinutes ??
@@ -865,7 +879,7 @@ export function validateDailyTransport(
           close(segment.durationMinutes, duration) &&
           segment.durationSource === source &&
           segment.measuredSegmentId === (measured?.id ?? null) &&
-          close(segment.loadTonnes, load) &&
+          closeTonnes(segment.loadTonnes, load) &&
           allocationsEqual(segment.allocations, expected),
         `车次 ${trip.id} 区间载荷或道路时间依据不一致`,
       );
@@ -883,7 +897,7 @@ export function validateDailyTransport(
           close(event.endMinute - event.startMinute, duration) &&
           event.durationSource === source &&
           event.measuredSegmentId === (measured?.id ?? null) &&
-          close(event.loadTonnes, load) &&
+          closeTonnes(event.loadTonnes, load) &&
           allocationsEqual(event.allocations, expected),
         `车次 ${trip.id} 行驶事件未对应完整循环或实测依据`,
       );
@@ -911,13 +925,14 @@ export function validateDailyTransport(
         vehicle.payloadTonnes === group.payloadTonnes,
       `车辆 ${vehicle.vehicleId} 基准或载重依据不一致`,
     );
+    const shifts = [...group.shifts].sort((a, b) => a.startMinute - b.startMinute);
+    const reportedShifts = [...vehicle.shifts].sort((a, b) => a.startMinute - b.startMinute);
     check(
-      vehicle.shifts.length === group.shifts.length &&
-        vehicle.shifts.every((shift) =>
-          group.shifts.some(
-            (entry) =>
-              entry.startMinute === shift.startMinute && entry.endMinute === shift.endMinute,
-          ),
+      reportedShifts.length === shifts.length &&
+        reportedShifts.every(
+          (shift, index) =>
+            shift.startMinute === shifts[index].startMinute &&
+            shift.endMinute === shifts[index].endMinute,
         ),
       `车辆 ${vehicle.vehicleId} 班次依据不一致`,
     );
@@ -930,20 +945,41 @@ export function validateDailyTransport(
         ),
       `车辆 ${vehicle.vehicleId} 车次关联不一致`,
     );
+    // Bind the whole trip, then use that shift for its adjoining empty travel. A very
+    // short or zero-length event on a shared boundary cannot identify its own shift.
+    const tripShifts = new Map(
+      vehicleTrips.map((trip) => [
+        trip.id,
+        shifts.find(
+          (shift) =>
+            trip.startMinute >= shift.startMinute &&
+            trip.startMinute < shift.endMinute &&
+            trip.endMinute <= shift.endMinute,
+        ) ??
+          shifts.find(
+            (shift) =>
+              trip.startMinute >= shift.startMinute &&
+              trip.startMinute <= shift.endMinute &&
+              trip.endMinute <= shift.endMinute + tolerance,
+          ),
+      ]),
+    );
     let previousPoint = base.positions[0].point;
     let previousMinute = -Infinity;
     let currentCycle = base;
     let lastShift: OperatingShift | undefined;
-    for (const event of vehicle.events) {
+    for (const [index, event] of vehicle.events.entries()) {
       check(!eventIds.has(event.id), '车辆事件身份重复');
       eventIds.add(event.id);
-      const shift = group.shifts.find(
-        (entry) =>
-          event.startMinute >= entry.startMinute - tolerance &&
-          event.endMinute <= entry.endMinute + tolerance,
-      );
+      const adjacentTrip =
+        event.kind === 'continuation'
+          ? vehicle.events[index + 1]?.tripId
+          : vehicle.events[index - 1]?.tripId;
+      const shift = tripShifts.get(event.tripId ?? adjacentTrip ?? '');
       check(
         !!shift &&
+          event.startMinute >= shift.startMinute - tolerance &&
+          event.endMinute <= shift.endMinute + tolerance &&
           nonnegative(event.endMinute - event.startMinute) &&
           event.startMinute >= previousMinute - tolerance,
         `车辆 ${vehicle.vehicleId} 事件重叠或超出工作窗口`,
@@ -1024,11 +1060,15 @@ export function validateDailyTransport(
       new Set(result.demands.map((demand) => demand.demandId)).size === inputs.size,
     '需求完成量条目不完整或重复',
   );
+  let completedSum = emptyTonnage();
+  let missingSum = emptyTonnage();
   for (const input of inputs.values()) {
     const actual = result.demands.find((demand) => demand.demandId === input.id);
-    const completed = totals.get(input.id) ?? 0;
+    const assigned = totals.get(input.id)?.total ?? 0;
+    const missing = remainingTonnes(input.dailyTonnes, assigned);
+    const completed = missing === 0 ? input.dailyTonnes : assigned;
     check(
-      completed <= input.dailyTonnes + tolerance && completed >= 0,
+      assigned >= 0 && (assigned <= input.dailyTonnes || closeTonnes(assigned, input.dailyTonnes)),
       `需求 ${input.id} 超计完成吨数`,
     );
     check(
@@ -1036,29 +1076,16 @@ export function validateDailyTransport(
         actual.cycleId === input.cycleId &&
         actual.loadingPositionId === input.loadingPositionId &&
         actual.unloadingPositionId === input.unloadingPositionId &&
-        close(actual.requestedTonnes, input.dailyTonnes) &&
-        close(actual.completedTonnes, completed) &&
-        close(actual.missingTonnes, Math.max(0, input.dailyTonnes - completed)),
+        closeTonnes(actual.requestedTonnes, input.dailyTonnes) &&
+        closeTonnes(actual.completedTonnes, completed) &&
+        closeTonnes(actual.missingTonnes, missing),
       `需求 ${input.id} 完成量或缺口不守恒`,
     );
+    completedSum = addTonnes(completedSum, completed);
+    missingSum = addTonnes(missingSum, missing);
   }
-  check(
-    close(
-      result.totalCompletedTonnes,
-      [...totals.values()].reduce((a, b) => a + b, 0),
-    ),
-    '总完成吨数不一致',
-  );
-  check(
-    close(
-      result.totalMissingTonnes,
-      [...inputs.values()].reduce(
-        (total, input) => total + Math.max(0, input.dailyTonnes - (totals.get(input.id) ?? 0)),
-        0,
-      ),
-    ),
-    '总运输缺口不一致',
-  );
+  check(closeTonnes(result.totalCompletedTonnes, completedSum.total), '总完成吨数不一致');
+  check(closeTonnes(result.totalMissingTonnes, missingSum.total), '总运输缺口不一致');
   check(
     close(
       result.totalDistanceMeters,

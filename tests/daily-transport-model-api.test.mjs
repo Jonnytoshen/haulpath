@@ -140,9 +140,10 @@ test(
   { timeout: 240000 },
   async (t) => {
     let distance = '10000';
-    const upstream = createServer((request, response) =>
-      roadResponse(new URL(request.url, 'http://127.0.0.1'), response, distance),
-    );
+    const upstream = createServer((request, response) => {
+      const url = new URL(request.url, 'http://127.0.0.1');
+      roadResponse(url, response, typeof distance === 'function' ? distance(url) : distance);
+    });
     await new Promise((resolve) => upstream.listen(0, '127.0.0.1', resolve));
     let app;
     try {
@@ -270,6 +271,48 @@ test(
         },
       );
       await t.test(
+        'an unused loop with a stale measurement does not block a loop with complete measured times',
+        async () => {
+          const model = await createModel(request, {
+            names: [
+              ['A', 'B', 'A'],
+              ['C', 'D', 'C'],
+            ],
+            demandRows: [[0, 0, 1, 10]],
+            speedKph: null,
+          });
+          const operations = model.operationsInput();
+          const [cycle, unusedCycle] = model.cycles;
+          operations.measuredSegments = [7, 8].map((durationMinutes, index) => ({
+            vehicleGroupId: operations.vehicleGroups[0].id,
+            cycleId: cycle.id,
+            fromPositionId: cycle.positions[index].id,
+            toPositionId: cycle.positions[index + 1].id,
+            durationMinutes,
+            emptyKwh: null,
+            fullKwh: null,
+            source: '使用循环的 7 / 8 分钟实测',
+          }));
+          operations.measuredSegments.push({
+            ...operations.measuredSegments[0],
+            cycleId: unusedCycle.id,
+            fromPositionId: unusedCycle.positions[0].id,
+            toPositionId: unusedCycle.positions[1].id,
+          });
+          await model.save('/operations', 'PUT', { operations });
+          await model.save(`/cycles/${unusedCycle.id}`, 'PATCH', { strategy: 34, confirmed: true });
+          const { result, snapshot } = await model.run();
+          assert.equal(snapshot.context.operations.measuredSegments[2].basis.strategy, 32);
+          assert.equal(result.totalCompletedTonnes, 10);
+          assert.deepEqual(
+            result.trips.map((trip) => trip.cycleId),
+            [cycle.id],
+          );
+          assert.equal(result.vehicles[0].workingMinutes, 25);
+          assert.equal(result.validation.valid, true);
+        },
+      );
+      await t.test(
         'multiple shifts include a cross-midnight window and never overlap vehicle events',
         async () => {
           const model = await createModel(request, {
@@ -297,6 +340,43 @@ test(
               (event, index) => index === 0 || event.startMinute >= events[index - 1].endMinute,
             ),
           );
+          assert.equal(result.validation.valid, true);
+        },
+      );
+      await t.test(
+        'very short events at the shared boundary belong to the shift that contains the full trip',
+        async () => {
+          const model = await createModel(request, {
+            names: [['A', 'B', 'A']],
+            demandRows: [[0, 0, 1, 10]],
+            shifts: [
+              { startMinute: 480, endMinute: 481 },
+              { startMinute: 481, endMinute: 661 },
+            ],
+            loadingMinutes: 0,
+            unloadingMinutes: 0,
+          });
+          const operations = model.operationsInput();
+          const cycle = model.cycles[0];
+          operations.measuredSegments = [
+            {
+              vehicleGroupId: operations.vehicleGroups[0].id,
+              cycleId: cycle.id,
+              fromPositionId: cycle.positions[0].id,
+              toPositionId: cycle.positions[1].id,
+              durationMinutes: 5e-8,
+              emptyKwh: null,
+              fullKwh: null,
+              source: '边界反例中的极短有向区间实测',
+            },
+          ];
+          await model.save('/operations', 'PUT', { operations });
+          const { result } = await model.run();
+          assert.equal(result.trips.length, 1);
+          assert.equal(result.trips[0].startMinute, 481);
+          assert.equal(result.trips[0].segments[0].durationMinutes, 5e-8);
+          assert.ok(result.trips[0].endMinute > 491);
+          assert.equal(result.totalCompletedTonnes, 10);
           assert.equal(result.validation.valid, true);
         },
       );
@@ -351,7 +431,47 @@ test(
           });
           const impossible = (await tooShort.run()).result;
           assert.equal(impossible.totalCompletedTonnes, 10);
-          assert.match(impossible.demands[1].reason, /班次均不足以完成一次.*接续、归位/);
+          assert.match(impossible.demands[1].reason, /从基准直接往返的单趟安排放不进现有班次/);
+        },
+      );
+      await t.test(
+        'a chained trip that partially serves a demand takes precedence over a slow direct journey',
+        async () => {
+          distance = (url) =>
+            url.searchParams.get('origin')?.startsWith('121.400000,') &&
+            url.searchParams.get('destination')?.startsWith('121.800000,')
+              ? '100000'
+              : '10000';
+          try {
+            const model = await createModel(request, {
+              names: [
+                ['A', 'B', 'A'],
+                ['C', 'D', 'C'],
+                ['E', 'F', 'E'],
+              ],
+              demandRows: [
+                [0, 0, 1, 10],
+                [1, 0, 1, 10],
+                [2, 0, 1, 15],
+              ],
+              shifts: [{ startMinute: 0, endMinute: 125 }],
+            });
+            const { result } = await model.run();
+            // Direct to E would take 100 + 30 + 10 min. Serving A, C and E in
+            // order instead takes 3 complete 30 min loops and 3 short 10 min transfers.
+            assert.deepEqual(
+              result.trips.map((trip) => trip.cycleId),
+              model.cycles.map((cycle) => cycle.id),
+            );
+            assert.equal(result.vehicles[0].workingMinutes, 120);
+            assert.equal(result.vehicles[0].returnedToBase, true);
+            const served = result.demands.find((demand) => demand.cycleId === model.cycles[2].id);
+            assert.equal(served.completedTonnes, 10);
+            assert.equal(served.missingTonnes, 5);
+            assert.match(served.reason, /本次构造未安排完成/);
+          } finally {
+            distance = '10000';
+          }
         },
       );
       await t.test(
@@ -385,6 +505,34 @@ test(
           assert.equal(result.vehicles[0].workingMinutes, 90);
           assert.equal(result.totalCompletedTonnes, 0.9);
           assert.equal(result.totalMissingTonnes, 0);
+        },
+      );
+      await t.test(
+        '3,000 decimal-load trips complete exactly the requested tonnage through the real Worker',
+        async () => {
+          const model = await createModel(request, {
+            names: [['A', 'B', 'A']],
+            demandRows: [[0, 0, 1, 134790]],
+            count: 50,
+            payloadTonnes: 44.93,
+            speedKph: 120,
+            loadingMinutes: 1,
+            unloadingMinutes: 1,
+            shifts: [{ startMinute: 0, endMinute: 720 }],
+          });
+          const { result } = await model.run();
+          // A loop takes 5 + 5 minutes of driving and 2 minutes of handling.
+          // 50 vehicles × 60 full loops × 44.93 tonnes yields exactly 134,790 tonnes.
+          assert.equal(result.trips.length, 3000);
+          assert.equal(result.totalCompletedTonnes, 134790);
+          assert.equal(result.totalMissingTonnes, 0);
+          assert.equal(result.totalDistanceMeters, 60000000);
+          assert.equal(result.validation.valid, true);
+          assert.ok(
+            result.vehicles.every(
+              (vehicle) => vehicle.tripIds.length === 60 && vehicle.workingMinutes === 720,
+            ),
+          );
         },
       );
       await t.test(

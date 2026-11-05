@@ -74,6 +74,10 @@ test(
       assert.match(await events.innerText(), /装货/);
       assert.match(await events.innerText(), /卸货/);
       assert.match(await events.innerText(), /运输/);
+      assert.equal(
+        await events.getByText('港区（第 1 位） → 堆场（第 2 位）', { exact: true }).count(),
+        3,
+      );
       assert.match(await events.innerText(), /08:00/);
       assert.match(await events.innerText(), /10:30/);
       await page.setViewportSize({ width: 390, height: 844 });

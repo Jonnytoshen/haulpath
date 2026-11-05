@@ -54,7 +54,17 @@ test(
       assert.deepEqual(task.snapshot.context, scenario.context);
       assert.ok(task.snapshot.roads.every((road) => road.distanceMeters === 10000));
       assert.deepEqual((await request(path)).body, scenario);
-      assert.deepEqual((await request(`${path}/daily-transport`)).body.resultTask, task);
+      const view = (await request(`${path}/daily-transport`)).body;
+      assert.deepEqual(view.resultTask, task);
+      const { body: summary } = await request(`${path}/daily-transport/${task.taskId}?summary=1`);
+      assert.deepEqual(summary, view.task);
+      assert.equal(summary.status, 'completed');
+      assert.deepEqual(summary.progress, {
+        completedTrips: 3,
+        completedTonnes: 25,
+        totalTonnes: 25,
+      });
+      assert.equal('snapshot' in summary || 'result' in summary, false);
     });
   },
 );

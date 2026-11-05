@@ -119,8 +119,14 @@ class Storage {
           id TEXT PRIMARY KEY,
           project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
           scenario_id TEXT NOT NULL REFERENCES planning_scenarios(id) ON DELETE CASCADE,
-          payload TEXT NOT NULL
-        ); CREATE INDEX daily_transport_tasks_scenario ON daily_transport_tasks(project_id, scenario_id);`);
+          summary TEXT NOT NULL
+        );
+        CREATE INDEX daily_transport_tasks_scenario ON daily_transport_tasks(project_id, scenario_id);
+        CREATE TABLE daily_transport_task_details (
+          task_id TEXT PRIMARY KEY REFERENCES daily_transport_tasks(id) ON DELETE CASCADE,
+          snapshot TEXT NOT NULL,
+          result TEXT
+        );`);
         this.db.pragma('user_version = 6');
       })();
     this.directedRoads = new DirectedRoadStorage(this.db, (projectId, scenarioId) =>

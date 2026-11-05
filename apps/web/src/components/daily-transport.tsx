@@ -8,6 +8,7 @@ import {
   type DailyTransportEvent,
   type DailyTransportEventKind,
   type DailyTransportTask,
+  type DailyTransportTaskSummary,
   type DailyTransportView,
   type PlanningScenario,
   type RoadTaskStatus,
@@ -76,6 +77,7 @@ export default function DailyTransport({
   const controller = useRef<AbortController | null>(null);
   const task = view?.task;
   const running = active(task?.status);
+  const runningTaskId = running ? task?.taskId : undefined;
   const frozen = scenario.status === 'frozen';
   const current = view?.inputVersion === scenario.inputVersion;
   const displayed = historyId ? history : view?.resultTask;
@@ -91,24 +93,43 @@ export default function DailyTransport({
     Number.isSafeInteger(Number(seed)) &&
     Number(seed) >= 0;
 
-  const refresh = useCallback(async () => {
-    if (writing.current) return;
-    controller.current?.abort();
-    const abort = new AbortController();
-    controller.current = abort;
-    const read = ++reads.current;
-    try {
-      const next = await request<DailyTransportView>(path, 'GET', undefined, abort.signal);
-      if (!alive.current || read !== reads.current) return;
-      setView(next);
-      setError('');
-    } catch (failure) {
-      if (alive.current && read === reads.current && !abort.signal.aborted)
-        setError(message(failure));
-    } finally {
-      if (alive.current && read === reads.current) setReading(false);
-    }
-  }, [path]);
+  const refresh = useCallback(
+    async (taskId?: string) => {
+      if (writing.current) return;
+      controller.current?.abort();
+      const abort = new AbortController();
+      controller.current = abort;
+      const read = ++reads.current;
+      try {
+        if (taskId) {
+          const summary = await request<DailyTransportTaskSummary>(
+            `${path}/${encodeURIComponent(taskId)}?summary=1`,
+            'GET',
+            undefined,
+            abort.signal,
+          );
+          if (!alive.current || read !== reads.current) return;
+          if (active(summary.status)) {
+            setView((previous) =>
+              previous?.task?.taskId === taskId ? { ...previous, task: summary } : previous,
+            );
+            setError('');
+            return;
+          }
+        }
+        const next = await request<DailyTransportView>(path, 'GET', undefined, abort.signal);
+        if (!alive.current || read !== reads.current) return;
+        setView(next);
+        setError('');
+      } catch (failure) {
+        if (alive.current && read === reads.current && !abort.signal.aborted)
+          setError(message(failure));
+      } finally {
+        if (alive.current && read === reads.current) setReading(false);
+      }
+    },
+    [path],
+  );
 
   useEffect(() => {
     const lifecycle = reads;
@@ -126,11 +147,11 @@ export default function DailyTransport({
   }, [refresh, scenario.inputVersion, scenario.revision]);
 
   useEffect(() => {
-    if (!running) return;
+    if (!runningTaskId) return;
     let stopped = false;
     let timer: number;
     async function poll() {
-      await refresh();
+      await refresh(runningTaskId);
       if (!stopped) timer = window.setTimeout(() => void poll(), 800);
     }
     timer = window.setTimeout(() => void poll(), 800);
@@ -138,7 +159,7 @@ export default function DailyTransport({
       stopped = true;
       window.clearTimeout(timer);
     };
-  }, [refresh, running]);
+  }, [refresh, runningTaskId]);
 
   async function mutate(operation: 'start' | 'stop') {
     if (writing.current || disabled || frozen) return;
@@ -198,15 +219,32 @@ export default function DailyTransport({
 
   const cycleName = (id: string) =>
     snapshot?.transportCycles?.find((cycle) => cycle.id === id)?.name ?? '原循环';
-  const positionName = (cycleId: string, positionId: string) =>
-    snapshot?.transportCycles
-      ?.find((cycle) => cycle.id === cycleId)
-      ?.positions.find((position) => position.id === positionId)?.point.name ?? '原位置';
+  const positionNames = new Map(
+    snapshot?.transportCycles?.flatMap((cycle) =>
+      cycle.positions.map(
+        (position, index) =>
+          [
+            position.id,
+            { label: `${position.point.name}（第 ${index + 1} 位）`, cycleName: cycle.name },
+          ] as const,
+      ),
+    ),
+  );
+  const positionName = (positionId: string) => positionNames.get(positionId)?.label ?? '原位置';
+  function eventLocation(event: DailyTransportEvent): string {
+    const from = positionNames.get(event.fromPositionId);
+    const to = positionNames.get(event.toPositionId);
+    if (event.kind === 'loading' || event.kind === 'unloading')
+      return from?.label ?? event.from.name;
+    if (event.kind === 'transport')
+      return `${from?.label ?? event.from.name} → ${to?.label ?? event.to.name}`;
+    return `${from?.cycleName ?? '原循环'} · ${from?.label ?? event.from.name} → ${to?.cycleName ?? '原循环'} · ${to?.label ?? event.to.name}`;
+  }
   const allocationText = (event: DailyTransportEvent) =>
     event.allocations
       .map((allocation) => {
         const demand = result?.demands.find((entry) => entry.demandId === allocation.demandId);
-        return `${demand ? `${positionName(demand.cycleId, demand.loadingPositionId)} → ${positionName(demand.cycleId, demand.unloadingPositionId)}` : '原需求'} ${tonnes(allocation.tonnes)} 吨`;
+        return `${demand ? `${positionName(demand.loadingPositionId)} → ${positionName(demand.unloadingPositionId)}` : '原需求'} ${tonnes(allocation.tonnes)} 吨`;
       })
       .join('；');
   const timelineStart = result?.vehicles.length
@@ -413,7 +451,7 @@ export default function DailyTransport({
           >
             <option value="">最近完整运输结果</option>
             {view.tasks.map((entry) => (
-              <option key={entry.taskId} value={entry.taskId}>
+              <option key={entry.taskId} value={entry.taskId} disabled={active(entry.status)}>
                 输入版本 {entry.inputVersion} · {statuses[entry.status]} ·{' '}
                 {savedTime(entry.createdAt)}
               </option>
@@ -525,7 +563,7 @@ export default function DailyTransport({
                             left: `${((event.startMinute - timelineStart) / timelineSpan) * 100}%`,
                             width: `${((event.endMinute - event.startMinute) / timelineSpan) * 100}%`,
                           }}
-                          title={`${kinds[event.kind]} ${time(event.startMinute)}–${time(event.endMinute)} · ${event.from.name}${event.from.name !== event.to.name ? ` → ${event.to.name}` : ''} · ${tonnes(event.loadTonnes)} 吨`}
+                          title={`${kinds[event.kind]} ${time(event.startMinute)}–${time(event.endMinute)} · ${eventLocation(event)} · ${tonnes(event.loadTonnes)} 吨`}
                         />
                       ))}
                     </div>
@@ -575,10 +613,7 @@ export default function DailyTransport({
                       <tr key={event.id}>
                         <td>
                           <strong>{kinds[event.kind]}</strong>
-                          <span>
-                            {event.from.name}
-                            {event.from.name !== event.to.name ? ` → ${event.to.name}` : ''}
-                          </span>
+                          <span>{eventLocation(event)}</span>
                           <small>
                             {event.durationSource === 'measured'
                               ? '区间实测'
@@ -624,8 +659,8 @@ export default function DailyTransport({
                       <td>
                         <strong>{cycleName(demand.cycleId)}</strong>
                         <span>
-                          {positionName(demand.cycleId, demand.loadingPositionId)} →{' '}
-                          {positionName(demand.cycleId, demand.unloadingPositionId)}
+                          {positionName(demand.loadingPositionId)} →{' '}
+                          {positionName(demand.unloadingPositionId)}
                         </span>
                         {demand.reason && <small>{demand.reason}</small>}
                       </td>
@@ -660,8 +695,8 @@ export default function DailyTransport({
                             {cycleName(trip.cycleId)} · 第 {trip.sequence} 车次
                           </strong>
                           <span>
-                            {positionName(trip.cycleId, segment.fromPositionId)} →{' '}
-                            {positionName(trip.cycleId, segment.toPositionId)}
+                            {positionName(segment.fromPositionId)} →{' '}
+                            {positionName(segment.toPositionId)}
                           </span>
                         </td>
                         <td>

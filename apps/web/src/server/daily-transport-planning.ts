@@ -93,7 +93,9 @@ async function execute(projectId: string, scenarioId: string, taskId: string): P
       );
       monitor = setInterval(() => {
         try {
-          if (storage.dailyTransport.getTask(projectId, scenarioId, taskId).status !== 'running') {
+          if (
+            storage.dailyTransport.getSummary(projectId, scenarioId, taskId).status !== 'running'
+          ) {
             void runningWorker.terminate();
             finish();
           }
@@ -131,7 +133,7 @@ async function execute(projectId: string, scenarioId: string, taskId: string): P
       runningWorker.once('exit', (code) => {
         if (finished) return;
         try {
-          const status = storage.dailyTransport.getTask(projectId, scenarioId, taskId).status;
+          const status = storage.dailyTransport.getSummary(projectId, scenarioId, taskId).status;
           finish(status === 'running' ? new Error(`运输 Worker 提前退出（${code}）`) : undefined);
         } catch (error) {
           finish(error instanceof Error ? error : new Error('任务不存在'));
