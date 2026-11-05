@@ -26,6 +26,7 @@
 !scripts/process.mjs
 !scripts/next.mjs
 !scripts/next-command.mjs
+!scripts/build-workers.mjs
 !scripts/docker/**
 **/.env*
 **/node_modules/

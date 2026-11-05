@@ -31,6 +31,7 @@ import { transportDemandsOf } from './transport-demand-validation';
 import { fleetOperationsOf } from './fleet-operations-validation';
 import { powerResourceRevision } from './power-connection-points-validation';
 import { DirectedRoadStorage } from './directed-road-storage';
+import { DailyTransportStorage } from './daily-transport-storage';
 
 function readScenario(payload: string): PlanningScenario {
   const scenario = JSON.parse(payload) as PlanningScenario;
@@ -53,6 +54,7 @@ function cycleSourceInputs(source: TransportCycle['source']) {
 class Storage {
   private db: Database.Database;
   readonly directedRoads: DirectedRoadStorage;
+  readonly dailyTransport: DailyTransportStorage;
   constructor(path: string) {
     mkdirSync(dirname(path), { recursive: true });
     this.db = new Database(path);
@@ -60,7 +62,7 @@ class Storage {
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('busy_timeout = 5000');
     const version = this.db.pragma('user_version', { simple: true }) as number;
-    if (version > 5) throw new Error('本机数据库版本比当前应用更新，请使用匹配的应用版本');
+    if (version > 6) throw new Error('本机数据库版本比当前应用更新，请使用匹配的应用版本');
     if (version === 0)
       this.db.transaction(() => {
         this.db
@@ -111,8 +113,23 @@ class Storage {
         );`);
         this.db.pragma('user_version = 5');
       })();
+    if (version < 6)
+      this.db.transaction(() => {
+        this.db.exec(`CREATE TABLE daily_transport_tasks (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+          scenario_id TEXT NOT NULL REFERENCES planning_scenarios(id) ON DELETE CASCADE,
+          payload TEXT NOT NULL
+        ); CREATE INDEX daily_transport_tasks_scenario ON daily_transport_tasks(project_id, scenario_id);`);
+        this.db.pragma('user_version = 6');
+      })();
     this.directedRoads = new DirectedRoadStorage(this.db, (projectId, scenarioId) =>
       this.getScenario(projectId, scenarioId),
+    );
+    this.dailyTransport = new DailyTransportStorage(
+      this.db,
+      (projectId, scenarioId) => this.getScenario(projectId, scenarioId),
+      this.directedRoads,
     );
     // The process-global storage instance survives route reloads; only an initial open recovers abandoned work.
     this.db.transaction(() => {

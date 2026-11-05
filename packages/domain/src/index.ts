@@ -10,6 +10,7 @@ export * from './power-connection-points';
 export * from './station-network';
 export * from './scenario-comparison';
 export * from './directed-roads';
+export * from './daily-transport';
 
 export type CoordinateSystem = 'GCJ-02' | 'WGS84';
 export const strategyGroups = [

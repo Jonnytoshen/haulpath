@@ -103,6 +103,7 @@ export function measuredSegmentIssue(
   measured: MeasuredSegment,
   operations: FleetOperations,
   cycles: TransportCycle[],
+  scope: 'operations' | 'travel-time' = 'operations',
 ): string | null {
   const group = operations.vehicleGroups.find(
     (candidate) => candidate.id === measured.vehicleGroupId,
@@ -125,7 +126,11 @@ export function measuredSegmentIssue(
     measured.basis.toLatitude !== to.point.latitude
   )
     return '实测区间坐标或规划偏好已改变，须重新确认';
-  if (measured.emptyKwh !== null && measured.basis.payloadTonnes !== group.payloadTonnes)
+  if (
+    scope === 'operations' &&
+    measured.emptyKwh !== null &&
+    measured.basis.payloadTonnes !== group.payloadTonnes
+  )
     return '实测满载依据已改变，须重新确认';
   return null;
 }

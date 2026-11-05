@@ -47,4 +47,4 @@
 
 无效行返回 `400` 并注明行号；旧修订号返回 `409`；项目或方案不存在、跨项目操作返回 `404`。有效输入变化只原子递增一次 `inputVersion` 与 `revision`，同内容保存不递增。任何失败保持原数据和版本。
 
-需求保存在方案版本化上下文的可选 `transportDemands` 数组，本功能自 SQLite schema 3 引入，当前 schema 5 另有项目电源和道路资料存储；旧草案缺省此字段。通用 `PATCH context` 必须原样保留当前 `transportCycles` 和 `transportDemands`，不得绕过专用接口校验；其他扩展资源仍可维护。需求读取不发起道路请求，不改变源线路及项目偏好记忆。
+需求保存在方案版本化上下文的可选 `transportDemands` 数组，本功能自 SQLite schema 3 引入，当前 schema 6 另有项目电源、道路资料及运输任务结果存储；旧草案缺省此字段。通用 `PATCH context` 必须原样保留当前 `transportCycles` 和 `transportDemands`，不得绕过专用接口校验；其他扩展资源仍可维护。需求读取不发起道路请求，不改变源线路及项目偏好记忆。

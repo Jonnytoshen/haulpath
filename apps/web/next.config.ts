@@ -6,6 +6,9 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: resolve(import.meta.dirname, '../..'),
   output: process.env.HAULPATH_BUILD_STANDALONE === '1' ? 'standalone' : undefined,
   serverExternalPackages: ['better-sqlite3'],
+  outputFileTracingIncludes: {
+    '/api/*': ['./.haulpath-workers/daily-transport.cjs'],
+  },
   async rewrites() {
     return [{ source: '/_AMapService/:path*', destination: '/api/amap/:path*' }];
   },

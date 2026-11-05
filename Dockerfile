@@ -19,6 +19,8 @@ RUN apt-get update \
     && apt-get install --no-install-recommends --yes sqlite3 ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build --chown=node:node /app/apps/web/.next/standalone ./
+# Keep the Worker explicit as well as traced: this is part of the application runtime.
+COPY --from=build --chown=node:node /app/apps/web/.haulpath-workers ./apps/web/.haulpath-workers
 COPY --from=build --chown=node:node /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=build --chown=node:node /app/apps/web/public ./apps/web/public
 COPY --chown=node:node scripts/docker ./scripts/docker
