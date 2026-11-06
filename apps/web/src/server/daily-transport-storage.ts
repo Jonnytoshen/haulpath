@@ -4,6 +4,7 @@ import type {
   DailyTransportConfig,
   DailyTransportProgress,
   DailyTransportResult,
+  DailyTransportSnapshot,
   DailyTransportTask,
   DailyTransportTaskSummary,
   DailyTransportView,
@@ -13,8 +14,10 @@ import type {
 } from '@haulpath/domain';
 import {
   DAILY_TRANSPORT_ALGORITHM_VERSION,
+  VEHICLE_ENERGY_ALGORITHM_VERSION,
   dailyTransportReadiness,
   stationNetworkReadiness,
+  vehicleEnergyReadiness,
 } from '@haulpath/domain';
 import type { DirectedRoadStorage } from './directed-road-storage';
 import { HttpError } from './http';
@@ -30,8 +33,11 @@ export function dailyTransportConfig(value: unknown): DailyTransportConfig {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     throw new HttpError(400, '运输试算配置须为对象');
   const input = value as Record<string, unknown>;
-  if (Object.keys(input).some((key) => !['seed', 'maxRuntimeMs'].includes(key)))
+  if (Object.keys(input).some((key) => !['seed', 'maxRuntimeMs', 'stage'].includes(key)))
     throw new HttpError(400, '运输试算配置包含未知字段');
+  const { stage } = input;
+  if (stage !== undefined && stage !== 'transport' && stage !== 'vehicle-energy')
+    throw new HttpError(400, '每日计划试算阶段无效');
   const seed = input.seed ?? 1;
   const maxRuntimeMs = input.maxRuntimeMs ?? 600000;
   if (!Number.isSafeInteger(seed) || (seed as number) < 0)
@@ -42,7 +48,11 @@ export function dailyTransportConfig(value: unknown): DailyTransportConfig {
     (maxRuntimeMs as number) > 7200000
   )
     throw new HttpError(400, '运输试算时限须为5至120分钟');
-  return { seed: seed as number, maxRuntimeMs: maxRuntimeMs as number };
+  return {
+    seed: seed as number,
+    maxRuntimeMs: maxRuntimeMs as number,
+    ...(stage === undefined ? {} : { stage }),
+  };
 }
 
 /** Polling and progress only touch task summaries. Historical input/result blobs are immutable. */
@@ -124,25 +134,31 @@ export class DailyTransportStorage {
   getTask(projectId: string, scenarioId: string, taskId: string): DailyTransportTask {
     return this.details(this.getSummary(projectId, scenarioId, taskId));
   }
-  private gaps(scenario: PlanningScenario, roads: RoadPreparationView): string[] {
-    const gaps = dailyTransportReadiness({
+  private snapshot(scenario: PlanningScenario, roads: RoadPreparationView): DailyTransportSnapshot {
+    return {
       context: scenario.context,
       roads: roads.roads,
       revision: scenario.revision,
-    });
-    gaps.push(...stationNetworkReadiness(scenario.context, 'transport'));
-    if (!roads.currentReady) gaps.unshift('当前输入版本的有向道路尚未完成显式准备');
+    };
+  }
+  private gaps(snapshot: DailyTransportSnapshot, currentReady: boolean): string[] {
+    const gaps = dailyTransportReadiness(snapshot);
+    gaps.push(...stationNetworkReadiness(snapshot.context, 'transport'));
+    if (!currentReady) gaps.unshift('当前输入版本的有向道路尚未完成显式准备');
     return gaps;
   }
   getView(projectId: string, scenarioId: string): DailyTransportView {
     const scenario = this.scenario(projectId, scenarioId);
     const tasks = this.list(scenario);
     const resultTask = tasks.find((task) => task.status === 'completed');
+    const roads = this.roads.getView(projectId, scenarioId);
+    const snapshot = this.snapshot(scenario, roads);
     return {
       projectId,
       scenarioId,
       inputVersion: scenario.inputVersion,
-      gaps: this.gaps(scenario, this.roads.getView(projectId, scenarioId)),
+      gaps: this.gaps(snapshot, roads.currentReady),
+      vehicleEnergyGaps: vehicleEnergyReadiness(snapshot),
       task: tasks[0] ?? null,
       tasks,
       resultTask: resultTask ? this.details(resultTask) : null,
@@ -160,17 +176,26 @@ export class DailyTransportStorage {
       if (scenarioRevision(expectedRevision) !== scenario.revision)
         throw new HttpError(409, '规划方案已被更新，请重新加载后试算');
       const roads = this.roads.getView(projectId, scenarioId);
-      const gaps = this.gaps(scenario, roads);
+      const snapshot = this.snapshot(scenario, roads);
+      const gaps = this.gaps(snapshot, roads.currentReady);
+      const energy = config.stage === 'vehicle-energy';
+      if (energy) gaps.push(...vehicleEnergyReadiness(snapshot));
       if (gaps.length) throw new HttpError(400, gaps.join('；'));
       const existing = this.list(scenario).find(active);
-      if (existing) return existing;
+      if (existing) {
+        if ((existing.config.stage === 'vehicle-energy') !== energy)
+          throw new HttpError(409, '当前方案已有另一阶段的试算，请等待完成或停止后再启动');
+        return existing;
+      }
       const task: DailyTransportTaskSummary = {
         taskId: randomUUID(),
         projectId,
         scenarioId,
         inputVersion: scenario.inputVersion,
         status: 'queued',
-        algorithmVersion: DAILY_TRANSPORT_ALGORITHM_VERSION,
+        algorithmVersion: energy
+          ? VEHICLE_ENERGY_ALGORITHM_VERSION
+          : DAILY_TRANSPORT_ALGORITHM_VERSION,
         config,
         progress: {
           completedTrips: 0,
@@ -192,14 +217,7 @@ export class DailyTransportStorage {
         .run(task.taskId, projectId, scenarioId, JSON.stringify(task));
       this.db
         .prepare('INSERT INTO daily_transport_task_details (task_id, snapshot) VALUES (?, ?)')
-        .run(
-          task.taskId,
-          JSON.stringify({
-            context: scenario.context,
-            roads: roads.roads,
-            revision: scenario.revision,
-          }),
-        );
+        .run(task.taskId, JSON.stringify(snapshot));
       return task;
     })();
   }
@@ -236,13 +254,18 @@ export class DailyTransportStorage {
     return this.db.transaction(() => {
       const task = this.getSummary(projectId, scenarioId, taskId);
       if (task.status !== 'running') return false;
+      const energy = task.config.stage === 'vehicle-energy';
       if (
+        (energy
+          ? result.energyStatus !== 'checked' || !result.vehicleEnergy
+          : result.energyStatus !== 'not-checked' || result.vehicleEnergy !== undefined) ||
+        result.physicalFeasibility !== 'not-established' ||
         !result.validation.valid ||
         result.validation.issues.length ||
         result.algorithmVersion !== task.algorithmVersion ||
         result.seed !== task.config.seed
       )
-        throw new Error('运输试算独立校验未通过或算法依据不匹配');
+        throw new Error('每日计划独立校验未通过或阶段依据不匹配');
       task.progress = {
         completedTrips: result.trips.length,
         completedTonnes: result.totalCompletedTonnes,

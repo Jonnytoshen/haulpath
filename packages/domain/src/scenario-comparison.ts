@@ -26,6 +26,9 @@ const fieldLabels: Record<string, string> = {
   stationNetwork: '站网配置',
   roadSettings: '道路准备',
   continuationStrategy: '跨线接续驾车偏好',
+  swapDetourLimits: '换电绕行限额',
+  maxExtraMeters: '额外行驶距离上限（米）',
+  maxExtraMinutes: '额外行驶时间上限（分钟）',
   positions: '业务点位顺序',
   point: '点位资料',
   source: '来源',
@@ -143,6 +146,7 @@ const sections: [keyof PlanningScenarioContext, string][] = [
   ['operations', '车辆与运营'],
   ['stationNetwork', '站网配置'],
   ['roadSettings', '道路准备'],
+  ['swapDetourLimits', '换电绕行限额'],
   ['resources', '其他资源'],
   ['annual', '年度参数'],
 ];

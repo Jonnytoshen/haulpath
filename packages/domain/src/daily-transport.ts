@@ -5,6 +5,7 @@ import { measuredSegmentIssue, vehicleGroupIssue } from './fleet-operations';
 import { transportDemandIssue } from './transport-demands';
 import type { PreparedRoad, RoadTaskStatus } from './directed-roads';
 import { directedRoadKey } from './directed-roads';
+import type { VehicleEnergyResult } from './vehicle-energy';
 
 export const DAILY_TRANSPORT_ALGORITHM_VERSION = 'daily-transport-greedy-1';
 
@@ -16,6 +17,7 @@ export interface DailyTransportSnapshot {
 export interface DailyTransportConfig {
   seed: number;
   maxRuntimeMs: number;
+  stage?: 'transport' | 'vehicle-energy';
 }
 export interface DailyTransportProgress {
   completedTrips: number;
@@ -108,7 +110,8 @@ export interface DailyTransportResult {
   totalMissingTonnes: number;
   totalDistanceMeters: number;
   validation: DailyTransportValidation;
-  energyStatus: 'not-checked';
+  energyStatus: 'not-checked' | 'checked';
+  vehicleEnergy?: VehicleEnergyResult;
   physicalFeasibility: 'not-established';
   limitations: string[];
 }
@@ -135,12 +138,33 @@ export interface DailyTransportView {
   scenarioId: string;
   inputVersion: number;
   gaps: string[];
+  vehicleEnergyGaps: string[];
   task: DailyTransportTaskSummary | null;
   tasks: DailyTransportTaskSummary[];
   resultTask: DailyTransportTask | null;
 }
 
 const tolerance = 1e-7;
+
+export function dailyTransportTripShift(
+  trip: DailyTransportTrip,
+  shifts: OperatingShift[],
+): OperatingShift | undefined {
+  return (
+    shifts.find(
+      (shift) =>
+        trip.startMinute >= shift.startMinute &&
+        trip.startMinute < shift.endMinute &&
+        trip.endMinute <= shift.endMinute,
+    ) ??
+    shifts.find(
+      (shift) =>
+        trip.startMinute >= shift.startMinute &&
+        trip.startMinute <= shift.endMinute &&
+        trip.endMinute <= shift.endMinute + tolerance,
+    )
+  );
+}
 function close(a: number, b: number): boolean {
   return (
     Number.isFinite(a) &&
@@ -948,21 +972,7 @@ export function validateDailyTransport(
     // Bind the whole trip, then use that shift for its adjoining empty travel. A very
     // short or zero-length event on a shared boundary cannot identify its own shift.
     const tripShifts = new Map(
-      vehicleTrips.map((trip) => [
-        trip.id,
-        shifts.find(
-          (shift) =>
-            trip.startMinute >= shift.startMinute &&
-            trip.startMinute < shift.endMinute &&
-            trip.endMinute <= shift.endMinute,
-        ) ??
-          shifts.find(
-            (shift) =>
-              trip.startMinute >= shift.startMinute &&
-              trip.startMinute <= shift.endMinute &&
-              trip.endMinute <= shift.endMinute + tolerance,
-          ),
-      ]),
+      vehicleTrips.map((trip) => [trip.id, dailyTransportTripShift(trip, shifts)]),
     );
     let previousPoint = base.positions[0].point;
     let previousMinute = -Infinity;

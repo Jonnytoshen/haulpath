@@ -11,6 +11,7 @@ export * from './station-network';
 export * from './scenario-comparison';
 export * from './directed-roads';
 export * from './daily-transport';
+export * from './vehicle-energy';
 
 export type CoordinateSystem = 'GCJ-02' | 'WGS84';
 export const strategyGroups = [
@@ -140,6 +141,11 @@ export interface JsonObject {
   [key: string]: JsonValue;
 }
 
+export interface SwapDetourLimits {
+  maxExtraMeters: number | null;
+  maxExtraMinutes: number | null;
+}
+
 /** Versioned draft data; result entries are context, not validated calculation conclusions. */
 export interface PlanningScenarioContext {
   schemaVersion: 1;
@@ -149,6 +155,7 @@ export interface PlanningScenarioContext {
   operations?: FleetOperations;
   stationNetwork?: StationNetwork;
   roadSettings?: RoadSettings;
+  swapDetourLimits?: SwapDetourLimits;
   annual: JsonObject[];
   results: JsonObject[];
 }

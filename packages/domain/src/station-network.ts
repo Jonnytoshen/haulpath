@@ -82,7 +82,10 @@ export interface StationNetworkInput {
 export function emptyStationNetwork(): StationNetwork {
   return { stationTypes: [], sites: [], powerSources: [], fixedLayout: [] };
 }
-function sameBattery(a: BatterySpecification | null, b: BatterySpecification | null): boolean {
+export function stationBatteryMatches(
+  a: BatterySpecification | null,
+  b: BatterySpecification | null,
+): boolean {
   return (
     !!a &&
     !!b &&
@@ -97,7 +100,7 @@ export function stationTypeReadiness(
   battery: BatterySpecification | null,
 ): string[] {
   const gaps: string[] = [];
-  if (!sameBattery(type.batteryBasis, battery))
+  if (!stationBatteryMatches(type.batteryBasis, battery))
     gaps.push('统一电池规格未关联或已改变，须显式重新关联');
   if (
     battery?.capacityKwh == null ||

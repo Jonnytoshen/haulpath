@@ -1,5 +1,5 @@
 import { parentPort, workerData } from 'node:worker_threads';
-import { generateDailyTransport } from '@haulpath/domain';
+import { generateDailyTransport, generateVehicleEnergy } from '@haulpath/domain';
 import type {
   DailyTransportWorkerData,
   DailyTransportWorkerMessage,
@@ -17,7 +17,9 @@ function send(message: DailyTransportWorkerMessage): void {
 }
 let lastProgressAt = -Infinity;
 try {
-  const result = generateDailyTransport(
+  const generate =
+    data.config.stage === 'vehicle-energy' ? generateVehicleEnergy : generateDailyTransport;
+  const result = generate(
     data.snapshot,
     (progress) => {
       const now = Date.now();

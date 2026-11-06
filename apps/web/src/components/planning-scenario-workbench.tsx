@@ -460,6 +460,12 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
                 key={`daily-${selected.id}`}
                 scenario={selected}
                 disabled={busy || reading || editing || frozen}
+                onChange={(saved) => {
+                  setSelected(saved);
+                  setScenarios((items) =>
+                    items.map((item) => (item.id === saved.id ? saved : item)),
+                  );
+                }}
                 onWritingChange={(value) => {
                   writing.current = value;
                   if (value) generation.current++;
