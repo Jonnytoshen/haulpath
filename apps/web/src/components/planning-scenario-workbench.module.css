@@ -290,3 +290,46 @@
     scrollbar-gutter: stable;
   }
 }
+
+.dailySelected.hasSelection {
+  grid-template-columns: minmax(0, 1fr);
+}
+.dailySelected > .listPanel {
+  display: none;
+}
+.dailyBack {
+  display: inline-flex;
+  min-height: 38px;
+  margin-bottom: 16px;
+}
+.scenarioTasks {
+  display: flex;
+  gap: 20px;
+  margin-top: 24px;
+  border-bottom: 1px solid var(--border);
+}
+.scenarioTasks button {
+  min-height: 40px;
+  border-radius: 0;
+  padding: 8px 0;
+  border-bottom: 2px solid transparent;
+  color: var(--secondary);
+}
+.scenarioTasks button[aria-pressed='true'] {
+  color: var(--foreground);
+  border-bottom-color: var(--primary);
+}
+@media (max-width: 720px) {
+  .scenarioTasks button,
+  .dailyBack {
+    min-height: 44px;
+  }
+}
+
+.dailyHeading {
+  align-items: center;
+  margin-block: 16px;
+}
+.dailyHeading p {
+  display: none;
+}

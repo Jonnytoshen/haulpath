@@ -5,6 +5,7 @@
 node_modules/
 .pnpm-store/
 .next/
+.haulpath-workers/
 next-env.d.ts
 out/
 dist/

@@ -1,6 +1,7 @@
 # Generated output, dependencies and local data are also excluded by .gitignore.
 node_modules/
 .next/
+.haulpath-workers/
 .nx/
 out/
 dist/

@@ -295,7 +295,7 @@ test('a newer database schema is refused without changing its records', async ()
   const path = join(directory, 'test.sqlite');
   const database = new Database(path);
   database.exec(
-    "CREATE TABLE future_data (value TEXT NOT NULL); INSERT INTO future_data VALUES ('preserve-me'); PRAGMA user_version = 6;",
+    "CREATE TABLE future_data (value TEXT NOT NULL); INSERT INTO future_data VALUES ('preserve-me'); PRAGMA user_version = 7;",
   );
   database.close();
   let application;
@@ -306,7 +306,7 @@ test('a newer database schema is refused without changing its records', async ()
     await application.stop();
     const preserved = new Database(path, { readonly: true });
     try {
-      assert.equal(preserved.pragma('user_version', { simple: true }), 6);
+      assert.equal(preserved.pragma('user_version', { simple: true }), 7);
       assert.deepEqual(preserved.prepare('SELECT value FROM future_data').all(), [
         { value: 'preserve-me' },
       ]);

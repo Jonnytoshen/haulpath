@@ -1,0 +1,747 @@
+'use client';
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Play, RefreshCw, Square } from 'lucide-react';
+import {
+  PLANNING_NOTICE,
+  formatKilometers,
+  type DailyTransportEvent,
+  type DailyTransportEventKind,
+  type DailyTransportTask,
+  type DailyTransportTaskSummary,
+  type DailyTransportView,
+  type PlanningScenario,
+  type RoadTaskStatus,
+} from '@haulpath/domain';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { NativeSelect } from '@/components/ui/native-select';
+import { request } from '@/lib/client-request';
+import styles from './daily-transport.module.css';
+
+const statuses: Record<RoadTaskStatus, string> = {
+  queued: '等待试算',
+  running: '正在试算',
+  completed: '试算完成',
+  stopped: '已停止',
+  failed: '试算失败',
+  'timed-out': '试算超时',
+  interrupted: '服务中断',
+  superseded: '输入已更新',
+};
+const kinds: Record<DailyTransportEventKind, string> = {
+  transport: '运输',
+  loading: '装货',
+  unloading: '卸货',
+  continuation: '跨线空驶',
+  return: '归位空驶',
+};
+const active = (status?: RoadTaskStatus) => status === 'queued' || status === 'running';
+const tonnes = (value: number) =>
+  value.toLocaleString('zh-CN', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+const minutes = (value: number) => value.toLocaleString('zh-CN', { maximumFractionDigits: 2 });
+const time = (minute: number) => {
+  const whole = Math.round(minute);
+  const day = Math.floor(whole / 1440);
+  return `${day ? `${day === 1 ? '次日' : `第${day + 1}日`} ` : ''}${String(Math.floor((whole % 1440) / 60)).padStart(2, '0')}:${String(whole % 60).padStart(2, '0')}`;
+};
+const savedTime = (value: string) =>
+  new Date(value).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false });
+const message = (error: unknown) =>
+  error instanceof Error ? error.message : '读取或生成运输日计划失败，请重试。';
+
+export default function DailyTransport({
+  scenario,
+  disabled,
+  onWritingChange,
+}: {
+  scenario: PlanningScenario;
+  disabled: boolean;
+  onWritingChange: (writing: boolean) => void;
+}) {
+  const path = `/api/projects/${encodeURIComponent(scenario.projectId)}/scenarios/${encodeURIComponent(scenario.id)}/daily-transport`;
+  const [view, setView] = useState<DailyTransportView | null>(null);
+  const [reading, setReading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [historyId, setHistoryId] = useState('');
+  const [history, setHistory] = useState<DailyTransportTask | null>(null);
+  const [historyReading, setHistoryReading] = useState(false);
+  const [vehicleId, setVehicleId] = useState('');
+  const [runtime, setRuntime] = useState('10');
+  const [seed, setSeed] = useState('1');
+  const alive = useRef(false);
+  const reads = useRef(0);
+  const historyReads = useRef(0);
+  const writing = useRef(false);
+  const controller = useRef<AbortController | null>(null);
+  const task = view?.task;
+  const running = active(task?.status);
+  const runningTaskId = running ? task?.taskId : undefined;
+  const frozen = scenario.status === 'frozen';
+  const current = view?.inputVersion === scenario.inputVersion;
+  const displayed = historyId ? history : view?.resultTask;
+  const result = displayed?.result;
+  const snapshot = displayed?.snapshot.context;
+  const selectedVehicle =
+    result?.vehicles.find((vehicle) => vehicle.vehicleId === vehicleId) ?? result?.vehicles[0];
+  const configValid =
+    Number.isInteger(Number(runtime)) &&
+    Number(runtime) >= 5 &&
+    Number(runtime) <= 120 &&
+    seed.trim() !== '' &&
+    Number.isSafeInteger(Number(seed)) &&
+    Number(seed) >= 0;
+
+  const refresh = useCallback(
+    async (taskId?: string) => {
+      if (writing.current) return;
+      controller.current?.abort();
+      const abort = new AbortController();
+      controller.current = abort;
+      const read = ++reads.current;
+      try {
+        if (taskId) {
+          const summary = await request<DailyTransportTaskSummary>(
+            `${path}/${encodeURIComponent(taskId)}?summary=1`,
+            'GET',
+            undefined,
+            abort.signal,
+          );
+          if (!alive.current || read !== reads.current) return;
+          if (active(summary.status)) {
+            setView((previous) =>
+              previous?.task?.taskId === taskId ? { ...previous, task: summary } : previous,
+            );
+            setError('');
+            return;
+          }
+        }
+        const next = await request<DailyTransportView>(path, 'GET', undefined, abort.signal);
+        if (!alive.current || read !== reads.current) return;
+        setView(next);
+        setError('');
+      } catch (failure) {
+        if (alive.current && read === reads.current && !abort.signal.aborted)
+          setError(message(failure));
+      } finally {
+        if (alive.current && read === reads.current) setReading(false);
+      }
+    },
+    [path],
+  );
+
+  useEffect(() => {
+    const lifecycle = reads;
+    const historical = historyReads;
+    alive.current = true;
+    // Subscribe to the persisted task; no computation depends on the page staying open.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void refresh();
+    return () => {
+      alive.current = false;
+      lifecycle.current++;
+      historical.current++;
+      controller.current?.abort();
+    };
+  }, [refresh, scenario.inputVersion, scenario.revision]);
+
+  useEffect(() => {
+    if (!runningTaskId) return;
+    let stopped = false;
+    let timer: number;
+    async function poll() {
+      await refresh(runningTaskId);
+      if (!stopped) timer = window.setTimeout(() => void poll(), 800);
+    }
+    timer = window.setTimeout(() => void poll(), 800);
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer);
+    };
+  }, [refresh, runningTaskId]);
+
+  async function mutate(operation: 'start' | 'stop') {
+    if (writing.current || disabled || frozen) return;
+    writing.current = true;
+    reads.current++;
+    controller.current?.abort();
+    setBusy(true);
+    setError('');
+    onWritingChange(true);
+    try {
+      const next = await request<DailyTransportView>(
+        operation === 'stop' ? `${path}/${task!.taskId}/stop` : path,
+        'POST',
+        operation === 'start'
+          ? {
+              expectedRevision: scenario.revision,
+              config: { seed: Number(seed), maxRuntimeMs: Number(runtime) * 60000 },
+            }
+          : undefined,
+      );
+      if (alive.current) {
+        setView(next);
+        setReading(false);
+        if (operation === 'start') {
+          setHistoryId('');
+          setHistory(null);
+          historyReads.current++;
+        }
+      }
+    } catch (failure) {
+      if (alive.current) setError(message(failure));
+    } finally {
+      writing.current = false;
+      if (alive.current) {
+        setBusy(false);
+        onWritingChange(false);
+      }
+    }
+  }
+
+  async function selectHistory(taskId: string) {
+    const read = ++historyReads.current;
+    setHistoryId(taskId);
+    setHistory(null);
+    setError('');
+    setHistoryReading(Boolean(taskId));
+    if (!taskId) return;
+    try {
+      const next = await request<DailyTransportTask>(`${path}/${encodeURIComponent(taskId)}`);
+      if (alive.current && read === historyReads.current) setHistory(next);
+    } catch (failure) {
+      if (alive.current && read === historyReads.current) setError(message(failure));
+    } finally {
+      if (alive.current && read === historyReads.current) setHistoryReading(false);
+    }
+  }
+
+  const cycleName = (id: string) =>
+    snapshot?.transportCycles?.find((cycle) => cycle.id === id)?.name ?? '原循环';
+  const positionNames = new Map(
+    snapshot?.transportCycles?.flatMap((cycle) =>
+      cycle.positions.map(
+        (position, index) =>
+          [
+            position.id,
+            { label: `${position.point.name}（第 ${index + 1} 位）`, cycleName: cycle.name },
+          ] as const,
+      ),
+    ),
+  );
+  const positionName = (positionId: string) => positionNames.get(positionId)?.label ?? '原位置';
+  function eventLocation(event: DailyTransportEvent): string {
+    const from = positionNames.get(event.fromPositionId);
+    const to = positionNames.get(event.toPositionId);
+    if (event.kind === 'loading' || event.kind === 'unloading')
+      return from?.label ?? event.from.name;
+    if (event.kind === 'transport')
+      return `${from?.label ?? event.from.name} → ${to?.label ?? event.to.name}`;
+    return `${from?.cycleName ?? '原循环'} · ${from?.label ?? event.from.name} → ${to?.cycleName ?? '原循环'} · ${to?.label ?? event.to.name}`;
+  }
+  const allocationText = (event: DailyTransportEvent) =>
+    event.allocations
+      .map((allocation) => {
+        const demand = result?.demands.find((entry) => entry.demandId === allocation.demandId);
+        return `${demand ? `${positionName(demand.loadingPositionId)} → ${positionName(demand.unloadingPositionId)}` : '原需求'} ${tonnes(allocation.tonnes)} 吨`;
+      })
+      .join('；');
+  const timelineStart = result?.vehicles.length
+    ? Math.floor(
+        Math.min(
+          ...result.vehicles.flatMap((vehicle) => vehicle.shifts.map((shift) => shift.startMinute)),
+        ) / 60,
+      ) * 60
+    : 0;
+  const timelineEnd = result?.vehicles.length
+    ? Math.ceil(
+        Math.max(
+          ...result.vehicles.flatMap((vehicle) => vehicle.shifts.map((shift) => shift.endMinute)),
+        ) / 60,
+      ) * 60
+    : 1440;
+  const timelineSpan = Math.max(60, timelineEnd - timelineStart);
+  const tickStep = Math.ceil(timelineSpan / 4 / 60) * 60;
+  const ticks = Array.from(
+    { length: Math.floor(timelineSpan / tickStep) + 1 },
+    (_, index) => timelineStart + index * tickStep,
+  );
+  const presentKinds = result
+    ? [...new Set(result.vehicles.flatMap((vehicle) => vehicle.events.map((event) => event.kind)))]
+    : [];
+
+  return (
+    <section className={styles.section} aria-label="方案每日运输计划">
+      <header className={styles.heading}>
+        <div>
+          <h3>每日运输计划</h3>
+          <p>按给定车队、完整循环与班次试算，核对每辆车的运输安排。</p>
+        </div>
+        <Button
+          className="text-button"
+          disabled={busy || reading}
+          onClick={() => {
+            setReading(true);
+            void refresh();
+          }}
+          aria-label="刷新运输日计划"
+        >
+          <RefreshCw aria-hidden="true" />
+          刷新
+        </Button>
+      </header>
+      <p className={styles.boundary}>
+        <strong>补能校核未完成</strong>：本次仅核对运输载荷与时间，不能据此判断完整物理可行。
+        {PLANNING_NOTICE}
+      </p>
+      <div className={styles.taskPanel}>
+        <div className={styles.taskHeading}>
+          <strong>
+            {reading && !view
+              ? '正在读取运输任务…'
+              : task
+                ? statuses[task.status]
+                : '尚未生成运输日计划'}
+          </strong>
+          <span>当前输入版本 {scenario.inputVersion}</span>
+        </div>
+        {running && (
+          <>
+            <p role="status">
+              已安排 {task!.progress.completedTrips} 个完整循环，完成{' '}
+              {tonnes(task!.progress.completedTonnes)} / {tonnes(task!.progress.totalTonnes)}{' '}
+              吨。关闭页面后继续试算。
+            </p>
+            <progress
+              className={styles.progress}
+              aria-label="运输试算进度"
+              value={task!.progress.completedTonnes}
+              max={task!.progress.totalTonnes || 1}
+            />
+          </>
+        )}
+        {task?.error && <p className={styles.error}>{task.error}</p>}
+        {!running && !frozen && (
+          <details className={styles.record} open={!task || !configValid}>
+            <summary>试算设置</summary>
+            <div className={styles.config}>
+              <label>
+                最长试算时间（分钟）
+                <Input
+                  type="number"
+                  min={5}
+                  max={120}
+                  step={1}
+                  value={runtime}
+                  disabled={disabled || frozen || busy}
+                  onChange={(event) => setRuntime(event.target.value)}
+                />
+              </label>
+              <label>
+                随机种子
+                <Input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={seed}
+                  disabled={disabled || frozen || busy}
+                  onChange={(event) => setSeed(event.target.value)}
+                />
+              </label>
+            </div>
+          </details>
+        )}
+        <div className={styles.actions}>
+          {running ? (
+            <Button
+              className="button"
+              disabled={busy || disabled || frozen}
+              onClick={() => void mutate('stop')}
+            >
+              <Square aria-hidden="true" />
+              停止运输试算
+            </Button>
+          ) : (
+            <Button
+              className="button primary"
+              disabled={
+                busy ||
+                disabled ||
+                frozen ||
+                reading ||
+                !current ||
+                Boolean(view?.gaps.length) ||
+                !configValid
+              }
+              onClick={() => void mutate('start')}
+            >
+              <Play aria-hidden="true" />
+              {busy ? '正在启动…' : '生成运输日计划'}
+            </Button>
+          )}
+          <span>
+            {frozen
+              ? '冻结版本只读，可复制为新草案调整。'
+              : '单任务队列；完成后提前结束，时限不保证计划质量。'}
+          </span>
+        </div>
+        {!configValid && (
+          <p className={styles.error}>试算时间须为 5–120 分钟，随机种子须为非负整数。</p>
+        )}
+        {view?.gaps.length ? (
+          <details className={styles.gaps} open>
+            <summary>运输试算待补齐（{view.gaps.length} 项）</summary>
+            <ul>
+              {view.gaps.map((gap, index) => (
+                <li key={`${index}-${gap}`}>{gap}</li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
+        {task && (
+          <details className={styles.record}>
+            <summary>任务与算法依据</summary>
+            <dl>
+              <div>
+                <dt>任务标识</dt>
+                <dd>{task.taskId}</dd>
+              </div>
+              <div>
+                <dt>输入版本</dt>
+                <dd>{task.inputVersion}</dd>
+              </div>
+              <div>
+                <dt>算法版本</dt>
+                <dd>{task.algorithmVersion}</dd>
+              </div>
+              <div>
+                <dt>随机种子 / 时限</dt>
+                <dd>
+                  {task.config.seed} / {minutes(task.config.maxRuntimeMs / 60000)} 分钟
+                </dd>
+              </div>
+              <div>
+                <dt>创建时间</dt>
+                <dd>{savedTime(task.createdAt)}</dd>
+              </div>
+              {task.finishedAt && (
+                <div>
+                  <dt>结束时间</dt>
+                  <dd>{savedTime(task.finishedAt)}</dd>
+                </div>
+              )}
+            </dl>
+          </details>
+        )}
+      </div>
+      {error && (
+        <p className={styles.error} role="alert">
+          {error}
+        </p>
+      )}
+      {view && view.tasks.length > 0 && (
+        <label className={styles.history}>
+          核对已保存任务
+          <NativeSelect
+            aria-label="核对已保存任务"
+            value={historyId}
+            disabled={busy}
+            onChange={(event) => void selectHistory(event.target.value)}
+          >
+            <option value="">最近完整运输结果</option>
+            {view.tasks.map((entry) => (
+              <option key={entry.taskId} value={entry.taskId} disabled={active(entry.status)}>
+                输入版本 {entry.inputVersion} · {statuses[entry.status]} ·{' '}
+                {savedTime(entry.createdAt)}
+              </option>
+            ))}
+          </NativeSelect>
+        </label>
+      )}
+      {historyReading && <p role="status">正在读取已保存任务…</p>}
+      {history && !history.result && (
+        <p className={styles.empty}>此任务{statuses[history.status]}，没有可核对的完整运输结果。</p>
+      )}
+      {result && displayed && (
+        <div className={styles.result}>
+          <div className={styles.resultHeading}>
+            <h3>运输试算结果 · 输入版本 {displayed.inputVersion}</h3>
+            <span>{savedTime(displayed.finishedAt ?? displayed.createdAt)}</span>
+          </div>
+          {displayed.inputVersion !== scenario.inputVersion && (
+            <p className={styles.stale}>
+              这是旧输入版本的保存结果，当前输入尚未采用此结果。名称、道路和参数均按原任务快照核对。
+            </p>
+          )}
+          <dl className={styles.metrics}>
+            <div>
+              <dt>实际完成</dt>
+              <dd>
+                {tonnes(result.totalCompletedTonnes)}
+                <span>吨</span>
+              </dd>
+            </div>
+            <div>
+              <dt>运量缺口</dt>
+              <dd>
+                {tonnes(result.totalMissingTonnes)}
+                <span>吨</span>
+              </dd>
+            </div>
+            <div>
+              <dt>完整循环</dt>
+              <dd>
+                {result.trips.length}
+                <span>车次</span>
+              </dd>
+            </div>
+            <div>
+              <dt>总行驶里程</dt>
+              <dd>
+                {formatKilometers(result.totalDistanceMeters)}
+                <span>km</span>
+              </dd>
+            </div>
+          </dl>
+          <section className={styles.block} aria-label="逐车时间轴">
+            <h4>逐车时间轴</h4>
+            <p className={styles.caption}>
+              以作业窗口为时间范围，包含完整循环、装卸、跨线接续及归位。选择车辆核对事件。
+            </p>
+            <ul className={styles.legend}>
+              {presentKinds.map((kind) => (
+                <li key={kind}>
+                  <span className={`${styles.swatch} ${styles[kind]}`} />
+                  {kinds[kind]}
+                </li>
+              ))}
+            </ul>
+            <div className={styles.timelineScroll}>
+              <div className={styles.timeline}>
+                <div className={styles.axis}>
+                  <span>计划车辆</span>
+                  <div>
+                    {ticks.map((tick) => (
+                      <span
+                        key={tick}
+                        style={{ left: `${((tick - timelineStart) / timelineSpan) * 100}%` }}
+                      >
+                        {time(tick)}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                {result.vehicles.map((vehicle) => (
+                  <div key={vehicle.vehicleId} className={styles.lane}>
+                    <Button
+                      className={`${styles.vehicle} ${selectedVehicle?.vehicleId === vehicle.vehicleId ? styles.selectedVehicle : ''}`}
+                      aria-pressed={selectedVehicle?.vehicleId === vehicle.vehicleId}
+                      onClick={() => setVehicleId(vehicle.vehicleId)}
+                    >
+                      <strong title={vehicle.vehicleId}>{vehicle.vehicleId}</strong>
+                      <span>
+                        {vehicle.vehicleGroupName} · {minutes(vehicle.workingMinutes)} 分钟
+                      </span>
+                    </Button>
+                    <div className={styles.track}>
+                      {vehicle.shifts.map((shift, index) => (
+                        <span
+                          key={index}
+                          className={styles.shift}
+                          style={{
+                            left: `${((shift.startMinute - timelineStart) / timelineSpan) * 100}%`,
+                            width: `${((shift.endMinute - shift.startMinute) / timelineSpan) * 100}%`,
+                          }}
+                        />
+                      ))}
+                      {vehicle.events.map((event) => (
+                        <span
+                          key={event.id}
+                          className={`${styles.event} ${styles[event.kind]}`}
+                          style={{
+                            left: `${((event.startMinute - timelineStart) / timelineSpan) * 100}%`,
+                            width: `${((event.endMinute - event.startMinute) / timelineSpan) * 100}%`,
+                          }}
+                          title={`${kinds[event.kind]} ${time(event.startMinute)}–${time(event.endMinute)} · ${eventLocation(event)} · ${tonnes(event.loadTonnes)} 吨`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+          {selectedVehicle && (
+            <section className={styles.block} aria-label="所选车辆事件">
+              <div className={styles.subheading}>
+                <h4>车辆事件明细</h4>
+                <label>
+                  计划车辆
+                  <NativeSelect
+                    value={selectedVehicle.vehicleId}
+                    onChange={(event) => setVehicleId(event.target.value)}
+                  >
+                    {result.vehicles.map((vehicle) => (
+                      <option key={vehicle.vehicleId} value={vehicle.vehicleId}>
+                        {vehicle.vehicleId} · {vehicle.vehicleGroupName}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </label>
+              </div>
+              <p className={styles.caption}>
+                {selectedVehicle.vehicleGroupName} · 载重上限{' '}
+                {tonnes(selectedVehicle.payloadTonnes)} 吨 ·{' '}
+                {selectedVehicle.returnedToBase ? '已回基准循环起点' : '未归位'} · 作业{' '}
+                {minutes(selectedVehicle.workingMinutes)} 分钟 ·{' '}
+                {formatKilometers(selectedVehicle.totalDistanceMeters)} km
+              </p>
+              <div className={styles.tableScroll}>
+                <table aria-label="车辆事件明细">
+                  <thead>
+                    <tr>
+                      <th>事件 / 地点</th>
+                      <th className={styles.num}>起止时间</th>
+                      <th className={styles.num}>时长（分钟）</th>
+                      <th className={styles.num}>载荷 / 作业量（吨）</th>
+                      <th className={styles.num}>里程（km）</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedVehicle.events.map((event) => (
+                      <tr key={event.id}>
+                        <td>
+                          <strong>{kinds[event.kind]}</strong>
+                          <span>{eventLocation(event)}</span>
+                          <small>
+                            {event.durationSource === 'measured'
+                              ? '区间实测'
+                              : event.durationSource === 'speed'
+                                ? '业务速度模板'
+                                : '装卸耗时模板'}
+                            {event.allocations.length > 0 ? ` · ${allocationText(event)}` : ''}
+                          </small>
+                        </td>
+                        <td className={styles.num}>
+                          {time(event.startMinute)}–{time(event.endMinute)}
+                        </td>
+                        <td className={styles.num}>
+                          {minutes(event.endMinute - event.startMinute)}
+                        </td>
+                        <td className={styles.num}>{tonnes(event.loadTonnes)}</td>
+                        <td className={styles.num}>{formatKilometers(event.distanceMeters)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {selectedVehicle.events.length === 0 && (
+                  <p className={styles.empty}>此车未安排运输事件。</p>
+                )}
+              </div>
+            </section>
+          )}
+          <section className={styles.block} aria-label="完成量与缺口">
+            <h4>完成量与缺口</h4>
+            <div className={styles.tableScroll}>
+              <table aria-label="需求完成量与缺口">
+                <thead>
+                  <tr>
+                    <th>循环 / 装卸需求</th>
+                    <th className={styles.num}>需求（吨）</th>
+                    <th className={styles.num}>完成（吨）</th>
+                    <th className={styles.num}>缺口（吨）</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.demands.map((demand) => (
+                    <tr key={demand.demandId}>
+                      <td>
+                        <strong>{cycleName(demand.cycleId)}</strong>
+                        <span>
+                          {positionName(demand.loadingPositionId)} →{' '}
+                          {positionName(demand.unloadingPositionId)}
+                        </span>
+                        {demand.reason && <small>{demand.reason}</small>}
+                      </td>
+                      <td className={styles.num}>{tonnes(demand.requestedTonnes)}</td>
+                      <td className={styles.num}>{tonnes(demand.completedTonnes)}</td>
+                      <td className={styles.num}>{tonnes(demand.missingTonnes)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <details className={styles.block}>
+            <summary>核对车次与区间载荷</summary>
+            <div className={styles.tableScroll}>
+              <table aria-label="车次区间载荷">
+                <thead>
+                  <tr>
+                    <th>车次 / 业务区间</th>
+                    <th>计划车辆 / 载荷依据</th>
+                    <th className={styles.num}>载荷（吨）</th>
+                    <th className={styles.num}>里程（km）</th>
+                    <th className={styles.num}>时间（分钟）</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.trips.flatMap((trip) =>
+                    trip.segments.map((segment, index) => (
+                      <tr key={`${trip.id}-${index}`}>
+                        <td>
+                          <strong>
+                            {cycleName(trip.cycleId)} · 第 {trip.sequence} 车次
+                          </strong>
+                          <span>
+                            {positionName(segment.fromPositionId)} →{' '}
+                            {positionName(segment.toPositionId)}
+                          </span>
+                        </td>
+                        <td>
+                          <strong>{trip.vehicleId}</strong>
+                          <small>
+                            {segment.allocations.length
+                              ? segment.allocations
+                                  .map((allocation) => `${tonnes(allocation.tonnes)} 吨`)
+                                  .join(' + ')
+                              : '空载'}{' '}
+                            · {segment.durationSource === 'measured' ? '区间实测' : '业务速度'}
+                          </small>
+                        </td>
+                        <td className={styles.num}>{tonnes(segment.loadTonnes)}</td>
+                        <td className={styles.num}>{formatKilometers(segment.distanceMeters)}</td>
+                        <td className={styles.num}>{minutes(segment.durationMinutes)}</td>
+                      </tr>
+                    )),
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </details>
+          <details className={styles.block}>
+            <summary>运输校验与适用边界</summary>
+            <p>
+              {result.validation.valid
+                ? '运输载荷、需求完成量、事件互斥、作业窗口与归位校验通过。'
+                : '运输独立校验未通过。'}
+            </p>
+            <ul>
+              {[...result.validation.issues, ...result.limitations].map((issue, index) => (
+                <li key={`${index}-${issue}`}>{issue}</li>
+              ))}
+            </ul>
+            <p>补能校核未完成，完整物理可行性尚未建立。</p>
+          </details>
+        </div>
+      )}
+      {!result && !historyReading && !historyId && (
+        <div className={styles.empty}>
+          <h4>逐车计划待生成</h4>
+          <p>补齐运输与道路资料后开始试算，完成后可核对时间轴、区间载荷和需求缺口。</p>
+        </div>
+      )}
+    </section>
+  );
+}

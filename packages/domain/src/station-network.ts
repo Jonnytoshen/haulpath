@@ -143,7 +143,10 @@ export function candidateSiteReadiness(site: CandidateSite, network: StationNetw
   if (!connection.confirmed) gaps.push('接电关系待确认');
   return gaps;
 }
-export function stationNetworkReadiness(context: PlanningScenarioContext): string[] {
+export function stationNetworkReadiness(
+  context: PlanningScenarioContext,
+  stage: 'station-operations' | 'transport' = 'station-operations',
+): string[] {
   const network = context.stationNetwork;
   if (!network) return ['站网资料待配置'];
   const gaps: string[] = [];
@@ -154,7 +157,7 @@ export function stationNetworkReadiness(context: PlanningScenarioContext): strin
     if (!site) gaps.push('固定布局的站址已删除或不存在');
     else gaps.push(...candidateSiteReadiness(site, network).map((gap) => `${site.name}：${gap}`));
     if (!type) gaps.push('固定布局的站型已删除或不存在');
-    else
+    else if (stage === 'station-operations')
       gaps.push(
         ...stationTypeReadiness(type, context.operations?.battery ?? null).map(
           (gap) => `${type.name}：${gap}`,

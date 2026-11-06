@@ -1,0 +1,440 @@
+.section {
+  min-width: 0;
+  margin-top: 24px;
+}
+.heading,
+.taskHeading,
+.resultHeading,
+.subheading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.heading {
+  align-items: start;
+}
+.heading h3,
+.resultHeading h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+.heading p,
+.caption,
+.taskPanel p {
+  margin: 8px 0 0;
+  color: var(--secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.heading svg,
+.actions svg {
+  width: 16px;
+  height: 16px;
+}
+.boundary {
+  margin: 16px 0;
+  color: var(--secondary);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.boundary strong {
+  color: var(--foreground);
+  font-weight: 600;
+}
+.taskPanel {
+  padding: 16px;
+  border-radius: 6px;
+  background: var(--muted);
+}
+.taskHeading {
+  font-size: 14px;
+}
+.taskHeading span,
+.resultHeading > span {
+  color: var(--secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.config {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+.config label {
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+  width: 190px;
+}
+.actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+.actions > span {
+  font-size: 12px;
+  color: var(--secondary);
+}
+.progress {
+  display: block;
+  width: 100%;
+  height: 8px;
+  appearance: none;
+  border: 0;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-top: 12px;
+  background: var(--border);
+}
+.progress::-webkit-progress-bar {
+  background: var(--border);
+}
+.progress::-webkit-progress-value {
+  background: var(--primary);
+}
+.progress::-moz-progress-bar {
+  background: var(--primary);
+}
+.error,
+.taskPanel .error {
+  color: #a2372e;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.gaps,
+.record {
+  margin-top: 12px;
+  font-size: 13px;
+}
+.gaps summary,
+.record summary,
+.block > summary {
+  cursor: pointer;
+  padding: 8px 0;
+}
+.gaps ul,
+.block ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  line-height: 1.7;
+}
+.record dl {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+.record dl > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.record dt {
+  flex: none;
+  color: var(--secondary);
+}
+.record dd {
+  margin: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.history {
+  display: grid;
+  gap: 8px;
+  max-width: 600px;
+  font-size: 13px;
+  margin-top: 20px;
+}
+.history select {
+  max-width: 100%;
+}
+.result {
+  margin-top: 24px;
+}
+.stale {
+  padding: 12px 16px;
+  margin: 16px 0;
+  border-radius: 6px;
+  background: var(--muted);
+  color: var(--foreground);
+  font-size: 13px;
+  line-height: 1.7;
+}
+/* Four metrics share the full result width: four 1fr columns, no outside gutter. */
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin: 20px 0 0;
+  padding: 16px 0;
+  border-block: 1px solid var(--border);
+}
+.metrics dt {
+  color: var(--secondary);
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+.metrics dd {
+  margin: 0;
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+}
+.metrics dd > span {
+  display: inline-block;
+  margin-left: 6px;
+  color: var(--secondary);
+  font-size: 12px;
+}
+.block {
+  margin-top: 24px;
+  min-width: 0;
+}
+.block h4,
+.empty h4 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+}
+.block > summary {
+  font-size: 14px;
+  font-weight: 500;
+}
+.block > p {
+  color: var(--secondary);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 0;
+  margin: 12px 0;
+  list-style: none;
+  font-size: 12px;
+  color: var(--secondary);
+}
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.swatch {
+  width: 16px;
+  height: 10px;
+  border-radius: 2px;
+  box-sizing: border-box;
+}
+.timelineScroll,
+.tableScroll {
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  margin-top: 12px;
+}
+.timeline {
+  min-width: 640px;
+}
+.axis,
+.lane {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+}
+.axis {
+  font-size: 11px;
+  color: var(--secondary);
+  padding: 8px 0 20px;
+}
+.axis > div {
+  height: 18px;
+  position: relative;
+  margin-right: 34px;
+}
+.axis > div > span {
+  position: absolute;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.track {
+  position: relative;
+  height: 44px;
+  margin-right: 34px;
+}
+.shift {
+  position: absolute;
+  top: 9px;
+  height: 26px;
+  border-radius: 4px;
+  background: var(--muted);
+}
+.vehicle {
+  display: grid;
+  width: 180px;
+  height: auto;
+  min-height: 48px;
+  padding: 8px;
+  gap: 4px;
+  justify-content: start;
+  white-space: normal;
+  text-align: left;
+  border-radius: 4px;
+  color: var(--foreground);
+}
+.vehicle strong {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 164px;
+  font-weight: 500;
+}
+.vehicle span {
+  font-size: 12px;
+  color: var(--secondary);
+}
+.vehicle:hover,
+.selectedVehicle {
+  background: var(--muted);
+}
+.event {
+  position: absolute;
+  top: 12px;
+  height: 20px;
+  border-radius: 3px;
+  box-sizing: border-box;
+}
+.transport {
+  background: var(--primary);
+}
+.loading {
+  background: var(--foreground);
+}
+.unloading {
+  background: #89968f;
+}
+.continuation {
+  background: white;
+  border: 2px solid var(--primary);
+}
+.return {
+  background: white;
+  border: 2px solid var(--foreground);
+}
+.subheading label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.subheading select {
+  width: auto;
+  max-width: 360px;
+}
+.tableScroll table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.tableScroll th {
+  text-align: left;
+  color: var(--secondary);
+  font-size: 12px;
+  font-weight: 400;
+  padding: 10px 12px;
+  white-space: nowrap;
+}
+.tableScroll th:first-child,
+.tableScroll td:first-child {
+  padding-left: 0;
+}
+.tableScroll th:last-child,
+.tableScroll td:last-child {
+  padding-right: 0;
+}
+.tableScroll td {
+  padding: 12px;
+  border-top: 1px solid var(--border);
+  vertical-align: top;
+}
+.tableScroll td strong,
+.tableScroll td span,
+.tableScroll td small {
+  display: block;
+}
+.tableScroll td strong {
+  font-weight: 500;
+}
+.tableScroll td span,
+.tableScroll td small {
+  margin-top: 4px;
+  color: var(--secondary);
+  line-height: 1.6;
+}
+.tableScroll td small {
+  font-size: 12px;
+  max-width: 420px;
+}
+.tableScroll .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.empty {
+  margin-top: 20px;
+  padding: 16px 0;
+  color: var(--secondary);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.empty p {
+  margin: 8px 0 0;
+}
+@media (max-width: 720px) {
+  .heading button,
+  .actions button,
+  .config input,
+  .history select,
+  .subheading select,
+  .block > summary,
+  .record summary,
+  .gaps summary {
+    min-height: 44px;
+  }
+  .taskPanel {
+    padding: 12px;
+  }
+  .config {
+    gap: 12px;
+  }
+  .config label {
+    width: 100%;
+  }
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px 12px;
+  }
+  .metrics dd {
+    font-size: 20px;
+  }
+  .subheading label {
+    display: grid;
+    width: 100%;
+  }
+  .subheading select {
+    width: 100%;
+    max-width: 100%;
+  }
+  .record dl > div {
+    align-items: start;
+  }
+}

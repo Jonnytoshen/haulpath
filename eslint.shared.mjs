@@ -7,6 +7,7 @@ export const ignores = globalIgnores([
   '**/node_modules/**',
   '**/.nx/**',
   '**/.next/**',
+  '**/.haulpath-workers/**',
   '**/next-env.d.ts',
   '**/dist/**',
   '**/out/**',

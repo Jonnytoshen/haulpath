@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { callerEnvironment, snapshotVariable } from './workspace-environment.mjs';
+import { buildWorkers } from './build-workers.mjs';
 
 const require = createRequire(import.meta.url);
 export const workspaceRoot = resolve(import.meta.dirname, '..');
@@ -10,6 +11,7 @@ const applicationRequire = createRequire(resolve(applicationRoot, 'package.json'
 // Shared with real-application tests, which spawn this Next CLI directly so the
 // production process they SIGKILL is the service rather than a task launcher.
 export function prepareNextCommand(command, args = [], environment = process.env) {
+  if (command === 'dev' || command === 'build') buildWorkers();
   const previousEnvironment = process.env;
   let prepared;
   try {

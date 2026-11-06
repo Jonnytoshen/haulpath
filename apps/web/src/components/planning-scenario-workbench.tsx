@@ -25,6 +25,7 @@ import FleetOperations from './fleet-operations';
 import FixedStationLayout from './fixed-station-layout';
 import ScenarioVersionComparison from './scenario-version-comparison';
 import DirectedRoadData from './directed-road-data';
+import DailyTransport from './daily-transport';
 import ScenarioInputValue, { scenarioInputNames } from './scenario-input-value';
 import comparisonStyles from './scenario-version-comparison.module.css';
 
@@ -48,6 +49,7 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
   const [deleting, setDeleting] = useState<PlanningScenario | null>(null);
   const [freezing, setFreezing] = useState<PlanningScenario | null>(null);
   const [comparing, setComparing] = useState(false);
+  const [scenarioTask, setScenarioTask] = useState<'inputs' | 'daily'>('inputs');
   const [editing, setEditing] = useState(false);
   const alive = useRef(false);
   const generation = useRef(0);
@@ -106,6 +108,7 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
       const current = await request<PlanningScenario>(`${path}/${scenario.id}`);
       if (!alive.current || read !== generation.current) return;
       setSelected(current);
+      setScenarioTask('inputs');
       setScenarios((items) => items.map((item) => (item.id === current.id ? current : item)));
     } catch (failure) {
       if (alive.current && read === generation.current) setError(messageOf(failure));
@@ -137,6 +140,7 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
           : [...items, saved],
       );
       setSelected(saved);
+      if (!current || editor.copy) setScenarioTask('inputs');
       setLoaded(true);
       setEditor(null);
       setNotice(
@@ -217,7 +221,9 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
       aria-label="项目规划方案"
       tabIndex={-1}
     >
-      <header className={styles.heading}>
+      <header
+        className={`${styles.heading} ${selected && scenarioTask === 'daily' ? styles.dailyHeading : ''}`}
+      >
         <div>
           <h2>方案草案</h2>
           <p>保存运输与选址资料，冻结决策依据并比较版本。</p>
@@ -271,7 +277,9 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
           {notice}
         </p>
       )}
-      <div className={`${styles.content} ${selected ? styles.hasSelection : ''}`}>
+      <div
+        className={`${styles.content} ${selected ? styles.hasSelection : ''} ${selected && scenarioTask === 'daily' ? styles.dailySelected : ''}`}
+      >
         <div className={`${styles.listPanel} ${selected ? styles.listWhenSelected : ''}`}>
           <div className={styles.listHeading}>
             <h3>本项目方案</h3>
@@ -319,7 +327,7 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
         {selected ? (
           <section className={styles.detail} aria-label="当前规划方案">
             <Button
-              className={`text-button ${styles.back}`}
+              className={`text-button ${styles.back} ${scenarioTask === 'daily' ? styles.dailyBack : ''}`}
               disabled={locked}
               onClick={() => {
                 setSelected(null);
@@ -340,177 +348,225 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
               输入版本 {selected.inputVersion} ·{' '}
               {selected.lineageId === selected.id ? '首份版本' : '同源版本'}
             </p>
-            {(selected.copiedFrom || selected.frozenAt) && (
-              <dl className={styles.facts}>
-                {selected.copiedFrom && (
-                  <div>
-                    <dt>复制来源</dt>
-                    <dd>
-                      {selected.copiedFrom.name} · 输入版本 {selected.copiedFrom.inputVersion} ·
-                      修订 {selected.copiedFrom.revision}
-                    </dd>
-                  </div>
+            {scenarioTask === 'inputs' && (
+              <>
+                {(selected.copiedFrom || selected.frozenAt) && (
+                  <dl className={styles.facts}>
+                    {selected.copiedFrom && (
+                      <div>
+                        <dt>复制来源</dt>
+                        <dd>
+                          {selected.copiedFrom.name} · 输入版本 {selected.copiedFrom.inputVersion} ·
+                          修订 {selected.copiedFrom.revision}
+                        </dd>
+                      </div>
+                    )}
+                    {selected.frozenAt && (
+                      <div>
+                        <dt>冻结时间</dt>
+                        <dd>
+                          <time dateTime={selected.frozenAt}>{savedTime(selected.frozenAt)}</time>
+                        </dd>
+                      </div>
+                    )}
+                  </dl>
                 )}
-                {selected.frozenAt && (
-                  <div>
-                    <dt>冻结时间</dt>
-                    <dd>
-                      <time dateTime={selected.frozenAt}>{savedTime(selected.frozenAt)}</time>
-                    </dd>
-                  </div>
+                <p className={styles.description}>
+                  {frozen
+                    ? '此版本已冻结，输入、名称和状态均不可改写。复制为新草案后可继续调整。'
+                    : '草案已保存在本机。关闭页面或重启服务后，可从本项目重新打开。共享资料变化不会自动引入。'}
+                </p>
+                <div className={styles.lifecycleActions}>
+                  <Button
+                    className="button"
+                    disabled={locked || frozen}
+                    onClick={() => {
+                      setError('');
+                      setFreezing(selected);
+                    }}
+                    aria-label="冻结规划方案"
+                  >
+                    <LockKeyhole aria-hidden="true" />
+                    冻结规划方案
+                  </Button>
+                  <Button
+                    className="button"
+                    disabled={locked}
+                    onClick={() => {
+                      setError('');
+                      setEditor({
+                        scenario: selected,
+                        name: `${selected.name.slice(0, 192)} · 新草案`,
+                        copy: true,
+                      });
+                    }}
+                  >
+                    <Copy aria-hidden="true" />
+                    复制为新草案
+                  </Button>
+                </div>
+                <details className={styles.saveRecord}>
+                  <summary>保存记录</summary>
+                  <dl className={styles.facts}>
+                    <div>
+                      <dt>最近保存</dt>
+                      <dd>
+                        <time dateTime={selected.updatedAt}>{savedTime(selected.updatedAt)}</time>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>创建时间</dt>
+                      <dd>
+                        <time dateTime={selected.createdAt}>{savedTime(selected.createdAt)}</time>
+                      </dd>
+                    </div>
+                  </dl>
+                </details>
+                {frozen && (
+                  <details className={comparisonStyles.frozen}>
+                    <summary>查看已冻结输入</summary>
+                    <ScenarioInputValue
+                      value={Object.fromEntries(
+                        Object.entries(selected.context).filter(
+                          ([key]) => key !== 'results' && key !== 'schemaVersion',
+                        ),
+                      )}
+                      names={scenarioInputNames(selected.context)}
+                    />
+                  </details>
                 )}
-              </dl>
+              </>
             )}
-            <p className={styles.description}>
-              {frozen
-                ? '此版本已冻结，输入、名称和状态均不可改写。复制为新草案后可继续调整。'
-                : '草案已保存在本机。关闭页面或重启服务后，可从本项目重新打开。共享资料变化不会自动引入。'}
-            </p>
-            <div className={styles.lifecycleActions}>
+            <nav className={styles.scenarioTasks} aria-label="规划方案任务">
               <Button
-                className="button"
-                disabled={locked || frozen}
-                onClick={() => {
-                  setError('');
-                  setFreezing(selected);
-                }}
-                aria-label="冻结规划方案"
-              >
-                <LockKeyhole aria-hidden="true" />
-                冻结规划方案
-              </Button>
-              <Button
-                className="button"
+                className="text-button"
+                aria-pressed={scenarioTask === 'inputs'}
                 disabled={locked}
-                onClick={() => {
-                  setError('');
-                  setEditor({
-                    scenario: selected,
-                    name: `${selected.name.slice(0, 192)} · 新草案`,
-                    copy: true,
-                  });
-                }}
+                onClick={() => setScenarioTask('inputs')}
               >
-                <Copy aria-hidden="true" />
-                复制为新草案
+                输入资料
               </Button>
-            </div>
-            <details className={styles.saveRecord}>
-              <summary>保存记录</summary>
-              <dl className={styles.facts}>
-                <div>
-                  <dt>最近保存</dt>
-                  <dd>
-                    <time dateTime={selected.updatedAt}>{savedTime(selected.updatedAt)}</time>
-                  </dd>
-                </div>
-                <div>
-                  <dt>创建时间</dt>
-                  <dd>
-                    <time dateTime={selected.createdAt}>{savedTime(selected.createdAt)}</time>
-                  </dd>
-                </div>
-              </dl>
-            </details>
-            {frozen && (
-              <details className={comparisonStyles.frozen}>
-                <summary>查看已冻结输入</summary>
-                <ScenarioInputValue
-                  value={Object.fromEntries(
-                    Object.entries(selected.context).filter(
-                      ([key]) => key !== 'results' && key !== 'schemaVersion',
-                    ),
-                  )}
-                  names={scenarioInputNames(selected.context)}
+              <Button
+                className="text-button"
+                aria-pressed={scenarioTask === 'daily'}
+                disabled={locked}
+                onClick={() => setScenarioTask('daily')}
+              >
+                每日计划
+              </Button>
+            </nav>
+            {scenarioTask === 'daily' ? (
+              <DailyTransport
+                key={`daily-${selected.id}`}
+                scenario={selected}
+                disabled={busy || reading || editing || frozen}
+                onWritingChange={(value) => {
+                  writing.current = value;
+                  if (value) generation.current++;
+                  setBusy(value);
+                  setReading(false);
+                }}
+              />
+            ) : (
+              <>
+                <DirectedRoadData
+                  key={`roads-${selected.id}`}
+                  scenario={selected}
+                  disabled={busy || reading || editing || frozen}
+                  onViewChange={setRoadView}
+                  onChange={(saved) => {
+                    setSelected(saved);
+                    setScenarios((items) =>
+                      items.map((item) => (item.id === saved.id ? saved : item)),
+                    );
+                  }}
+                  onWritingChange={(value) => {
+                    writing.current = value;
+                    if (value) generation.current++;
+                    setBusy(value);
+                    setReading(false);
+                  }}
                 />
-              </details>
+                <TransportCycles
+                  key={selected.id}
+                  scenario={selected}
+                  preparedRoads={
+                    roadView?.scenarioId === selected.id &&
+                    roadView.inputVersion === selected.inputVersion
+                      ? roadView.roads
+                      : []
+                  }
+                  disabled={busy || reading || frozen}
+                  onEditingChange={setEditing}
+                  onChange={(saved) => {
+                    setSelected(saved);
+                    setScenarios((items) =>
+                      items.map((item) => (item.id === saved.id ? saved : item)),
+                    );
+                  }}
+                  onWritingChange={(value) => {
+                    writing.current = value;
+                    if (value) generation.current++;
+                    setBusy(value);
+                    setReading(false);
+                  }}
+                />
+                <TransportDemands
+                  key={`demands-${selected.id}`}
+                  scenario={selected}
+                  disabled={busy || reading || frozen}
+                  onEditingChange={setEditing}
+                  onChange={(saved) => {
+                    setSelected(saved);
+                    setScenarios((items) =>
+                      items.map((item) => (item.id === saved.id ? saved : item)),
+                    );
+                  }}
+                  onWritingChange={(value) => {
+                    writing.current = value;
+                    if (value) generation.current++;
+                    setBusy(value);
+                    setReading(false);
+                  }}
+                />
+                <FleetOperations
+                  key={`operations-${selected.id}`}
+                  scenario={selected}
+                  disabled={busy || reading || frozen}
+                  onEditingChange={setEditing}
+                  onChange={(saved) => {
+                    setSelected(saved);
+                    setScenarios((items) =>
+                      items.map((item) => (item.id === saved.id ? saved : item)),
+                    );
+                  }}
+                  onWritingChange={(value) => {
+                    writing.current = value;
+                    if (value) generation.current++;
+                    setBusy(value);
+                    setReading(false);
+                  }}
+                />
+                <FixedStationLayout
+                  key={`station-network-${selected.id}`}
+                  scenario={selected}
+                  disabled={busy || reading || frozen}
+                  onEditingChange={setEditing}
+                  onChange={(saved) => {
+                    setSelected(saved);
+                    setScenarios((items) =>
+                      items.map((item) => (item.id === saved.id ? saved : item)),
+                    );
+                  }}
+                  onWritingChange={(value) => {
+                    writing.current = value;
+                    if (value) generation.current++;
+                    setBusy(value);
+                    setReading(false);
+                  }}
+                />
+              </>
             )}
-            <DirectedRoadData
-              key={`roads-${selected.id}`}
-              scenario={selected}
-              disabled={busy || reading || editing || frozen}
-              onViewChange={setRoadView}
-              onChange={(saved) => {
-                setSelected(saved);
-                setScenarios((items) => items.map((item) => (item.id === saved.id ? saved : item)));
-              }}
-              onWritingChange={(value) => {
-                writing.current = value;
-                if (value) generation.current++;
-                setBusy(value);
-                setReading(false);
-              }}
-            />
-            <TransportCycles
-              key={selected.id}
-              scenario={selected}
-              preparedRoads={
-                roadView?.scenarioId === selected.id &&
-                roadView.inputVersion === selected.inputVersion
-                  ? roadView.roads
-                  : []
-              }
-              disabled={busy || reading || frozen}
-              onEditingChange={setEditing}
-              onChange={(saved) => {
-                setSelected(saved);
-                setScenarios((items) => items.map((item) => (item.id === saved.id ? saved : item)));
-              }}
-              onWritingChange={(value) => {
-                writing.current = value;
-                if (value) generation.current++;
-                setBusy(value);
-                setReading(false);
-              }}
-            />
-            <TransportDemands
-              key={`demands-${selected.id}`}
-              scenario={selected}
-              disabled={busy || reading || frozen}
-              onEditingChange={setEditing}
-              onChange={(saved) => {
-                setSelected(saved);
-                setScenarios((items) => items.map((item) => (item.id === saved.id ? saved : item)));
-              }}
-              onWritingChange={(value) => {
-                writing.current = value;
-                if (value) generation.current++;
-                setBusy(value);
-                setReading(false);
-              }}
-            />
-            <FleetOperations
-              key={`operations-${selected.id}`}
-              scenario={selected}
-              disabled={busy || reading || frozen}
-              onEditingChange={setEditing}
-              onChange={(saved) => {
-                setSelected(saved);
-                setScenarios((items) => items.map((item) => (item.id === saved.id ? saved : item)));
-              }}
-              onWritingChange={(value) => {
-                writing.current = value;
-                if (value) generation.current++;
-                setBusy(value);
-                setReading(false);
-              }}
-            />
-            <FixedStationLayout
-              key={`station-network-${selected.id}`}
-              scenario={selected}
-              disabled={busy || reading || frozen}
-              onEditingChange={setEditing}
-              onChange={(saved) => {
-                setSelected(saved);
-                setScenarios((items) => items.map((item) => (item.id === saved.id ? saved : item)));
-              }}
-              onWritingChange={(value) => {
-                writing.current = value;
-                if (value) generation.current++;
-                setBusy(value);
-                setReading(false);
-              }}
-            />
             <div className={styles.detailActions}>
               <Button
                 className="button"
