@@ -25,6 +25,7 @@ import {
   scenarioContext,
   scenarioFields,
   scenarioRevision,
+  swapDetourLimitsOf,
 } from './scenario-validation';
 import { cyclePositions, confirmCycle } from './transport-cycle-validation';
 import { transportDemandsOf } from './transport-demand-validation';
@@ -354,6 +355,8 @@ class Storage {
         throw new HttpError(400, '站网资料须通过专用接口维护，不能直接覆盖');
       if (!isDeepStrictEqual(context.roadSettings, scenario.context.roadSettings))
         throw new HttpError(400, '道路准备偏好须通过专用接口维护，不能直接覆盖');
+      if (!isDeepStrictEqual(context.swapDetourLimits, scenario.context.swapDetourLimits))
+        throw new HttpError(400, '换电绕行限额须通过专用接口维护，不能直接覆盖');
       const inputChanged = !isDeepStrictEqual(context, scenario.context);
       if (name === scenario.name && !inputChanged) return scenario;
       if (inputChanged) scenario.inputVersion++;
@@ -382,6 +385,32 @@ class Storage {
       if (continuationStrategy === (scenario.context.roadSettings?.continuationStrategy ?? 32))
         return scenario;
       scenario.context.roadSettings = { continuationStrategy };
+      scenario.inputVersion++;
+      scenario.revision++;
+      scenario.updatedAt = new Date().toISOString();
+      this.db
+        .prepare('UPDATE planning_scenarios SET payload = ? WHERE id = ? AND project_id = ?')
+        .run(JSON.stringify(scenario), scenarioId, projectId);
+      return scenario;
+    })();
+  }
+  replaceSwapDetourLimits(
+    projectId: string,
+    scenarioId: string,
+    input: Record<string, unknown>,
+  ): PlanningScenario {
+    return this.db.transaction(() => {
+      const scenario = this.getScenario(projectId, scenarioId);
+      assertScenarioEditable(scenario);
+      scenarioFields(input, ['expectedRevision', 'swapDetourLimits']);
+      if (scenarioRevision(input.expectedRevision) !== scenario.revision)
+        throw new HttpError(409, '规划方案已被更新，请重新加载后编辑');
+      const limits = swapDetourLimitsOf(input.swapDetourLimits);
+      const unlimited = limits.maxExtraMeters === null && limits.maxExtraMinutes === null;
+      const next = unlimited ? undefined : limits;
+      if (isDeepStrictEqual(next, scenario.context.swapDetourLimits)) return scenario;
+      if (next) scenario.context.swapDetourLimits = next;
+      else delete scenario.context.swapDetourLimits;
       scenario.inputVersion++;
       scenario.revision++;
       scenario.updatedAt = new Date().toISOString();

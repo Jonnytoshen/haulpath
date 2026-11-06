@@ -48,6 +48,7 @@ export default function ScenarioInputValue({
     (section) =>
       path === section || path.startsWith(`${section}.`) || path.startsWith(`${section}[`),
   );
+  if (value === null && path.startsWith('swapDetourLimits.')) return <span>不限</span>;
   if (value == null || value === '') return <span className={styles.missing}>—</span>;
   if (typeof value === 'boolean') return <span>{value ? '是' : '否'}</span>;
   if (typeof value === 'number')

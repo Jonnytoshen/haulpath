@@ -8,6 +8,7 @@ import type {
   FleetOperations,
   StationNetwork,
   RoadSettings,
+  SwapDetourLimits,
 } from '@haulpath/domain';
 import { isStrategy } from '@haulpath/domain';
 import { HttpError } from './http';
@@ -40,6 +41,32 @@ function jsonObject(input: unknown, depth = 0): input is JsonObject {
   );
 }
 
+export function swapDetourLimitsOf(input: unknown): SwapDetourLimits {
+  if (!input || typeof input !== 'object' || Array.isArray(input))
+    throw new HttpError(400, '换电绕行限额须为对象');
+  const limits = input as Record<string, unknown>;
+  scenarioFields(limits, ['maxExtraMeters', 'maxExtraMinutes']);
+  const { maxExtraMeters, maxExtraMinutes } = limits;
+  if (
+    maxExtraMeters !== null &&
+    (typeof maxExtraMeters !== 'number' ||
+      !Number.isSafeInteger(maxExtraMeters) ||
+      maxExtraMeters < 0)
+  )
+    throw new HttpError(400, '额外行驶距离上限须为非负整数米或留空');
+  if (
+    maxExtraMinutes !== null &&
+    (typeof maxExtraMinutes !== 'number' ||
+      !Number.isFinite(maxExtraMinutes) ||
+      maxExtraMinutes < 0)
+  )
+    throw new HttpError(400, '额外行驶时间上限须为非负分钟数或留空');
+  return {
+    maxExtraMeters: maxExtraMeters === 0 ? 0 : maxExtraMeters,
+    maxExtraMinutes: maxExtraMinutes === 0 ? 0 : maxExtraMinutes,
+  };
+}
+
 export function scenarioContext(input: unknown): PlanningScenarioContext {
   if (!input || typeof input !== 'object' || Array.isArray(input))
     throw new HttpError(400, '规划方案上下文无效');
@@ -52,6 +79,7 @@ export function scenarioContext(input: unknown): PlanningScenarioContext {
     'operations',
     'stationNetwork',
     'roadSettings',
+    'swapDetourLimits',
     'annual',
     'results',
   ]);
@@ -94,6 +122,9 @@ export function scenarioContext(input: unknown): PlanningScenarioContext {
     ...(context.roadSettings === undefined
       ? {}
       : { roadSettings: context.roadSettings as unknown as RoadSettings }),
+    ...(context.swapDetourLimits === undefined
+      ? {}
+      : { swapDetourLimits: swapDetourLimitsOf(context.swapDetourLimits) }),
     annual: context.annual,
     results: context.results,
   };

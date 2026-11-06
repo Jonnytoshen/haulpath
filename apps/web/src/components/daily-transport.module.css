@@ -114,9 +114,30 @@
 }
 .gaps summary,
 .record summary,
+.detourLimits summary,
 .block > summary {
   cursor: pointer;
   padding: 8px 0;
+}
+.detourLimits {
+  margin-top: 16px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+}
+.detourLimits summary span {
+  margin-left: 6px;
+  color: var(--secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.detourLimits p {
+  max-width: 68ch;
+}
+.detourLimits .config label {
+  width: 220px;
+}
+.detourLimits input {
+  background: var(--background);
 }
 .gaps ul,
 .block ul {
@@ -192,6 +213,19 @@
   color: var(--secondary);
   font-size: 12px;
 }
+.energySummary {
+  display: flex;
+  gap: 4px 16px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--secondary);
+}
+.energySummary strong {
+  color: var(--foreground);
+  font-weight: 600;
+}
 .block {
   margin-top: 24px;
   min-width: 0;
@@ -211,7 +245,7 @@
   font-size: 13px;
   line-height: 1.7;
 }
-.legend {
+.block .legend {
   display: flex;
   flex-wrap: wrap;
   gap: 8px 16px;
@@ -257,17 +291,20 @@
 .axis > div {
   height: 18px;
   position: relative;
-  margin-right: 34px;
+  margin-right: 40px;
 }
 .axis > div > span {
   position: absolute;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+.energyTimeline .axis > div > span:last-child:not(:first-child) {
+  transform: translateX(-100%);
+}
 .track {
   position: relative;
   height: 44px;
-  margin-right: 34px;
+  margin-right: 40px;
 }
 .shift {
   position: absolute;
@@ -329,6 +366,72 @@
   background: white;
   border: 2px solid var(--foreground);
 }
+.station-entry {
+  background: #735d2e;
+}
+.station-exit {
+  background: var(--background);
+  border: 2px solid #735d2e;
+}
+.swap {
+  background: var(--background);
+  border: 2px dashed #735d2e;
+}
+.event.swap {
+  min-width: 5px;
+  z-index: 1;
+}
+.socLane {
+  margin-top: 12px;
+}
+.socLabel {
+  display: grid;
+  gap: 4px;
+  padding-left: 8px;
+  color: var(--secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.socLabel strong {
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 600;
+}
+.socPlot {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  flex-direction: column;
+  height: 60px;
+  margin-right: 40px;
+  color: var(--secondary);
+  font-size: 12px;
+  line-height: 1;
+}
+.socPlot svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  border-bottom: 1px solid var(--border);
+}
+.socPlot > span {
+  position: relative;
+  left: calc(100% + 4px);
+  width: max-content;
+}
+.socLine {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 2px;
+  stroke-linejoin: round;
+}
+.socSafety {
+  stroke: #735d2e;
+  stroke-width: 1px;
+  stroke-dasharray: 4px 3px;
+}
 .subheading label {
   display: flex;
   align-items: center;
@@ -344,6 +447,15 @@
   min-width: 640px;
   border-collapse: collapse;
   font-size: 13px;
+}
+.tableScroll .energyTable {
+  min-width: 900px;
+}
+.energyTable td:first-child {
+  overflow-wrap: anywhere;
+}
+.tableHint {
+  display: none;
 }
 .tableScroll th {
   text-align: left;
@@ -399,6 +511,33 @@
 .empty p {
   margin: 8px 0 0;
 }
+@media (max-width: 1100px) {
+  .tableHint {
+    display: block;
+    margin: 8px 0 0;
+  }
+}
+@media (max-width: 900px) {
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px 12px;
+  }
+  .metrics dd {
+    font-size: 20px;
+  }
+  .energyTimeline {
+    min-width: 0;
+  }
+  .energyTimeline .axis,
+  .energyTimeline .lane {
+    grid-template-columns: 112px minmax(0, 1fr);
+    gap: 12px;
+  }
+  .energyTimeline .vehicle {
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 @media (max-width: 720px) {
   .heading button,
   .actions button,
@@ -407,6 +546,7 @@
   .subheading select,
   .block > summary,
   .record summary,
+  .detourLimits summary,
   .gaps summary {
     min-height: 44px;
   }
@@ -416,15 +556,9 @@
   .config {
     gap: 12px;
   }
-  .config label {
+  .config label,
+  .detourLimits .config label {
     width: 100%;
-  }
-  .metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 20px 12px;
-  }
-  .metrics dd {
-    font-size: 20px;
   }
   .subheading label {
     display: grid;
@@ -436,5 +570,19 @@
   }
   .record dl > div {
     align-items: start;
+  }
+}
+@media (max-width: 640px) {
+  .energyTimeline .axis > div > span:not(:first-child, :last-child) {
+    display: none;
+  }
+  .tableScroll .energyTable {
+    table-layout: fixed;
+  }
+  .energyTable th:first-child {
+    width: 168px;
+  }
+  .energyTable th:nth-child(2) {
+    width: 146px;
   }
 }

@@ -759,3 +759,19 @@ Standards / Spec两轴初轮分别为1项P2和0项。Standards指出前端同值
 QA 位于 `.scratch/haulpath-swap-station-siting/qa/09/`。`full-tests-2026-11-06.log` 为完整回归，`reviewed-*` 为部署复验，`visual-final.log`、`visual/` 和 `taste/inspect/` 为视觉证据，`code-review.md` 为审查闭合记录。QA 保留在本地 worktree。
 
 本票交付运输时间与载荷试算。补能校核未完成，结果只适用于运输阶段。Docker 验收覆盖原生 arm64，最低 Node 验收覆盖 Worker 产物。道路使用高德服务边界替身。**未校验重卡限高、限重及货车限行**。
+
+## 2026-11-06 车辆电量与限额绕行换电（10 工单）
+
+集成基线 `314c2ee1acb676c72322ad625a5c9eac727929a6`，已审查并验收的功能源码 `32c77cfda8ee9133cf5aa79025745daec93daf2f`。在独立 worktree 的 `codex/vehicle-energy-and-swaps` 分支，使用 macOS arm64、Node 24.21.0、pnpm 12.10.1、Next.js 16.4.2 和系统 Chrome 验收。测试使用临时 SQLite，仅替换高德服务边界。
+
+| 验证                   | 实际结果                                                                                                                                                                                 |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 格式、lint、类型、构建 | `pnpm run format:check`、`pnpm lint`、`pnpm run typecheck`、`pnpm run build`（webpack）、提交区间校验均通过。                                                                            |
+| 真实应用定向           | HTTP、SQLite、Worker 与浏览器 **9/9**。绕行距离与时间分别覆盖等于上限及超限。10 吨满载有向绕行在 169 kWh 到站、换入 300 kWh，反向实测耗电 37 kWh，末段空驶归位剩 90 kWh。                |
+| 反例和版本             | 覆盖实测载重依据失效后的模板计算、微小正耗电累计、低于到站或归位安全电量、等待挤占班次、限额保护及冻结复制比较。浏览器从页面启动无法到站的试算，仍可核对上一次通过的输入版本与换电事件。 |
+| 生产页面               | Chrome 在 1440、768、390 像素宽度均能完整看到 SOC 曲线及换电前后 SOC，无页面横向溢出或浏览器错误。检查器 0 个失败及 2 个现有工作台样式提示。                                             |
+| 完整串行套件           | `caffeinate -i pnpm test` **265/265**，失败、取消、跳过及 todo 均为 0，约 967.1 秒。                                                                                                     |
+
+Standards 与 Spec 以 `314c2ee...ea1bef0` 为范围独立审查。历史详情读取、分钟限额精度、微小耗电累计和浏览器失败分支的修正均已复验。日志和截图位于本地 worktree 的 `.scratch/haulpath-swap-station-siting/qa/10/`，其中 `full-tests-2026-11-06.log` 为完整回归，`targeted-final.log` 为 10 工单定向验收，`visual-final.log` 和 `visual/` 为生产浏览器证据。
+
+本票验证车辆电量阶段。换入与首日出发按满电，工位、库存及充电周转、共享电源和 24 小时周期仍待校核。本轮未执行真实高德、Docker 或最低 Node 完整套件。**未校验重卡限高、限重及货车限行**。

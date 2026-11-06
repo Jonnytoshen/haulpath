@@ -14,6 +14,14 @@ export function GET(_request: Request, context: Context) {
     return Response.json(storage.dailyTransport.getView(projectId, scenarioId));
   });
 }
+export function PUT(request: Request, context: Context) {
+  return api(async () => {
+    const { projectId, scenarioId } = await context.params;
+    return Response.json(
+      storage.replaceSwapDetourLimits(projectId, scenarioId, await readJson(request)),
+    );
+  });
+}
 export function POST(request: Request, context: Context) {
   return api(async () => {
     const { projectId, scenarioId } = await context.params;

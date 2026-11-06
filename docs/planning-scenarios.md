@@ -1,6 +1,6 @@
 # 规划方案与版本
 
-规划方案是项目内用于组织选址资料和分析结果的整体，与线路测算得到的“路线方案”分开。当前提供草案的创建、选择、改名、删除和重开，以及冻结、复制、显式引入资料与输入比较；支持从本项目线路建立并确认[运输循环](transport-cycles.md)，维护[运输需求与区间日货流](transport-demands.md)及[车辆组、电池与运营模板](fleet-operations.md)；项目级[电源接入点](power-connection-points.md)独立维护，方案内支持[候选站址、站型及人工固定布局](fixed-station-layout.md)；已提供[有向道路异步准备及复用](directed-road-data.md)，支持[逐车运输日计划](daily-transport.md)的时间、载荷与运量缺口试算，补能及财务结果由后续功能逐步交付。
+规划方案是项目内用于组织选址资料和分析结果的整体，与线路测算得到的“路线方案”分开。当前提供草案的创建、选择、改名、删除和重开，以及冻结、复制、显式引入资料与输入比较；支持从本项目线路建立并确认[运输循环](transport-cycles.md)，维护[运输需求与区间日货流](transport-demands.md)及[车辆组、电池与运营模板](fleet-operations.md)；项目级[电源接入点](power-connection-points.md)独立维护，方案内支持[候选站址、站型及人工固定布局](fixed-station-layout.md)；已提供[有向道路异步准备及复用](directed-road-data.md)，支持[逐车运输日计划](daily-transport.md)的时间、载荷与运量缺口试算，以及限额绕行换电与车辆电量校核。站内周转、共享电源、24 小时周期与财务结果由后续功能逐步交付。
 
 ## 页面与保存
 
