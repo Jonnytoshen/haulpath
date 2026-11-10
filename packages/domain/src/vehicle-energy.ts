@@ -1,7 +1,7 @@
 import type { Point, TransportCycle } from './index';
 import {
   DAILY_TRANSPORT_ALGORITHM_VERSION,
-  dailyTransportTripShift,
+  dailyTransportEventShifts,
   generateDailyTransport,
   validateDailyTransport,
 } from './daily-transport';
@@ -14,6 +14,7 @@ import type {
   DailyTransportValidation,
   DailyTransportVehicle,
 } from './daily-transport';
+import { representativeDayIntervals } from './operating-windows';
 import { directedRoadKey } from './directed-roads';
 import type { PreparedRoad } from './directed-roads';
 import { measuredSegmentIssue } from './fleet-operations';
@@ -60,8 +61,8 @@ export interface VehicleEnergyResult {
   totalDistanceMeters: number;
   swapCount: number;
   vehicles: VehicleEnergyTimeline[];
-  stationCapacityStatus: 'not-checked';
-  batteryInventoryStatus: 'not-checked';
+  stationCapacityStatus: 'not-checked' | 'checked';
+  batteryInventoryStatus: 'not-checked' | 'checked';
   sharedPowerStatus: 'not-checked';
   periodicityStatus: 'not-checked';
 }
@@ -114,7 +115,6 @@ type Label = {
   visit: { option: SwapOption; serviceStartMinute: number } | null;
 };
 
-const DAY_MINUTES = 1440;
 const TIME_TOLERANCE = 1e-7;
 const fullCharge: Charge = { usedKwh: 0, correctionKwh: 0 };
 const noEnergy: EnergyUse = { energyKwh: 0, energySource: 'none', measuredEnergySegmentId: null };
@@ -232,26 +232,6 @@ function directEnergy(
   };
 }
 
-/** Expand calendar windows to cover any overnight shift in this representative day. */
-function serviceIntervals(windows: OperatingShift[]): OperatingShift[] {
-  const sorted = [-DAY_MINUTES, 0, DAY_MINUTES]
-    .flatMap((offset) =>
-      windows.map((window) => ({
-        startMinute: window.startMinute + offset,
-        endMinute: window.endMinute + offset,
-      })),
-    )
-    .sort((a, b) => a.startMinute - b.startMinute);
-  const intervals: OperatingShift[] = [];
-  for (const window of sorted) {
-    const previous = intervals.at(-1);
-    if (previous && window.startMinute <= previous.endMinute)
-      previous.endMinute = Math.max(previous.endMinute, window.endMinute);
-    else intervals.push(window);
-  }
-  return intervals;
-}
-
 function fixedStations(snapshot: DailyTransportSnapshot): {
   stations: FixedStation[];
   issues: string[];
@@ -285,7 +265,7 @@ function fixedStations(snapshot: DailyTransportSnapshot): {
     stations.push({
       site,
       swapMinutes: type.swapMinutes,
-      windows: serviceIntervals(type.serviceWindows),
+      windows: representativeDayIntervals(type.serviceWindows),
     });
   }
   return { stations, issues };
@@ -379,18 +359,9 @@ function stepsForVehicle(
   group: VehicleGroup,
 ): Step[] {
   const { snapshot, trips, roads, cycles, fixed } = inputs;
-  const shifts = new Map(
-    vehicle.tripIds.map((tripId) => [
-      tripId,
-      dailyTransportTripShift(trips.get(tripId)!, vehicle.shifts),
-    ]),
-  );
-  return vehicle.events.map((event, index) => {
-    const adjacent =
-      event.kind === 'continuation'
-        ? vehicle.events[index + 1]?.tripId
-        : vehicle.events[index - 1]?.tripId;
-    const shift = shifts.get(event.tripId ?? adjacent ?? '');
+  const shifts = dailyTransportEventShifts(vehicle, trips);
+  return vehicle.events.map((event) => {
+    const shift = shifts.get(event.id);
     const cycle = cycles.get(event.cycleId)!;
     const segmentIndex = cycle.positions.findIndex(
       (position) => position.id === event.fromPositionId,

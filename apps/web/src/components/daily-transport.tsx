@@ -1,10 +1,11 @@
 'use client';
 
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
-import { BatteryCharging, Play, RefreshCw, Square } from 'lucide-react';
+import { BatteryCharging, Play, RefreshCw, Square, Warehouse } from 'lucide-react';
 import {
   PLANNING_NOTICE,
   formatKilometers,
+  type DailyTransportStage,
   type DailyTransportEvent,
   type DailyTransportEventKind,
   type DailyTransportTask,
@@ -19,6 +20,11 @@ import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
 import { request } from '@/lib/client-request';
 import { BatteryTrace, energyNumber, percent } from './daily-transport-soc-trace';
+import {
+  StationTurnoverLedger,
+  serviceWaitLabels,
+  stationClockTime,
+} from './daily-transport-station-ledger';
 import styles from './daily-transport.module.css';
 
 const statuses: Record<RoadTaskStatus, string> = {
@@ -41,14 +47,19 @@ const kinds: Record<DailyTransportEventKind | VehicleEnergyEvent['kind'], string
   swap: '换电',
   'station-exit': '驶离站址',
 };
-type Mutation = 'transport' | 'vehicle-energy' | 'stop' | 'save-limits';
+type Mutation = DailyTransportStage | 'stop' | 'save-limits';
 type DetourDraft = { revision: number; kilometers: string; minutes: string };
 const active = (status?: RoadTaskStatus) => status === 'queued' || status === 'running';
 const tonnes = (value: number) =>
   value.toLocaleString('zh-CN', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 const minutes = (value: number) => value.toLocaleString('zh-CN', { maximumFractionDigits: 2 });
+const stages: Record<DailyTransportStage, string> = {
+  transport: '运输试算',
+  'vehicle-energy': '车辆电量试算',
+  'station-turnover': '站内周转试算',
+};
 const stageName = (task?: DailyTransportTaskSummary | null) =>
-  task?.config.stage === 'vehicle-energy' ? '车辆电量试算' : '运输试算';
+  stages[task?.config.stage ?? 'transport'];
 const limitDistance = (value: number | null | undefined) =>
   value == null ? '不限距离' : `额外里程 ≤ ${formatKilometers(value)} km`;
 const limitTime = (value: number | null | undefined) =>
@@ -95,6 +106,7 @@ export default function DailyTransport({
   const controller = useRef<AbortController | null>(null);
   const task = view?.task;
   const running = active(task?.status);
+  const baselineProgress = task?.config.stage && task.config.stage !== 'transport';
   const runningTaskId = running ? task?.taskId : undefined;
   const frozen = scenario.status === 'frozen';
   const current = view?.inputVersion === scenario.inputVersion;
@@ -102,12 +114,20 @@ export default function DailyTransport({
   const result = displayed?.result;
   const snapshot = displayed?.snapshot.context;
   const energy = result?.vehicleEnergy;
+  const turnover = result?.stationTurnover;
+  const eventTime = turnover ? stationClockTime : time;
+  const stationSwaps = new Map(
+    turnover?.stations.flatMap((station) =>
+      station.swaps.map((swap) => [swap.eventId, swap] as const),
+    ),
+  );
   const energyVehicles = new Map(energy?.vehicles.map((vehicle) => [vehicle.vehicleId, vehicle]));
   const selectedVehicle =
     result?.vehicles.find((vehicle) => vehicle.vehicleId === vehicleId) ?? result?.vehicles[0];
   const selectedEnergy = selectedVehicle && energyVehicles.get(selectedVehicle.vehicleId);
   const selectedEvents = selectedEnergy?.events ?? selectedVehicle?.events ?? [];
   const energyGaps = view?.vehicleEnergyGaps ?? [];
+  const turnoverGaps = view?.stationTurnoverGaps ?? [];
   const limits = scenario.context.swapDetourLimits;
   const savedDistance = limits?.maxExtraMeters ?? null;
   const savedMinutes = limits?.maxExtraMinutes ?? null;
@@ -239,7 +259,7 @@ export default function DailyTransport({
               config: {
                 seed: Number(seed),
                 maxRuntimeMs: Number(runtime) * 60000,
-                ...(operation === 'vehicle-energy' ? { stage: operation } : {}),
+                ...(operation === 'transport' ? {} : { stage: operation }),
               },
             }
           : undefined,
@@ -351,13 +371,14 @@ export default function DailyTransport({
   const startDisabled =
     busy || disabled || frozen || reading || !current || Boolean(view?.gaps.length) || !configValid;
   const energyDisabled = startDisabled || energyGaps.length > 0 || !validLimits || dirtyLimits;
+  const turnoverDisabled = energyDisabled || turnoverGaps.length > 0;
 
   return (
     <section className={styles.section} aria-label="方案每日运输计划">
       <header className={styles.heading}>
         <div>
           <h3>每日运输计划</h3>
-          <p>按给定车队、完整循环与班次，试算逐车运输和固定布局内的换电访问。</p>
+          <p>按给定车队、完整循环与班次，试算逐车运输、换电访问和固定布局内的电池周转。</p>
         </div>
         <Button
           className="text-button"
@@ -375,11 +396,13 @@ export default function DailyTransport({
       <p className={styles.boundary}>
         {energy ? (
           <>
-            <strong>车辆电量校核通过</strong>
+            <strong>{turnover ? '站内周转校核通过' : '车辆电量校核通过'}</strong>
             {displayed &&
               displayed.inputVersion !== scenario.inputVersion &&
               `（输入版本 ${displayed.inputVersion} 的结果）`}
-            {' · 工位、库存、共享电源及 24 小时周期尚未校核。'}
+            {turnover
+              ? ' · 共享电源及 24 小时周期尚未校核。'
+              : ' · 工位、库存、共享电源及 24 小时周期尚未校核。'}
           </>
         ) : (
           <>
@@ -403,16 +426,14 @@ export default function DailyTransport({
         {running && (
           <>
             <p role="status">
-              {task?.config.stage === 'vehicle-energy' && '运输基线 · '}
+              {baselineProgress && '运输基线 · '}
               已安排 {task!.progress.completedTrips} 个完整循环，完成{' '}
               {tonnes(task!.progress.completedTonnes)} / {tonnes(task!.progress.totalTonnes)}{' '}
               吨。关闭页面后继续试算。
             </p>
             <progress
               className={styles.progress}
-              aria-label={
-                task?.config.stage === 'vehicle-energy' ? '运输基线试算进度' : '运输试算进度'
-              }
+              aria-label={baselineProgress ? '运输基线试算进度' : '运输试算进度'}
               value={task!.progress.completedTonnes}
               max={task!.progress.totalTonnes || 1}
             />
@@ -444,12 +465,20 @@ export default function DailyTransport({
                 {operation === 'transport' ? '正在启动…' : '生成运输日计划'}
               </Button>
               <Button
-                className={`button${energyDisabled ? '' : ' primary'}`}
+                className={`button${!energyDisabled && turnoverDisabled ? ' primary' : ''}`}
                 disabled={energyDisabled}
                 onClick={() => void mutate('vehicle-energy')}
               >
                 <BatteryCharging aria-hidden="true" />
                 {operation === 'vehicle-energy' ? '正在启动…' : '生成车辆电量试算'}
+              </Button>
+              <Button
+                className={`button${turnoverDisabled ? '' : ' primary'}`}
+                disabled={turnoverDisabled}
+                onClick={() => void mutate('station-turnover')}
+              >
+                <Warehouse aria-hidden="true" />
+                {operation === 'station-turnover' ? '正在启动…' : '生成站内周转试算'}
               </Button>
             </>
           )}
@@ -571,6 +600,16 @@ export default function DailyTransport({
             <summary>车辆电量试算待补齐（{energyGaps.length} 项）</summary>
             <ul>
               {energyGaps.map((gap, index) => (
+                <li key={`${index}-${gap}`}>{gap}</li>
+              ))}
+            </ul>
+          </details>
+        )}
+        {turnoverGaps.length > 0 && (
+          <details className={styles.gaps} open>
+            <summary>站内周转试算待补齐（{turnoverGaps.length} 项）</summary>
+            <ul>
+              {turnoverGaps.map((gap, index) => (
                 <li key={`${index}-${gap}`}>{gap}</li>
               ))}
             </ul>
@@ -699,6 +738,13 @@ export default function DailyTransport({
               <span>首日出发与换入电池均按满电试算</span>
             </p>
           )}
+          {turnover && displayed && (
+            <StationTurnoverLedger
+              key={displayed.taskId}
+              turnover={turnover}
+              network={snapshot?.stationNetwork}
+            />
+          )}
           <section className={styles.block} aria-label="逐车时间轴">
             <h4>逐车时间轴</h4>
             <p className={styles.caption}>
@@ -769,7 +815,7 @@ export default function DailyTransport({
                                 left: `${((event.startMinute - timelineStart) / timelineSpan) * 100}%`,
                                 width: `${((event.endMinute - event.startMinute) / timelineSpan) * 100}%`,
                               }}
-                              title={`${kinds[event.kind]} ${time(event.startMinute)}–${time(event.endMinute)} · ${eventLocation(event)}${'startSocPercent' in event ? ` · SOC ${percent(event.startSocPercent)} → ${percent(event.endSocPercent)}` : ` · ${tonnes(event.loadTonnes)} 吨`}`}
+                              title={`${kinds[event.kind]} ${eventTime(event.startMinute)}–${eventTime(event.endMinute)} · ${eventLocation(event)}${'startSocPercent' in event ? ` · SOC ${percent(event.startSocPercent)} → ${percent(event.endSocPercent)}` : ` · ${tonnes(event.loadTonnes)} 吨`}`}
                             />
                           ))}
                         </div>
@@ -853,6 +899,7 @@ export default function DailyTransport({
                   <tbody>
                     {selectedEvents.map((event) => {
                       const charge = 'startSocPercent' in event ? event : null;
+                      const stationSwap = stationSwaps.get(event.id);
                       return (
                         <tr key={event.id}>
                           <td>
@@ -870,10 +917,14 @@ export default function DailyTransport({
                             </small>
                             {charge?.detour && (
                               <small>
-                                服务 {time(charge.detour.serviceStartMinute)} 开始 · 换电{' '}
+                                服务 {eventTime(charge.detour.serviceStartMinute)} 开始 · 换电{' '}
                                 {minutes(event.endMinute - charge.detour.serviceStartMinute)} 分钟
+                                {stationSwap && ` · 工位 ${stationSwap.bay}`}
                                 {charge.detour.serviceStartMinute > event.startMinute &&
-                                  ` · 等待开放 ${minutes(charge.detour.serviceStartMinute - event.startMinute)} 分钟`}
+                                  ` · ${stationSwap ? '等待' : '等待开放'} ${(stationSwap ? energyNumber : minutes)(charge.detour.serviceStartMinute - event.startMinute)} 分钟`}
+                                {stationSwap?.waitReasons.length
+                                  ? `（${stationSwap.waitReasons.map((reason) => serviceWaitLabels[reason]).join('、')}）`
+                                  : ''}
                                 <br />
                                 较直达额外行驶 {formatKilometers(charge.detour.extraMeters)} km ·{' '}
                                 {minutes(charge.detour.extraMinutes)} 分钟
@@ -889,7 +940,7 @@ export default function DailyTransport({
                             </td>
                           )}
                           <td className={styles.num}>
-                            {time(event.startMinute)}–{time(event.endMinute)}
+                            {eventTime(event.startMinute)}–{eventTime(event.endMinute)}
                           </td>
                           <td className={styles.num}>
                             {minutes(event.endMinute - event.startMinute)}
@@ -1000,7 +1051,13 @@ export default function DailyTransport({
             </div>
           </details>
           <details className={styles.block}>
-            <summary>{energy ? '运输与车辆电量校验及适用边界' : '运输校验与适用边界'}</summary>
+            <summary>
+              {turnover
+                ? '运输、车辆电量与站内周转校验及适用边界'
+                : energy
+                  ? '运输与车辆电量校验及适用边界'
+                  : '运输校验与适用边界'}
+            </summary>
             <p>
               {result.validation.valid
                 ? '运输载荷、需求完成量、事件互斥、作业窗口与归位校验通过。'
@@ -1018,7 +1075,13 @@ export default function DailyTransport({
                   换电绕行限额 · {limitDistance(snapshot?.swapDetourLimits?.maxExtraMeters)} ·{' '}
                   {limitTime(snapshot?.swapDetourLimits?.maxExtraMinutes)}。
                 </p>
-                <p>工位、库存、共享电源及 24 小时周期尚未校核。</p>
+                {turnover ? (
+                  <p>
+                    独立校验已核对工位占用、满电库存与站内充电。共享电源及 24 小时周期尚未校核。
+                  </p>
+                ) : (
+                  <p>工位、库存、共享电源及 24 小时周期尚未校核。</p>
+                )}
               </>
             ) : (
               <p>补能校核未完成，完整物理可行性尚未建立。</p>
