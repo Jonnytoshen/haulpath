@@ -625,6 +625,10 @@
   font-variant-numeric: tabular-nums;
 }
 
+.powerSummary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .ledgerSection {
   margin-top: 12px;
   border-bottom: 1px solid var(--border);
@@ -654,6 +658,10 @@
 @media (max-width: 720px) {
   .inventory {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .powerSummary {
+    grid-template-columns: 1fr;
   }
 
   .ledgerSection summary {

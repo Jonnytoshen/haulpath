@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
-import { BatteryCharging, Play, RefreshCw, Square, Warehouse } from 'lucide-react';
+import { BatteryCharging, Play, RefreshCw, Square, Warehouse, Zap } from 'lucide-react';
 import {
   PLANNING_NOTICE,
   formatKilometers,
@@ -26,6 +26,7 @@ import {
   stationClockTime,
 } from './daily-transport-station-ledger';
 import styles from './daily-transport.module.css';
+import { SharedPowerLedger } from './daily-transport-power-ledger';
 
 const statuses: Record<RoadTaskStatus, string> = {
   queued: '等待试算',
@@ -57,6 +58,7 @@ const stages: Record<DailyTransportStage, string> = {
   transport: '运输试算',
   'vehicle-energy': '车辆电量试算',
   'station-turnover': '站内周转试算',
+  'shared-power': '共享电源试算',
 };
 const stageName = (task?: DailyTransportTaskSummary | null) =>
   stages[task?.config.stage ?? 'transport'];
@@ -396,13 +398,21 @@ export default function DailyTransport({
       <p className={styles.boundary}>
         {energy ? (
           <>
-            <strong>{turnover ? '站内周转校核通过' : '车辆电量校核通过'}</strong>
+            <strong>
+              {result?.sharedPower
+                ? '共享电源校核通过'
+                : turnover
+                  ? '站内周转校核通过'
+                  : '车辆电量校核通过'}
+            </strong>
             {displayed &&
               displayed.inputVersion !== scenario.inputVersion &&
               `（输入版本 ${displayed.inputVersion} 的结果）`}
-            {turnover
-              ? ' · 共享电源及 24 小时周期尚未校核。'
-              : ' · 工位、库存、共享电源及 24 小时周期尚未校核。'}
+            {result?.sharedPower
+              ? ' · 24 小时周期尚未校核。'
+              : turnover
+                ? ' · 共享电源及 24 小时周期尚未校核。'
+                : ' · 工位、库存、共享电源及 24 小时周期尚未校核。'}
           </>
         ) : (
           <>
@@ -473,12 +483,20 @@ export default function DailyTransport({
                 {operation === 'vehicle-energy' ? '正在启动…' : '生成车辆电量试算'}
               </Button>
               <Button
-                className={`button${turnoverDisabled ? '' : ' primary'}`}
+                className="button"
                 disabled={turnoverDisabled}
                 onClick={() => void mutate('station-turnover')}
               >
                 <Warehouse aria-hidden="true" />
                 {operation === 'station-turnover' ? '正在启动…' : '生成站内周转试算'}
+              </Button>
+              <Button
+                className={`button${turnoverDisabled ? '' : ' primary'}`}
+                disabled={turnoverDisabled}
+                onClick={() => void mutate('shared-power')}
+              >
+                <Zap aria-hidden="true" />
+                {operation === 'shared-power' ? '正在启动…' : '生成共享电源试算'}
               </Button>
             </>
           )}
@@ -607,7 +625,7 @@ export default function DailyTransport({
         )}
         {turnoverGaps.length > 0 && (
           <details className={styles.gaps} open>
-            <summary>站内周转试算待补齐（{turnoverGaps.length} 项）</summary>
+            <summary>站内周转与共享电源试算待补齐（{turnoverGaps.length} 项）</summary>
             <ul>
               {turnoverGaps.map((gap, index) => (
                 <li key={`${index}-${gap}`}>{gap}</li>
@@ -737,6 +755,13 @@ export default function DailyTransport({
               <span>统一电池 {energyNumber(energy.batteryCapacityKwh)} kWh</span>
               <span>首日出发与换入电池均按满电试算</span>
             </p>
+          )}
+          {result.sharedPower && turnover && displayed && (
+            <SharedPowerLedger
+              key={`power-${displayed.taskId}`}
+              power={result.sharedPower}
+              turnover={turnover}
+            />
           )}
           {turnover && displayed && (
             <StationTurnoverLedger

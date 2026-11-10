@@ -10,7 +10,7 @@ const loadingLongitude = 121.43;
 const unloadingLongitude = 121.44;
 const stationLongitude = 122.15;
 
-export async function startVehicleEnergyApplication(t, { mode = 'dev' } = {}) {
+export async function startVehicleEnergyApplication(t, { mode = 'dev', extraDistances = [] } = {}) {
   const distances = new Map([
     [`${baseLongitude}:${loadingLongitude}`, 11000],
     [`${loadingLongitude}:${baseLongitude}`, 13000],
@@ -20,6 +20,7 @@ export async function startVehicleEnergyApplication(t, { mode = 'dev' } = {}) {
     [`${stationLongitude}:${unloadingLongitude}`, 80000],
     [`${unloadingLongitude}:${stationLongitude}`, 94000],
     [`${stationLongitude}:${loadingLongitude}`, 92000],
+    ...extraDistances,
   ]);
   const upstream = createServer((incoming, response) => {
     const url = new URL(incoming.url, 'http://127.0.0.1');

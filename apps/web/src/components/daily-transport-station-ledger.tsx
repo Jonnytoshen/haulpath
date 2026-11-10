@@ -20,6 +20,7 @@ const chargingWaitLabels: Record<StationChargeEvent['waitReasons'][number], stri
   'charge-window': '充电窗口',
   'charging-slot': '充电位占用',
   'local-power': '站内可用功率',
+  'shared-power': '共享电源功率占用或容量不足',
   horizon: '试算范围内未开始充电',
 };
 
@@ -47,7 +48,7 @@ function windowsText(windows: OperatingShift[]) {
     .join('、');
 }
 
-function LedgerTable({ label, children }: { label: string; children: ReactNode }) {
+export function LedgerTable({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div
       className={styles.tableScroll}
@@ -139,6 +140,7 @@ export function StationTurnoverLedger({
           <label>
             站址
             <NativeSelect
+              aria-label="站址"
               value={station.stationId}
               onChange={(event) => setStationId(event.target.value)}
             >
