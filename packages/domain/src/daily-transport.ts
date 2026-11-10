@@ -6,6 +6,7 @@ import { transportDemandIssue } from './transport-demands';
 import type { PreparedRoad, RoadTaskStatus } from './directed-roads';
 import { directedRoadKey } from './directed-roads';
 import type { VehicleEnergyResult } from './vehicle-energy';
+import type { StationTurnoverResult } from './station-turnover';
 
 export const DAILY_TRANSPORT_ALGORITHM_VERSION = 'daily-transport-greedy-1';
 
@@ -14,10 +15,12 @@ export interface DailyTransportSnapshot {
   roads: PreparedRoad[];
   revision: number;
 }
+export type DailyTransportStage = 'transport' | 'vehicle-energy' | 'station-turnover';
+
 export interface DailyTransportConfig {
   seed: number;
   maxRuntimeMs: number;
-  stage?: 'transport' | 'vehicle-energy';
+  stage?: DailyTransportStage;
 }
 export interface DailyTransportProgress {
   completedTrips: number;
@@ -112,6 +115,7 @@ export interface DailyTransportResult {
   validation: DailyTransportValidation;
   energyStatus: 'not-checked' | 'checked';
   vehicleEnergy?: VehicleEnergyResult;
+  stationTurnover?: StationTurnoverResult;
   physicalFeasibility: 'not-established';
   limitations: string[];
 }
@@ -139,6 +143,7 @@ export interface DailyTransportView {
   inputVersion: number;
   gaps: string[];
   vehicleEnergyGaps: string[];
+  stationTurnoverGaps: string[];
   task: DailyTransportTaskSummary | null;
   tasks: DailyTransportTaskSummary[];
   resultTask: DailyTransportTask | null;
@@ -165,6 +170,28 @@ export function dailyTransportTripShift(
     )
   );
 }
+/** Connect access and return drives to the same shift as the adjacent trip. */
+export function dailyTransportEventShifts(
+  vehicle: DailyTransportVehicle,
+  trips: Map<string, DailyTransportTrip>,
+): Map<string, OperatingShift | undefined> {
+  const shifts = new Map(
+    vehicle.tripIds.map((tripId) => [
+      tripId,
+      dailyTransportTripShift(trips.get(tripId)!, vehicle.shifts),
+    ]),
+  );
+  return new Map(
+    vehicle.events.map((event, index) => {
+      const adjacent =
+        event.kind === 'continuation'
+          ? vehicle.events[index + 1]?.tripId
+          : vehicle.events[index - 1]?.tripId;
+      return [event.id, shifts.get(event.tripId ?? adjacent ?? '')];
+    }),
+  );
+}
+
 function close(a: number, b: number): boolean {
   return (
     Number.isFinite(a) &&

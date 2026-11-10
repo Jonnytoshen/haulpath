@@ -7,21 +7,10 @@ import { createServer } from 'node:http';
 import { startApplication, jsonRequest } from './helpers/application.mjs';
 import { roadResponse } from './helpers/directed-road-fixture.mjs';
 import {
+  openDailyPlan,
   dailyTransportFixture,
   waitDailyTransportTask,
 } from './helpers/daily-transport-fixture.mjs';
-
-async function openDailyPlan(page, baseUrl, project, scenario) {
-  await page.goto(baseUrl);
-  const expand = page.getByRole('button', { name: '展开项目与线路', exact: true });
-  if (await expand.isVisible()) await expand.click();
-  await page.getByRole('button', { name: project.name, exact: true }).click();
-  if (await expand.isVisible()) await expand.click();
-  await page.getByRole('button', { name: '规划方案', exact: true }).click();
-  await page.getByRole('button', { name: `打开规划方案 ${scenario.name}`, exact: true }).click();
-  await page.getByRole('button', { name: '每日计划', exact: true }).click();
-  return page.getByRole('region', { name: '方案每日运输计划', exact: true });
-}
 
 test(
   'daily plan survives closing the page and exposes vehicle time, partial loads and unmet demand',

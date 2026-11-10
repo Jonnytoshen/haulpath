@@ -5,6 +5,7 @@ import type {
   DailyTransportProgress,
   DailyTransportResult,
   DailyTransportSnapshot,
+  DailyTransportStage,
   DailyTransportTask,
   DailyTransportTaskSummary,
   DailyTransportView,
@@ -14,9 +15,11 @@ import type {
 } from '@haulpath/domain';
 import {
   DAILY_TRANSPORT_ALGORITHM_VERSION,
+  DAILY_STATION_TURNOVER_ALGORITHM_VERSION,
   VEHICLE_ENERGY_ALGORITHM_VERSION,
   dailyTransportReadiness,
   stationNetworkReadiness,
+  stationTurnoverReadiness,
   vehicleEnergyReadiness,
 } from '@haulpath/domain';
 import type { DirectedRoadStorage } from './directed-road-storage';
@@ -28,6 +31,12 @@ const active = (task: DailyTransportTaskSummary) =>
 type SummaryRow = { summary: string };
 type DetailRow = { snapshot: string; result: string | null };
 
+const algorithmVersions: Record<DailyTransportStage, string> = {
+  transport: DAILY_TRANSPORT_ALGORITHM_VERSION,
+  'vehicle-energy': VEHICLE_ENERGY_ALGORITHM_VERSION,
+  'station-turnover': DAILY_STATION_TURNOVER_ALGORITHM_VERSION,
+};
+
 export function dailyTransportConfig(value: unknown): DailyTransportConfig {
   if (value === undefined) return { seed: 1, maxRuntimeMs: 600000 };
   if (!value || typeof value !== 'object' || Array.isArray(value))
@@ -36,7 +45,12 @@ export function dailyTransportConfig(value: unknown): DailyTransportConfig {
   if (Object.keys(input).some((key) => !['seed', 'maxRuntimeMs', 'stage'].includes(key)))
     throw new HttpError(400, '运输试算配置包含未知字段');
   const { stage } = input;
-  if (stage !== undefined && stage !== 'transport' && stage !== 'vehicle-energy')
+  if (
+    stage !== undefined &&
+    stage !== 'transport' &&
+    stage !== 'vehicle-energy' &&
+    stage !== 'station-turnover'
+  )
     throw new HttpError(400, '每日计划试算阶段无效');
   const seed = input.seed ?? 1;
   const maxRuntimeMs = input.maxRuntimeMs ?? 600000;
@@ -159,6 +173,7 @@ export class DailyTransportStorage {
       inputVersion: scenario.inputVersion,
       gaps: this.gaps(snapshot, roads.currentReady),
       vehicleEnergyGaps: vehicleEnergyReadiness(snapshot),
+      stationTurnoverGaps: stationTurnoverReadiness(snapshot),
       task: tasks[0] ?? null,
       tasks,
       resultTask: resultTask ? this.details(resultTask) : null,
@@ -178,12 +193,13 @@ export class DailyTransportStorage {
       const roads = this.roads.getView(projectId, scenarioId);
       const snapshot = this.snapshot(scenario, roads);
       const gaps = this.gaps(snapshot, roads.currentReady);
-      const energy = config.stage === 'vehicle-energy';
-      if (energy) gaps.push(...vehicleEnergyReadiness(snapshot));
+      const stage = config.stage ?? 'transport';
+      if (stage !== 'transport') gaps.push(...vehicleEnergyReadiness(snapshot));
+      if (stage === 'station-turnover') gaps.push(...stationTurnoverReadiness(snapshot));
       if (gaps.length) throw new HttpError(400, gaps.join('；'));
       const existing = this.list(scenario).find(active);
       if (existing) {
-        if ((existing.config.stage === 'vehicle-energy') !== energy)
+        if ((existing.config.stage ?? 'transport') !== stage)
           throw new HttpError(409, '当前方案已有另一阶段的试算，请等待完成或停止后再启动');
         return existing;
       }
@@ -193,9 +209,7 @@ export class DailyTransportStorage {
         scenarioId,
         inputVersion: scenario.inputVersion,
         status: 'queued',
-        algorithmVersion: energy
-          ? VEHICLE_ENERGY_ALGORITHM_VERSION
-          : DAILY_TRANSPORT_ALGORITHM_VERSION,
+        algorithmVersion: algorithmVersions[stage],
         config,
         progress: {
           completedTrips: 0,
@@ -254,11 +268,20 @@ export class DailyTransportStorage {
     return this.db.transaction(() => {
       const task = this.getSummary(projectId, scenarioId, taskId);
       if (task.status !== 'running') return false;
-      const energy = task.config.stage === 'vehicle-energy';
+      const stage = task.config.stage ?? 'transport';
+      const energy = result.vehicleEnergy;
+      const station = stage === 'station-turnover';
+      const stationStatus = station ? 'checked' : 'not-checked';
       if (
-        (energy
-          ? result.energyStatus !== 'checked' || !result.vehicleEnergy
-          : result.energyStatus !== 'not-checked' || result.vehicleEnergy !== undefined) ||
+        (stage === 'transport'
+          ? result.energyStatus !== 'not-checked' || energy !== undefined
+          : result.energyStatus !== 'checked' ||
+            !energy ||
+            energy.stationCapacityStatus !== stationStatus ||
+            energy.batteryInventoryStatus !== stationStatus ||
+            energy.sharedPowerStatus !== 'not-checked' ||
+            energy.periodicityStatus !== 'not-checked') ||
+        (station ? !result.stationTurnover : result.stationTurnover !== undefined) ||
         result.physicalFeasibility !== 'not-established' ||
         !result.validation.valid ||
         result.validation.issues.length ||

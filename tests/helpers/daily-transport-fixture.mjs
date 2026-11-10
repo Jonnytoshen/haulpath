@@ -241,3 +241,15 @@ export async function makeLongTransportWorkload(request, fixture) {
   await waitRoadTask(request, fixture.path, ready.body.task.taskId, 'completed');
   return fixture;
 }
+
+export async function openDailyPlan(page, baseUrl, project, scenario) {
+  await page.goto(baseUrl);
+  const expand = page.getByRole('button', { name: '展开项目与线路', exact: true });
+  if (await expand.isVisible()) await expand.click();
+  await page.getByRole('button', { name: project.name, exact: true }).click();
+  if (await expand.isVisible()) await expand.click();
+  await page.getByRole('button', { name: '规划方案', exact: true }).click();
+  await page.getByRole('button', { name: `打开规划方案 ${scenario.name}`, exact: true }).click();
+  await page.getByRole('button', { name: '每日计划', exact: true }).click();
+  return page.getByRole('region', { name: '方案每日运输计划', exact: true });
+}

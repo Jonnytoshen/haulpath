@@ -2,6 +2,7 @@ import type { PlanningScenarioContext, Strategy, TransportCycle } from './index'
 
 export interface BatterySpecification {
   capacityKwh: number | null;
+  /** Constant grid-side power for one battery. */
   chargePowerKw: number | null;
   chargeEfficiency: number | null;
   source: string;

@@ -12,6 +12,8 @@ export * from './scenario-comparison';
 export * from './directed-roads';
 export * from './daily-transport';
 export * from './vehicle-energy';
+export * from './daily-station-turnover';
+export * from './station-turnover';
 
 export type CoordinateSystem = 'GCJ-02' | 'WGS84';
 export const strategyGroups = [

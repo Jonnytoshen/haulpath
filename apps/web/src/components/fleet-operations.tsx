@@ -564,7 +564,7 @@ export default function FleetOperations({
           </dd>
         </div>
         <div>
-          <dt>等效充电功率</dt>
+          <dt>电网侧等效充电功率</dt>
           <dd>
             {display(operations.battery?.chargePowerKw)} <small>kW</small>
           </dd>
@@ -712,6 +712,9 @@ export default function FleetOperations({
             <fieldset className={styles.editorFields} disabled={busy || discarding}>
               <section className={styles.editorSection} aria-label="编辑统一电池">
                 <h4>统一电池规格</h4>
+                <p className={styles.helper} id="battery-charging-basis">
+                  等效充电功率按单块电池从电网取电的功率填写，补入电量为购电量乘以效率。
+                </p>
                 <div className={styles.fieldGrid}>
                   {(
                     [
@@ -725,6 +728,9 @@ export default function FleetOperations({
                       <Input
                         aria-label={label}
                         inputMode="decimal"
+                        aria-describedby={
+                          field === 'chargePowerKw' ? 'battery-charging-basis' : undefined
+                        }
                         value={editor.battery[field]}
                         onChange={(event) =>
                           setEditor({
