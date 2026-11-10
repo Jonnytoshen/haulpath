@@ -7,6 +7,7 @@ import type { PreparedRoad, RoadTaskStatus } from './directed-roads';
 import { directedRoadKey } from './directed-roads';
 import type { VehicleEnergyResult } from './vehicle-energy';
 import type { StationTurnoverResult } from './station-turnover';
+import type { SharedPowerResult } from './shared-power';
 
 export const DAILY_TRANSPORT_ALGORITHM_VERSION = 'daily-transport-greedy-1';
 
@@ -15,7 +16,8 @@ export interface DailyTransportSnapshot {
   roads: PreparedRoad[];
   revision: number;
 }
-export type DailyTransportStage = 'transport' | 'vehicle-energy' | 'station-turnover';
+export type DailyTransportStage =
+  'transport' | 'vehicle-energy' | 'station-turnover' | 'shared-power';
 
 export interface DailyTransportConfig {
   seed: number;
@@ -116,6 +118,7 @@ export interface DailyTransportResult {
   energyStatus: 'not-checked' | 'checked';
   vehicleEnergy?: VehicleEnergyResult;
   stationTurnover?: StationTurnoverResult;
+  sharedPower?: SharedPowerResult;
   physicalFeasibility: 'not-established';
   limitations: string[];
 }

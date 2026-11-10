@@ -16,6 +16,7 @@ import type {
 import {
   DAILY_TRANSPORT_ALGORITHM_VERSION,
   DAILY_STATION_TURNOVER_ALGORITHM_VERSION,
+  DAILY_SHARED_POWER_ALGORITHM_VERSION,
   VEHICLE_ENERGY_ALGORITHM_VERSION,
   dailyTransportReadiness,
   stationNetworkReadiness,
@@ -35,6 +36,7 @@ const algorithmVersions: Record<DailyTransportStage, string> = {
   transport: DAILY_TRANSPORT_ALGORITHM_VERSION,
   'vehicle-energy': VEHICLE_ENERGY_ALGORITHM_VERSION,
   'station-turnover': DAILY_STATION_TURNOVER_ALGORITHM_VERSION,
+  'shared-power': DAILY_SHARED_POWER_ALGORITHM_VERSION,
 };
 
 export function dailyTransportConfig(value: unknown): DailyTransportConfig {
@@ -49,7 +51,8 @@ export function dailyTransportConfig(value: unknown): DailyTransportConfig {
     stage !== undefined &&
     stage !== 'transport' &&
     stage !== 'vehicle-energy' &&
-    stage !== 'station-turnover'
+    stage !== 'station-turnover' &&
+    stage !== 'shared-power'
   )
     throw new HttpError(400, '每日计划试算阶段无效');
   const seed = input.seed ?? 1;
@@ -195,7 +198,8 @@ export class DailyTransportStorage {
       const gaps = this.gaps(snapshot, roads.currentReady);
       const stage = config.stage ?? 'transport';
       if (stage !== 'transport') gaps.push(...vehicleEnergyReadiness(snapshot));
-      if (stage === 'station-turnover') gaps.push(...stationTurnoverReadiness(snapshot));
+      if (stage === 'station-turnover' || stage === 'shared-power')
+        gaps.push(...stationTurnoverReadiness(snapshot));
       if (gaps.length) throw new HttpError(400, gaps.join('；'));
       const existing = this.list(scenario).find(active);
       if (existing) {
@@ -270,7 +274,8 @@ export class DailyTransportStorage {
       if (task.status !== 'running') return false;
       const stage = task.config.stage ?? 'transport';
       const energy = result.vehicleEnergy;
-      const station = stage === 'station-turnover';
+      const sharedPower = stage === 'shared-power';
+      const station = stage === 'station-turnover' || sharedPower;
       const stationStatus = station ? 'checked' : 'not-checked';
       if (
         (stage === 'transport'
@@ -279,9 +284,10 @@ export class DailyTransportStorage {
             !energy ||
             energy.stationCapacityStatus !== stationStatus ||
             energy.batteryInventoryStatus !== stationStatus ||
-            energy.sharedPowerStatus !== 'not-checked' ||
+            energy.sharedPowerStatus !== (sharedPower ? 'checked' : 'not-checked') ||
             energy.periodicityStatus !== 'not-checked') ||
         (station ? !result.stationTurnover : result.stationTurnover !== undefined) ||
+        (sharedPower ? !result.sharedPower : result.sharedPower !== undefined) ||
         result.physicalFeasibility !== 'not-established' ||
         !result.validation.valid ||
         result.validation.issues.length ||

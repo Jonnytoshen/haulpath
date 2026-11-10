@@ -14,6 +14,7 @@ export * from './daily-transport';
 export * from './vehicle-energy';
 export * from './daily-station-turnover';
 export * from './station-turnover';
+export * from './shared-power';
 
 export type CoordinateSystem = 'GCJ-02' | 'WGS84';
 export const strategyGroups = [

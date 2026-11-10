@@ -3,9 +3,11 @@ import type { OperatingShift } from './fleet-operations';
 import { REPRESENTATIVE_DAY_MINUTES, representativeDayIntervals } from './operating-windows';
 import { stationNetworkReadiness } from './station-network';
 import type { VehicleEnergyEvent, VehicleEnergyResult } from './vehicle-energy';
+import { createSharedPowerCalendar, powerFits } from './shared-power';
 
 export type StationSwapWaitReason = 'service-window' | 'bay' | 'full-battery';
-export type StationChargeWaitReason = 'charge-window' | 'charging-slot' | 'local-power' | 'horizon';
+export type StationChargeWaitReason =
+  'charge-window' | 'charging-slot' | 'local-power' | 'shared-power' | 'horizon';
 
 export interface StationSwapArrival {
   stationId: string;
@@ -131,13 +133,6 @@ function chargingIntervals(windows: OperatingShift[]): OperatingShift[] {
   return intervals;
 }
 
-function powerFits(powerKw: number, limitKw: number): boolean {
-  return (
-    Number.isFinite(powerKw) &&
-    (powerKw <= limitKw || powerKw - limitKw <= limitKw * (4 * Number.EPSILON))
-  );
-}
-
 function chargingCapacity(basis: StationBasis, gridPowerKw: number): number {
   const limit = Math.min(basis.stationPowerKw, basis.sitePowerKw);
   const count = Math.min(basis.chargingSlots, Math.ceil(limit / gridPowerKw));
@@ -181,6 +176,7 @@ const chargeWaitLabels: Record<StationChargeWaitReason, string> = {
   'charge-window': '充电窗口无法安排连续充电',
   'charging-slot': '充电位占用',
   'local-power': '站内功率上限或站址可用功率不足',
+  'shared-power': '共享电源功率占用或容量不足',
   horizon: '试算范围内未开始充电',
 };
 
@@ -191,7 +187,11 @@ function chargeStatus(
   return endMinute === null ? 'pending' : endMinute <= horizonMinute ? 'full' : 'charging';
 }
 
-function createStationLedger(station: StationCalendar, input: StationTurnoverInput) {
+function createStationLedger(
+  station: StationCalendar,
+  input: StationTurnoverInput,
+  sharedPower?: ReturnType<typeof createSharedPowerCalendar>,
+) {
   const { basis } = station;
   const { capacityKwh, gridPowerKw, efficiency, horizonMinute } = input;
   const maxConcurrent = chargingCapacity(basis, gridPowerKw);
@@ -234,8 +234,18 @@ function createStationLedger(station: StationCalendar, input: StationTurnoverInp
       const readyMinute = Math.max(swap.endMinute, charger.readyMinute);
       if (readyMinute > swap.endMinute)
         waitReasons.push(maxConcurrent < basis.chargingSlots ? 'local-power' : 'charging-slot');
-      const start = nextWindowStart(station.chargeWindows, readyMinute, duration);
-      if (start === null || start > readyMinute) waitReasons.push('charge-window');
+      const reservation = sharedPower?.reserve(
+        station.chargeWindows,
+        readyMinute,
+        duration,
+        horizonMinute,
+      );
+      const start = reservation
+        ? reservation.startMinute
+        : nextWindowStart(station.chargeWindows, readyMinute, duration);
+      if (reservation?.sharedWait) waitReasons.push('shared-power');
+      if (reservation ? reservation.windowWait : start === null || start > readyMinute)
+        waitReasons.push('charge-window');
       if (start !== null && start < horizonMinute) {
         const end = start + duration;
         if (!Number.isFinite(end)) throw failedSwap(station, swap, '充电结束时间超出试算数值范围');
@@ -352,12 +362,23 @@ function createStationLedger(station: StationCalendar, input: StationTurnoverInp
 }
 
 /** The caller submits actual arrivals in time order, breaking simultaneous ties consistently. */
-export function createStationTurnover(snapshot: DailyTransportSnapshot) {
+export function createStationTurnover(snapshot: DailyTransportSnapshot, sharedPower = false) {
   const gaps = stationTurnoverReadiness(snapshot);
   if (gaps.length) throw new Error(gaps.join('；'));
   const input = stationTurnoverInput(snapshot);
+  const sources = new Map(
+    sharedPower
+      ? snapshot.context.stationNetwork!.powerSources.map((source) => [
+          source.id,
+          createSharedPowerCalendar(source.point.availableCapacityKw!, input.gridPowerKw),
+        ])
+      : [],
+  );
   const stations = new Map(
-    input.stations.map((station) => [station.basis.stationId, createStationLedger(station, input)]),
+    input.stations.map((station) => [
+      station.basis.stationId,
+      createStationLedger(station, input, sources.get(station.basis.powerSourceId)),
+    ]),
   );
   return {
     scheduleSwap(

@@ -8,6 +8,7 @@ import {
   type DailyTransportVehicle,
 } from './daily-transport';
 import type { OperatingShift } from './fleet-operations';
+import { buildSharedPowerLedger, validateSharedPower } from './shared-power';
 import {
   createStationTurnover,
   stationTurnoverReadiness,
@@ -23,6 +24,7 @@ import {
 } from './vehicle-energy';
 
 export const DAILY_STATION_TURNOVER_ALGORITHM_VERSION = 'daily-station-turnover-1';
+export const DAILY_SHARED_POWER_ALGORITHM_VERSION = 'daily-shared-power-1';
 
 interface VehicleSchedule {
   vehicle: DailyTransportVehicle;
@@ -132,12 +134,29 @@ export function generateDailyStationTurnover(
   onProgress?: (progress: DailyTransportProgress) => void,
   config: DailyTransportConfig = { seed: 1, maxRuntimeMs: 10 * 60 * 1000 },
 ): DailyTransportResult {
+  return generateStationPlan(snapshot, onProgress, config, false);
+}
+
+export function generateDailySharedPower(
+  snapshot: DailyTransportSnapshot,
+  onProgress?: (progress: DailyTransportProgress) => void,
+  config: DailyTransportConfig = { seed: 1, maxRuntimeMs: 10 * 60 * 1000 },
+): DailyTransportResult {
+  return generateStationPlan(snapshot, onProgress, config, true);
+}
+
+function generateStationPlan(
+  snapshot: DailyTransportSnapshot,
+  onProgress: ((progress: DailyTransportProgress) => void) | undefined,
+  config: DailyTransportConfig,
+  sharedPower: boolean,
+): DailyTransportResult {
   const deadline = Date.now() + config.maxRuntimeMs;
   const gaps = stationTurnoverReadiness(snapshot);
   if (gaps.length) throw new Error(gaps.join('；'));
   const result = generateVehicleEnergy(snapshot, onProgress, config);
   const energy = result.vehicleEnergy!;
-  const station = createStationTurnover(snapshot);
+  const station = createStationTurnover(snapshot, sharedPower);
   const sites = new Map(snapshot.context.stationNetwork?.sites.map((site) => [site.id, site.name]));
   const trips = new Map(result.trips.map((trip) => [trip.id, trip]));
   const vehicles = new Map(result.vehicles.map((vehicle) => [vehicle.vehicleId, vehicle]));
@@ -192,17 +211,30 @@ export function generateDailyStationTurnover(
       (sum, event) => sum + (event.endMinute - event.startMinute),
       0,
     );
-  result.algorithmVersion = DAILY_STATION_TURNOVER_ALGORITHM_VERSION;
+  result.algorithmVersion = sharedPower
+    ? DAILY_SHARED_POWER_ALGORITHM_VERSION
+    : DAILY_STATION_TURNOVER_ALGORITHM_VERSION;
   energy.stationCapacityStatus = 'checked';
   energy.batteryInventoryStatus = 'checked';
   result.stationTurnover = station.finish();
+  if (sharedPower) {
+    energy.sharedPowerStatus = 'checked';
+    result.sharedPower = buildSharedPowerLedger(snapshot, result.stationTurnover);
+  }
   result.limitations = [
-    '已校核车辆、换电工位、满电库存和站内充电。共享电源与 24 小时周期尚待校核。',
+    sharedPower
+      ? '已校核车辆、换电工位、库存、连续充电及共享电源。24 小时周期尚待校核。'
+      : '已校核车辆、换电工位、满电库存和站内充电。共享电源与 24 小时周期尚待校核。',
     '首日车辆与站内备电池按满电起算，后续按实际事件延续。',
     '沿车辆电量试算选定的车次、班次及换电访问，按实际到站顺序安排站内服务。试算失败不证明布局无解。',
+    ...(sharedPower
+      ? [
+          '按实际到站顺序预订完整连续充电区间，跨站可填补已有预订之前的空档；不重排已预订区间。购电仅统计账目截止前的实际占用，未按电价优化。',
+        ]
+      : []),
     ...result.limitations.slice(3),
   ];
-  result.validation = validateDailyStationTurnover(snapshot, result);
+  result.validation = validateDailyStationTurnover(snapshot, result, sharedPower);
   if (!result.validation.valid)
     throw new Error(`站内周转独立校验未通过：${result.validation.issues.join('；')}`);
   return result;
@@ -211,15 +243,21 @@ export function generateDailyStationTurnover(
 function validateDailyStationTurnover(
   snapshot: DailyTransportSnapshot,
   result: DailyTransportResult,
+  sharedPower: boolean,
 ): DailyTransportValidation {
   const energy = result.vehicleEnergy;
   const ledger = result.stationTurnover;
   if (
-    result.algorithmVersion !== DAILY_STATION_TURNOVER_ALGORITHM_VERSION ||
+    result.algorithmVersion !==
+      (sharedPower
+        ? DAILY_SHARED_POWER_ALGORITHM_VERSION
+        : DAILY_STATION_TURNOVER_ALGORITHM_VERSION) ||
     !energy ||
     !ledger ||
     energy.stationCapacityStatus !== 'checked' ||
-    energy.batteryInventoryStatus !== 'checked'
+    energy.batteryInventoryStatus !== 'checked' ||
+    energy.sharedPowerStatus !== (sharedPower ? 'checked' : 'not-checked') ||
+    (sharedPower ? !result.sharedPower : result.sharedPower !== undefined)
   )
     return { valid: false, issues: ['站内周转阶段依据不一致'] };
 
@@ -227,12 +265,16 @@ function validateDailyStationTurnover(
     ...result,
     algorithmVersion: VEHICLE_ENERGY_ALGORITHM_VERSION,
     stationTurnover: undefined,
+    sharedPower: undefined,
     vehicleEnergy: {
       ...energy,
       stationCapacityStatus: 'not-checked',
       batteryInventoryStatus: 'not-checked',
+      sharedPowerStatus: 'not-checked',
     },
   });
   if (!vehicles.valid) return vehicles;
-  return validateStationTurnover(snapshot, energy, ledger);
+  const stations = validateStationTurnover(snapshot, energy, ledger);
+  if (!stations.valid || !sharedPower) return stations;
+  return validateSharedPower(snapshot, ledger, result.sharedPower!);
 }

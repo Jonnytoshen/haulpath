@@ -1,6 +1,7 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import {
   generateDailyStationTurnover,
+  generateDailySharedPower,
   generateDailyTransport,
   generateVehicleEnergy,
 } from '@haulpath/domain';
@@ -25,6 +26,7 @@ try {
     transport: generateDailyTransport,
     'vehicle-energy': generateVehicleEnergy,
     'station-turnover': generateDailyStationTurnover,
+    'shared-power': generateDailySharedPower,
   };
   const generate = generators[data.config.stage ?? 'transport'];
   const result = generate(

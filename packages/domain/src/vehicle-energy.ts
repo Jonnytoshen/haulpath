@@ -63,7 +63,7 @@ export interface VehicleEnergyResult {
   vehicles: VehicleEnergyTimeline[];
   stationCapacityStatus: 'not-checked' | 'checked';
   batteryInventoryStatus: 'not-checked' | 'checked';
-  sharedPowerStatus: 'not-checked';
+  sharedPowerStatus: 'not-checked' | 'checked';
   periodicityStatus: 'not-checked';
 }
 
