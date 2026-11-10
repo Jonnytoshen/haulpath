@@ -83,7 +83,10 @@ test(
     const failed = await startTurnover();
     assert.equal(failed.status, 'failed', failed.error ?? failed.status);
     assert.equal(failed.result, null);
-    await region.getByText(/人工确认换电站.*服务窗口/).waitFor();
+    await region
+      .getByRole('status')
+      .filter({ hasText: /人工确认换电站.*服务窗口/ })
+      .waitFor();
     await region.getByText(/这是旧输入版本的保存结果/).waitFor();
     await heading.waitFor();
     await waited.waitFor();
