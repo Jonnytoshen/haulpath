@@ -2,11 +2,68 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { sharedPowerFixture, sharedPowerDistances } from './helpers/shared-power-fixture.mjs';
 import { startVehicleEnergyApplication } from './helpers/vehicle-energy-fixture.mjs';
-import { stationNetworkInputs } from './helpers/daily-transport-fixture.mjs';
+import { operationInputs, stationNetworkInputs } from './helpers/daily-transport-fixture.mjs';
 import { jsonRequest, startApplication } from './helpers/application.mjs';
 
 const near = (actual, expected) =>
   assert.ok(Math.abs(actual - expected) < 1e-7, `Expected ${expected}, got ${actual}`);
+
+test(
+  'a short local charge fills the idle gap before a shared-power-delayed reservation',
+  { timeout: 180000 },
+  async (t) => {
+    const { request } = await startVehicleEnergyApplication(t, {
+      extraDistances: sharedPowerDistances,
+    });
+    const model = await sharedPowerFixture(request, { perStation: 1, endMinute: 920 });
+    const operations = operationInputs(model.scenario.context.operations);
+    operations.vehicleGroups[0].count = 3;
+    const secondCycle = model.scenario.context.transportCycles.at(-1);
+    const direct = operations.measuredSegments.find(
+      (segment) =>
+        segment.cycleId === secondCycle.id &&
+        segment.fromPositionId === secondCycle.positions[0].id,
+    );
+    direct.emptyKwh = direct.fullKwh = 275;
+    await model.save('/operations', 'PUT', { operations });
+    await model.save('/demands', 'PUT', {
+      demands: model.scenario.context.transportDemands.map((demand) => ({
+        ...demand,
+        dailyTonnes: demand.cycleId === model.cycle.id ? 10 : 11,
+      })),
+    });
+    let network = stationNetworkInputs(model.scenario.context.stationNetwork);
+    network.stationTypes[0].swapMinutes = 50;
+    network.stationTypes[0].bays = 1;
+    network.stationTypes[0].chargingSlots = 1;
+    network.stationTypes.push({
+      ...network.stationTypes[0],
+      id: undefined,
+      name: '快速双库存站型',
+      swapMinutes: 1,
+      batteryInventory: 2,
+    });
+    await model.save('/station-network', 'PUT', { network });
+    network = stationNetworkInputs(model.scenario.context.stationNetwork);
+    network.fixedLayout[1].stationTypeId = network.stationTypes[1].id;
+    await model.save('/station-network', 'PUT', { network });
+    const task = await model.startSharedPower();
+    const [slow, fast] = task.result.stationTurnover.stations;
+    near(slow.charges[0].startMinute, 606);
+    near(slow.charges[0].endMinute, 678 + 7 / 9);
+    assert.equal(fast.charges.length, 2);
+    const long = fast.charges.find((charge) => charge.returnedKwh === 169);
+    const short = fast.charges.find((charge) => charge.returnedKwh === 223);
+    assert.ok(long && short);
+    near(long.startMinute, 678 + 7 / 9);
+    // A 1 tonne tail load uses 77 kWh before swapping: 42 7/9 min at 108 kW net.
+    // The local charger is free 558..606 despite its existing booking at 678 7/9.
+    near(short.returnedMinute, 558);
+    near(short.startMinute, 558);
+    near(short.endMinute, 600 + 7 / 9);
+    assert.equal(task.result.validation.valid, true);
+  },
+);
 
 test(
   'shared supply staggers two stations and propagates full-battery waiting into vehicle return',

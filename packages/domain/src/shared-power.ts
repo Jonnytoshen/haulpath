@@ -40,6 +40,10 @@ export function powerFits(powerKw: number, limitKw: number): boolean {
 }
 
 type Reservation = { startMinute: number; endMinute: number };
+interface ChargingCalendar {
+  conflictEnd(start: number, end: number): number | null;
+  book(startMinute: number, endMinute: number): void;
+}
 
 /** Immutable reservations may arrive out of release order across stations. Search all gaps. */
 export function createSharedPowerCalendar(capacityKw: number, gridPowerKw: number) {
@@ -58,24 +62,47 @@ export function createSharedPowerCalendar(capacityKw: number, gridPowerKw: numbe
     return null;
   }
 
+  function book(startMinute: number, endMinute: number) {
+    reservations.push({ startMinute, endMinute });
+  }
+
   return {
-    reserve(windows: OperatingShift[], ready: number, duration: number, horizon: number) {
+    conflictEnd,
+    book,
+    reserve(
+      windows: OperatingShift[],
+      ready: number,
+      duration: number,
+      horizon: number,
+      local?: ChargingCalendar,
+    ) {
       let sharedWait = capacity < 1;
-      if (sharedWait) return { startMinute: null, sharedWait, windowWait: false };
+      let localWait = false;
+      if (sharedWait) return { startMinute: null, sharedWait, localWait, windowWait: false };
       for (const window of windows) {
         let start = Math.max(ready, window.startMinute);
         while (start + duration <= window.endMinute + 1e-7) {
           const end = start + duration;
           const conflict = conflictEnd(start, end);
-          if (conflict === null) {
-            if (start < horizon) reservations.push({ startMinute: start, endMinute: end });
-            return { startMinute: start, sharedWait, windowWait: window.startMinute > ready };
+          const localConflict = local?.conflictEnd(start, end) ?? null;
+          if (conflict === null && localConflict === null) {
+            if (start < horizon) {
+              book(start, end);
+              local?.book(start, end);
+            }
+            return {
+              startMinute: start,
+              sharedWait,
+              localWait,
+              windowWait: window.startMinute > ready,
+            };
           }
-          sharedWait = true;
-          start = conflict;
+          if (conflict !== null) sharedWait = true;
+          if (localConflict !== null) localWait = true;
+          start = Math.max(conflict ?? start, localConflict ?? start);
         }
       }
-      return { startMinute: null, sharedWait, windowWait: true };
+      return { startMinute: null, sharedWait, localWait, windowWait: true };
     },
   };
 }

@@ -195,6 +195,9 @@ function createStationLedger(
   const { basis } = station;
   const { capacityKwh, gridPowerKw, efficiency, horizonMinute } = input;
   const maxConcurrent = chargingCapacity(basis, gridPowerKw);
+  const localCalendar = sharedPower
+    ? createSharedPowerCalendar(maxConcurrent * gridPowerKw, gridPowerKw)
+    : undefined;
   const swaps: StationSwapEvent[] = [];
   const charges: StationChargeEvent[] = [];
   const bayReleases: number[] = [];
@@ -230,27 +233,30 @@ function createStationLedger(
     } else if (!maxConcurrent) {
       waitReasons.push('local-power');
     } else {
-      const charger = nextResource(chargerReleases, maxConcurrent, swap.endMinute);
-      const readyMinute = Math.max(swap.endMinute, charger.readyMinute);
-      if (readyMinute > swap.endMinute)
-        waitReasons.push(maxConcurrent < basis.chargingSlots ? 'local-power' : 'charging-slot');
+      const charger = sharedPower
+        ? undefined
+        : nextResource(chargerReleases, maxConcurrent, swap.endMinute);
+      const readyMinute = Math.max(swap.endMinute, charger?.readyMinute ?? 0);
       const reservation = sharedPower?.reserve(
         station.chargeWindows,
         readyMinute,
         duration,
         horizonMinute,
+        localCalendar,
       );
       const start = reservation
         ? reservation.startMinute
         : nextWindowStart(station.chargeWindows, readyMinute, duration);
       if (reservation?.sharedWait) waitReasons.push('shared-power');
+      if (reservation?.localWait || readyMinute > swap.endMinute)
+        waitReasons.push(maxConcurrent < basis.chargingSlots ? 'local-power' : 'charging-slot');
       if (reservation ? reservation.windowWait : start === null || start > readyMinute)
         waitReasons.push('charge-window');
       if (start !== null && start < horizonMinute) {
         const end = start + duration;
         if (!Number.isFinite(end)) throw failedSwap(station, swap, '充电结束时间超出试算数值范围');
         if (!(end > start)) throw failedSwap(station, swap, '充电时长小于试算时间精度');
-        chargerReleases[charger.index] = end;
+        if (charger) chargerReleases[charger.index] = end;
         startMinute = start;
         endMinute = end;
       } else if (start !== null) waitReasons.push('horizon');
