@@ -283,3 +283,5 @@ export function cycleReadiness(cycle: TransportCycle, operations?: FleetOperatio
 }
 
 export * from './repeatable-day';
+
+export * from './daily-transport-search';
