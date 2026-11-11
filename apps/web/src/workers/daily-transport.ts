@@ -3,6 +3,7 @@ import {
   generateDailyStationTurnover,
   generateDailySharedPower,
   generateDailyTransport,
+  generateRepeatableDay,
   generateVehicleEnergy,
 } from '@haulpath/domain';
 import type {
@@ -27,6 +28,7 @@ try {
     'vehicle-energy': generateVehicleEnergy,
     'station-turnover': generateDailyStationTurnover,
     'shared-power': generateDailySharedPower,
+    'repeatable-day': generateRepeatableDay,
   };
   const generate = generators[data.config.stage ?? 'transport'];
   const result = generate(

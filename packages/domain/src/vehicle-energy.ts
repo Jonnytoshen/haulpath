@@ -56,7 +56,7 @@ export interface VehicleEnergyTimeline {
 
 export interface VehicleEnergyResult {
   batteryCapacityKwh: number;
-  initialSocPercent: 100;
+  initialSocPercent: 100 | 'periodic';
   replacementSocPercent: 100;
   totalDistanceMeters: number;
   swapCount: number;
@@ -64,7 +64,7 @@ export interface VehicleEnergyResult {
   stationCapacityStatus: 'not-checked' | 'checked';
   batteryInventoryStatus: 'not-checked' | 'checked';
   sharedPowerStatus: 'not-checked' | 'checked';
-  periodicityStatus: 'not-checked';
+  periodicityStatus: 'not-checked' | 'checked';
 }
 
 type EnergyUse = Pick<VehicleEnergyEvent, 'energyKwh' | 'energySource' | 'measuredEnergySegmentId'>;
@@ -444,10 +444,18 @@ function solveVehicle(
   capacityKwh: number,
   reserveKwh: number,
   deadline: number,
+  initialKwh = capacityKwh,
+  requireSwap = false,
 ): Label {
   const usableKwh = capacityKwh - reserveKwh;
   let frontier: Label[] = [
-    { minute: 0, charge: fullCharge, swapCount: 0, previous: null, visit: null },
+    {
+      minute: 0,
+      charge: { usedKwh: capacityKwh - initialKwh, correctionKwh: 0 },
+      swapCount: 0,
+      previous: null,
+      visit: null,
+    },
   ];
   for (const [index, step] of steps.entries()) {
     if (Date.now() > deadline) throw new Error('车辆电量试算达到时限，未发布阶段结果');
@@ -499,6 +507,9 @@ function solveVehicle(
     }
     frontier = preferredLabels(next);
   }
+  if (requireSwap) frontier = frontier.filter((label) => label.swapCount > 0);
+  if (!frontier.length)
+    throw new Error(`车辆 ${vehicle.vehicleId} 未找到可恢复周期电量的换电安排；不证明全局无解`);
   return frontier.reduce((preferred, label) =>
     label.swapCount < preferred.swapCount ? label : preferred,
   );
@@ -585,6 +596,7 @@ function timeline(
   last: Label,
   capacityKwh: number,
   reserveKwh: number,
+  initialKwh = capacityKwh,
 ): VehicleEnergyTimeline {
   const usableKwh = capacityKwh - reserveKwh;
   const chargeKwh = (charge: Charge) => remainingCharge(charge, capacityKwh, reserveKwh);
@@ -623,7 +635,7 @@ function timeline(
   });
   return {
     vehicleId,
-    initialKwh: capacityKwh,
+    initialKwh,
     finalKwh: chargeKwh(last.charge),
     safetyKwh: reserveKwh,
     consumedKwh: events.reduce((sum, event) => sum + event.energyKwh, 0),
@@ -644,11 +656,17 @@ function inputMaps(snapshot: DailyTransportSnapshot, result: DailyTransportResul
   };
 }
 
+export interface VehicleEnergyStart {
+  initialKwh: ReadonlyMap<string, number>;
+  requireSwap: boolean;
+}
+
 /** Keep the checked 09 schedule as the direct basis, then look ahead along each vehicle's work. */
 export function generateVehicleEnergy(
   snapshot: DailyTransportSnapshot,
   onProgress?: (progress: DailyTransportProgress) => void,
   config: DailyTransportConfig = { seed: 1, maxRuntimeMs: 10 * 60 * 1000 },
+  start?: VehicleEnergyStart,
 ): DailyTransportResult {
   const deadline = Date.now() + config.maxRuntimeMs;
   const gaps = vehicleEnergyReadiness(snapshot);
@@ -665,8 +683,22 @@ export function generateVehicleEnergy(
       throw new Error(`车辆 ${vehicle.vehicleId}（${group.name}）安全电量待配置`);
     }
     const steps = stepsForVehicle(inputs, vehicle, group);
-    const plan = solveVehicle(vehicle, steps, capacityKwh, reserveKwh, deadline);
-    vehicles.push(timeline(vehicle.vehicleId, steps, plan, capacityKwh, reserveKwh));
+    const initialKwh = start?.initialKwh.get(vehicle.vehicleId) ?? capacityKwh;
+    if (!Number.isFinite(initialKwh) || initialKwh < reserveKwh || initialKwh > capacityKwh)
+      throw new Error(`车辆 ${vehicle.vehicleId} 的周期出发电量无效`);
+    const requireSwap =
+      start?.requireSwap &&
+      steps.some((step) => typeof step.direct !== 'string' && step.direct.energyKwh > 0);
+    const plan = solveVehicle(
+      vehicle,
+      steps,
+      capacityKwh,
+      reserveKwh,
+      deadline,
+      initialKwh,
+      requireSwap,
+    );
+    vehicles.push(timeline(vehicle.vehicleId, steps, plan, capacityKwh, reserveKwh, initialKwh));
   }
   const result: DailyTransportResult = {
     ...baseline,
@@ -674,7 +706,7 @@ export function generateVehicleEnergy(
     energyStatus: 'checked',
     vehicleEnergy: {
       batteryCapacityKwh: capacityKwh,
-      initialSocPercent: 100,
+      initialSocPercent: start ? 'periodic' : 100,
       replacementSocPercent: 100,
       totalDistanceMeters: vehicles.reduce((sum, vehicle) => sum + vehicle.totalDistanceMeters, 0),
       swapCount: vehicles.reduce(
@@ -694,7 +726,7 @@ export function generateVehicleEnergy(
       ...baseline.limitations.slice(1),
     ],
   };
-  result.validation = validateVehicleEnergy(snapshot, result);
+  result.validation = validateVehicleEnergy(snapshot, result, start?.initialKwh);
   if (!result.validation.valid)
     throw new Error(`车辆电量独立校验未通过：${result.validation.issues.join('；')}`);
   return result;
@@ -747,11 +779,13 @@ function matchesEventBasis(event: VehicleEnergyEvent, expected: EventBasis): boo
 export function validateVehicleEnergy(
   snapshot: DailyTransportSnapshot,
   result: DailyTransportResult,
+  initialKwh?: ReadonlyMap<string, number>,
 ): DailyTransportValidation {
   const { issues } = validateDailyTransport(snapshot, {
     ...result,
     algorithmVersion: DAILY_TRANSPORT_ALGORITHM_VERSION,
     energyStatus: 'not-checked',
+    physicalFeasibility: 'not-established',
     vehicleEnergy: undefined,
   });
   issues.push(...vehicleEnergyReadiness(snapshot));
@@ -764,7 +798,7 @@ export function validateVehicleEnergy(
     result.energyStatus !== 'checked' ||
     result.physicalFeasibility !== 'not-established' ||
     energy.batteryCapacityKwh !== capacityKwh ||
-    energy.initialSocPercent !== 100 ||
+    energy.initialSocPercent !== (initialKwh ? 'periodic' : 100) ||
     energy.replacementSocPercent !== 100 ||
     energy.stationCapacityStatus !== 'not-checked' ||
     energy.batteryInventoryStatus !== 'not-checked' ||
@@ -789,14 +823,21 @@ export function validateVehicleEnergy(
       issues.push(`${prefix}安全电量或逐车电量账目缺失`);
       continue;
     }
-    if (actual.initialKwh !== capacityKwh || actual.safetyKwh !== reserve)
+    const initial = initialKwh?.get(vehicle.vehicleId) ?? capacityKwh;
+    if (
+      !Number.isFinite(initial) ||
+      initial < reserve ||
+      initial > capacityKwh ||
+      actual.initialKwh !== initial ||
+      actual.safetyKwh !== reserve
+    )
       issues.push(`${prefix}初始电量或安全余量不一致`);
     const steps = stepsForVehicle(inputs, vehicle, group);
     let cursor = 0;
     let previousMinute = 0;
     const usableKwh = capacityKwh - reserve;
     const chargeKwh = (charge: Charge) => remainingCharge(charge, capacityKwh, reserve);
-    let charge = fullCharge;
+    let charge = { usedKwh: capacityKwh - initial, correctionKwh: 0 };
     let consumedKwh = 0;
     let workingMinutes = 0;
     let distanceMeters = 0;

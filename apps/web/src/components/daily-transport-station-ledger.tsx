@@ -33,10 +33,12 @@ const chargeStatuses = {
 export function stationClockTime(minute: number) {
   const total = Math.round(minute * 60);
   const day = Math.floor(total / 86400);
-  const hour = String(Math.floor((total % 86400) / 3600)).padStart(2, '0');
-  const minuteOfHour = String(Math.floor((total % 3600) / 60)).padStart(2, '0');
-  const second = total % 60;
-  const dayLabel = day === 0 ? '' : day === 1 ? '次日 ' : `第 ${day + 1} 日 `;
+  const withinDay = ((total % 86400) + 86400) % 86400;
+  const hour = String(Math.floor(withinDay / 3600)).padStart(2, '0');
+  const minuteOfHour = String(Math.floor((withinDay % 3600) / 60)).padStart(2, '0');
+  const second = withinDay % 60;
+  const dayLabel =
+    day === 0 ? '' : day === -1 ? '前日 ' : day === 1 ? '次日 ' : `第 ${day + 1} 日 `;
   return `${dayLabel}${hour}:${minuteOfHour}${second ? `:${String(second).padStart(2, '0')}` : ''}`;
 }
 
@@ -166,7 +168,11 @@ export function StationTurnoverLedger({
       </p>
       <dl className={styles.inventory}>
         <div>
-          <dt>首日 00:00 满电</dt>
+          <dt>
+            {turnover.initialBatterySocPercent === 'periodic'
+              ? '周期 00:00 满电'
+              : '首日 00:00 满电'}
+          </dt>
           <dd>{energyNumber(station.initialFullBatteries)} 块</dd>
         </div>
         <div>
@@ -181,9 +187,17 @@ export function StationTurnoverLedger({
           <dt>截止时在充</dt>
           <dd>{energyNumber(charging)} 块</dd>
         </div>
+        {turnover.initialBatterySocPercent === 'periodic' && (
+          <div>
+            <dt>截止时服务中</dt>
+            <dd>{energyNumber(station.horizonInventory.inService ?? 0)} 块</dd>
+          </div>
+        )}
       </dl>
       <p className={styles.caption}>
-        首日站内备电按 {percent(turnover.initialBatterySocPercent)} SOC 起算，账目截至{' '}
+        {turnover.initialBatterySocPercent === 'periodic'
+          ? '按求得的周期初态衔接，账目截至 '
+          : `首日站内备电按 ${percent(turnover.initialBatterySocPercent)} SOC 起算，账目截至 `}
         {stationClockTime(turnover.horizonMinute)}。换电开始领用满电池，服务结束接收换下电池。
       </p>
       {stationType && (

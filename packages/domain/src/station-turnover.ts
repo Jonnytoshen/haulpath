@@ -51,14 +51,14 @@ export interface StationTurnoverLedger {
   stationPowerKw: number;
   sitePowerKw: number;
   initialFullBatteries: number;
-  horizonInventory: { full: number; pending: number; charging: number };
+  horizonInventory: { full: number; pending: number; charging: number; inService?: number };
   swaps: StationSwapEvent[];
   charges: StationChargeEvent[];
 }
 
 export interface StationTurnoverResult {
   horizonMinute: number;
-  initialBatterySocPercent: 100;
+  initialBatterySocPercent: 100 | 'periodic';
   stations: StationTurnoverLedger[];
 }
 
@@ -84,7 +84,10 @@ export function stationTurnoverReadiness(snapshot: DailyTransportSnapshot): stri
   return stationNetworkReadiness(snapshot.context);
 }
 
-function stationTurnoverInput(snapshot: DailyTransportSnapshot): StationTurnoverInput {
+function stationTurnoverInput(
+  snapshot: DailyTransportSnapshot,
+  repetitions = 1,
+): StationTurnoverInput {
   const { operations, stationNetwork } = snapshot.context;
   const battery = operations!.battery!;
   const network = stationNetwork!;
@@ -96,7 +99,9 @@ function stationTurnoverInput(snapshot: DailyTransportSnapshot): StationTurnover
     capacityKwh: battery.capacityKwh!,
     gridPowerKw: battery.chargePowerKw!,
     efficiency: battery.chargeEfficiency!,
-    horizonMinute,
+    // A finite periodic witness includes a trailing charging day, without new vehicle work.
+    horizonMinute:
+      horizonMinute + (repetitions === 1 ? 0 : repetitions) * REPRESENTATIVE_DAY_MINUTES,
     stations: network.fixedLayout.map(({ siteId, stationTypeId }) => {
       const site = network.sites.find((candidate) => candidate.id === siteId)!;
       const type = network.stationTypes.find((candidate) => candidate.id === stationTypeId)!;
@@ -114,16 +119,16 @@ function stationTurnoverInput(snapshot: DailyTransportSnapshot): StationTurnover
           initialFullBatteries: type.batteryInventory!,
         },
         swapMinutes: type.swapMinutes!,
-        serviceWindows: representativeDayIntervals(type.serviceWindows),
-        chargeWindows: chargingIntervals(type.chargeWindows),
+        serviceWindows: representativeDayIntervals(type.serviceWindows, repetitions),
+        chargeWindows: chargingIntervals(type.chargeWindows, repetitions),
       };
     }),
   };
 }
 
-function chargingIntervals(windows: OperatingShift[]): OperatingShift[] {
+function chargingIntervals(windows: OperatingShift[], repetitions = 1): OperatingShift[] {
   // A charge started near the end of an overnight shift can extend into the next calendar day.
-  const intervals = representativeDayIntervals(windows, 2);
+  const intervals = representativeDayIntervals(windows, repetitions + 1);
   if (
     intervals.some(
       ({ startMinute, endMinute }) => endMinute - startMinute >= REPRESENTATIVE_DAY_MINUTES,
@@ -368,10 +373,14 @@ function createStationLedger(
 }
 
 /** The caller submits actual arrivals in time order, breaking simultaneous ties consistently. */
-export function createStationTurnover(snapshot: DailyTransportSnapshot, sharedPower = false) {
+export function createStationTurnover(
+  snapshot: DailyTransportSnapshot,
+  sharedPower = false,
+  repetitions = 1,
+) {
   const gaps = stationTurnoverReadiness(snapshot);
   if (gaps.length) throw new Error(gaps.join('；'));
-  const input = stationTurnoverInput(snapshot);
+  const input = stationTurnoverInput(snapshot, repetitions);
   const sources = new Map(
     sharedPower
       ? snapshot.context.stationNetwork!.powerSources.map((source) => [
@@ -584,10 +593,11 @@ export function validateStationTurnover(
   snapshot: DailyTransportSnapshot,
   energy: VehicleEnergyResult,
   ledger: StationTurnoverResult,
+  repetitions = 1,
 ): DailyTransportValidation {
   const issues = stationTurnoverReadiness(snapshot);
   if (issues.length) return { valid: false, issues };
-  const input = stationTurnoverInput(snapshot);
+  const input = stationTurnoverInput(snapshot, repetitions);
   const stations = new Map(input.stations.map((station) => [station.basis.stationId, station]));
   const ledgers = new Map(ledger.stations.map((station) => [station.stationId, station]));
   if (

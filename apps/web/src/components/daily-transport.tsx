@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
-import { BatteryCharging, Play, RefreshCw, Square, Warehouse, Zap } from 'lucide-react';
+import { BatteryCharging, Repeat2, Play, RefreshCw, Square, Warehouse, Zap } from 'lucide-react';
 import {
   PLANNING_NOTICE,
   formatKilometers,
@@ -26,6 +26,7 @@ import {
   stationClockTime,
 } from './daily-transport-station-ledger';
 import styles from './daily-transport.module.css';
+import { PeriodicityLedger } from './daily-transport-periodicity';
 import { SharedPowerLedger } from './daily-transport-power-ledger';
 
 const statuses: Record<RoadTaskStatus, string> = {
@@ -59,6 +60,7 @@ const stages: Record<DailyTransportStage, string> = {
   'vehicle-energy': '车辆电量试算',
   'station-turnover': '站内周转试算',
   'shared-power': '共享电源试算',
+  'repeatable-day': '24 小时周期校核',
 };
 const stageName = (task?: DailyTransportTaskSummary | null) =>
   stages[task?.config.stage ?? 'transport'];
@@ -399,27 +401,31 @@ export default function DailyTransport({
         {energy ? (
           <>
             <strong>
-              {result?.sharedPower
-                ? '共享电源校核通过'
-                : turnover
-                  ? '站内周转校核通过'
-                  : '车辆电量校核通过'}
+              {result?.periodicity
+                ? '24 小时周期闭合，完整物理校核通过'
+                : result?.sharedPower
+                  ? '共享电源校核通过'
+                  : turnover
+                    ? '站内周转校核通过'
+                    : '车辆电量校核通过'}
             </strong>
             {displayed &&
               displayed.inputVersion !== scenario.inputVersion &&
               `（输入版本 ${displayed.inputVersion} 的结果）`}
-            {result?.sharedPower
-              ? ' · 24 小时周期尚未校核。'
-              : turnover
-                ? ' · 共享电源及 24 小时周期尚未校核。'
-                : ' · 工位、库存、共享电源及 24 小时周期尚未校核。'}
+            {result?.periodicity
+              ? ' · 财务尚未校核。'
+              : result?.sharedPower
+                ? ' · 24 小时周期尚未校核。'
+                : turnover
+                  ? ' · 共享电源及 24 小时周期尚未校核。'
+                  : ' · 工位、库存、共享电源及 24 小时周期尚未校核。'}
           </>
         ) : (
           <>
             <strong>补能校核未完成</strong> · 运输试算核对运输载荷与时间。
           </>
         )}
-        不能据此判断完整物理可行。
+        {!result?.periodicity && '不能据此判断完整物理可行。'}
         {PLANNING_NOTICE}
       </p>
       <div className={styles.taskPanel}>
@@ -491,12 +497,20 @@ export default function DailyTransport({
                 {operation === 'station-turnover' ? '正在启动…' : '生成站内周转试算'}
               </Button>
               <Button
-                className={`button${turnoverDisabled ? '' : ' primary'}`}
+                className="button"
                 disabled={turnoverDisabled}
                 onClick={() => void mutate('shared-power')}
               >
                 <Zap aria-hidden="true" />
                 {operation === 'shared-power' ? '正在启动…' : '生成共享电源试算'}
+              </Button>
+              <Button
+                className={`button${turnoverDisabled ? '' : ' primary'}`}
+                disabled={turnoverDisabled}
+                onClick={() => void mutate('repeatable-day')}
+              >
+                <Repeat2 aria-hidden="true" />
+                {operation === 'repeatable-day' ? '正在启动…' : '校核 24 小时周期'}
               </Button>
             </>
           )}
@@ -753,9 +767,14 @@ export default function DailyTransport({
             <p className={styles.energySummary}>
               <strong>换电 {energy.swapCount} 次</strong>
               <span>统一电池 {energyNumber(energy.batteryCapacityKwh)} kWh</span>
-              <span>首日出发与换入电池均按满电试算</span>
+              <span>
+                {result.periodicity
+                  ? '采用求得的周期出发电量，换入电池须由库存领用'
+                  : '首日出发与换入电池均按满电试算'}
+              </span>
             </p>
           )}
+          {result.periodicity && <PeriodicityLedger result={result} />}
           {result.sharedPower && turnover && displayed && (
             <SharedPowerLedger
               key={`power-${displayed.taskId}`}
