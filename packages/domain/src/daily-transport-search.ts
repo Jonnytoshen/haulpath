@@ -1,4 +1,5 @@
 import type {
+  DailyTransportBest,
   DailyTransportConfig,
   DailyTransportProgress,
   DailyTransportResult,
@@ -39,16 +40,29 @@ export function initialDailyTransportSearch(
     best: null,
   };
 }
+type CandidateMetrics = Pick<DailyTransportBest, 'completedTonnes' | 'distanceMeters'>;
 /** Larger served tonnage, then shorter actual driving; no economic assumptions. */
+export function improvesDailyTransportMetrics(
+  candidate: CandidateMetrics,
+  best?: CandidateMetrics | null,
+): boolean {
+  return (
+    !best ||
+    candidate.completedTonnes > best.completedTonnes ||
+    (candidate.completedTonnes === best.completedTonnes &&
+      candidate.distanceMeters < best.distanceMeters)
+  );
+}
 export function improvesDailyTransport(
   result: DailyTransportResult,
   best: DailyTransportSearch['best'],
 ): boolean {
-  const distance = result.vehicleEnergy!.totalDistanceMeters;
-  return (
-    !best ||
-    result.totalCompletedTonnes > best.completedTonnes ||
-    (result.totalCompletedTonnes === best.completedTonnes && distance < best.distanceMeters)
+  return improvesDailyTransportMetrics(
+    {
+      completedTonnes: result.totalCompletedTonnes,
+      distanceMeters: result.vehicleEnergy!.totalDistanceMeters,
+    },
+    best,
   );
 }
 function permutation(ids: string[], rank: bigint): string[] {

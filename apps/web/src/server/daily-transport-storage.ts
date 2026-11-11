@@ -24,6 +24,7 @@ import {
   initialDailyTransportSearch,
   FIXED_LAYOUT_SEARCH_VERSION,
   improvesDailyTransport,
+  improvesDailyTransportMetrics,
   dailyTransportReadiness,
   stationNetworkReadiness,
   stationTurnoverReadiness,
@@ -194,11 +195,7 @@ export class DailyTransportStorage {
     const best = candidates.reduce<DailyTransportTaskSummary | undefined>((best, task) => {
       const a = task.search!.best!;
       const b = best?.search?.best;
-      return !b ||
-        a.completedTonnes > b.completedTonnes ||
-        (a.completedTonnes === b.completedTonnes && a.distanceMeters < b.distanceMeters)
-        ? task
-        : best;
+      return improvesDailyTransportMetrics(a, b) ? task : best;
     }, undefined);
     const resultTask =
       best ?? tasks.find((task) => task.search?.best || task.status === 'completed');
