@@ -18,6 +18,8 @@ import {
   DAILY_STATION_TURNOVER_ALGORITHM_VERSION,
   DAILY_SHARED_POWER_ALGORITHM_VERSION,
   VEHICLE_ENERGY_ALGORITHM_VERSION,
+  REPEATABLE_DAY_ALGORITHM_VERSION,
+  validateRepeatableDay,
   dailyTransportReadiness,
   stationNetworkReadiness,
   stationTurnoverReadiness,
@@ -37,6 +39,7 @@ const algorithmVersions: Record<DailyTransportStage, string> = {
   'vehicle-energy': VEHICLE_ENERGY_ALGORITHM_VERSION,
   'station-turnover': DAILY_STATION_TURNOVER_ALGORITHM_VERSION,
   'shared-power': DAILY_SHARED_POWER_ALGORITHM_VERSION,
+  'repeatable-day': REPEATABLE_DAY_ALGORITHM_VERSION,
 };
 
 export function dailyTransportConfig(value: unknown): DailyTransportConfig {
@@ -52,7 +55,8 @@ export function dailyTransportConfig(value: unknown): DailyTransportConfig {
     stage !== 'transport' &&
     stage !== 'vehicle-energy' &&
     stage !== 'station-turnover' &&
-    stage !== 'shared-power'
+    stage !== 'shared-power' &&
+    stage !== 'repeatable-day'
   )
     throw new HttpError(400, '每日计划试算阶段无效');
   const seed = input.seed ?? 1;
@@ -198,7 +202,7 @@ export class DailyTransportStorage {
       const gaps = this.gaps(snapshot, roads.currentReady);
       const stage = config.stage ?? 'transport';
       if (stage !== 'transport') gaps.push(...vehicleEnergyReadiness(snapshot));
-      if (stage === 'station-turnover' || stage === 'shared-power')
+      if (stage === 'station-turnover' || stage === 'shared-power' || stage === 'repeatable-day')
         gaps.push(...stationTurnoverReadiness(snapshot));
       if (gaps.length) throw new HttpError(400, gaps.join('；'));
       const existing = this.list(scenario).find(active);
@@ -274,7 +278,8 @@ export class DailyTransportStorage {
       if (task.status !== 'running') return false;
       const stage = task.config.stage ?? 'transport';
       const energy = result.vehicleEnergy;
-      const sharedPower = stage === 'shared-power';
+      const periodic = stage === 'repeatable-day';
+      const sharedPower = stage === 'shared-power' || periodic;
       const station = stage === 'station-turnover' || sharedPower;
       const stationStatus = station ? 'checked' : 'not-checked';
       if (
@@ -285,10 +290,13 @@ export class DailyTransportStorage {
             energy.stationCapacityStatus !== stationStatus ||
             energy.batteryInventoryStatus !== stationStatus ||
             energy.sharedPowerStatus !== (sharedPower ? 'checked' : 'not-checked') ||
-            energy.periodicityStatus !== 'not-checked') ||
+            energy.periodicityStatus !== (periodic ? 'checked' : 'not-checked')) ||
         (station ? !result.stationTurnover : result.stationTurnover !== undefined) ||
         (sharedPower ? !result.sharedPower : result.sharedPower !== undefined) ||
-        result.physicalFeasibility !== 'not-established' ||
+        result.physicalFeasibility !== (periodic ? 'feasible' : 'not-established') ||
+        (periodic
+          ? !validateRepeatableDay(this.details(task).snapshot, result).valid
+          : result.periodicity !== undefined) ||
         !result.validation.valid ||
         result.validation.issues.length ||
         result.algorithmVersion !== task.algorithmVersion ||

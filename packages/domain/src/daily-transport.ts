@@ -1,3 +1,4 @@
+import type { RepeatableDayResult } from './repeatable-day';
 import type { PlanningScenarioContext, Point, TransportCycle } from './index';
 import { cycleHasAdjacentOverlap, cycleIsClosed } from './index';
 import type { FleetOperations, OperatingShift, VehicleGroup } from './fleet-operations';
@@ -17,7 +18,7 @@ export interface DailyTransportSnapshot {
   revision: number;
 }
 export type DailyTransportStage =
-  'transport' | 'vehicle-energy' | 'station-turnover' | 'shared-power';
+  'transport' | 'vehicle-energy' | 'station-turnover' | 'shared-power' | 'repeatable-day';
 
 export interface DailyTransportConfig {
   seed: number;
@@ -119,7 +120,8 @@ export interface DailyTransportResult {
   vehicleEnergy?: VehicleEnergyResult;
   stationTurnover?: StationTurnoverResult;
   sharedPower?: SharedPowerResult;
-  physicalFeasibility: 'not-established';
+  physicalFeasibility: 'not-established' | 'feasible';
+  periodicity?: RepeatableDayResult;
   limitations: string[];
 }
 export interface DailyTransportTaskSummary {

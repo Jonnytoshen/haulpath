@@ -65,7 +65,9 @@ export function SharedPowerLedger({
           ? `${waiting} 条回收电池充电因共享电源占用或容量不足等待。`
           : '本次充电未因共享电源等待。'}
         {pending > 0 && `截止时仍有 ${pending} 块电池待充，需结合站账核对窗口与功率。`}
-        24 小时周期尚未校核。
+        {turnover.initialBatterySocPercent === 'periodic'
+          ? '按已闭合的 24 小时周期核对购电。'
+          : '24 小时周期尚未校核。'}
       </p>
       <details className={styles.ledgerSection} open>
         <summary>电源下各站占用</summary>

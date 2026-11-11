@@ -157,8 +157,8 @@ export function buildSharedPowerLedger(
       const cuts = new Set([0, horizon]);
       for (let midnight = 1440; midnight < horizon; midnight += 1440) cuts.add(midnight);
       for (const session of sessions) {
-        if (session.startMinute < horizon) cuts.add(session.startMinute);
-        if (session.endMinute < horizon) cuts.add(session.endMinute);
+        if (session.startMinute > 0 && session.startMinute < horizon) cuts.add(session.startMinute);
+        if (session.endMinute > 0 && session.endMinute < horizon) cuts.add(session.endMinute);
       }
       const boundaries = [...cuts].sort((a, b) => a - b);
       const intervals = boundaries.slice(0, -1).map((startMinute, index) => {
@@ -238,7 +238,9 @@ export function validateSharedPower(
     const horizon = result.horizonMinute;
     const purchased = sessions.reduce(
       (sum, s) =>
-        sum + s.gridPowerKw * (Math.max(0, Math.min(horizon, s.endMinute) - s.startMinute) / 60),
+        sum +
+        s.gridPowerKw *
+          (Math.max(0, Math.min(horizon, s.endMinute) - Math.max(0, s.startMinute)) / 60),
       0,
     );
     if (!close(ledger.peakPowerKw, peak) || !close(ledger.gridEnergyKwh, purchased))

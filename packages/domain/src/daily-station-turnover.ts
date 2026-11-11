@@ -155,71 +155,16 @@ function generateStationPlan(
   const gaps = stationTurnoverReadiness(snapshot);
   if (gaps.length) throw new Error(gaps.join('；'));
   const result = generateVehicleEnergy(snapshot, onProgress, config);
+  scheduleStationVisits(snapshot, result, sharedPower, 1, deadline);
   const energy = result.vehicleEnergy!;
-  const station = createStationTurnover(snapshot, sharedPower);
-  const sites = new Map(snapshot.context.stationNetwork?.sites.map((site) => [site.id, site.name]));
-  const trips = new Map(result.trips.map((trip) => [trip.id, trip]));
-  const vehicles = new Map(result.vehicles.map((vehicle) => [vehicle.vehicleId, vehicle]));
-  const arrivals = new Arrivals();
-
-  energy.vehicles.forEach((timeline, vehicleOrder) => {
-    const vehicle = vehicles.get(timeline.vehicleId)!;
-    const schedule: VehicleSchedule = {
-      vehicle,
-      timeline,
-      shifts: dailyTransportEventShifts(vehicle, trips),
-      index: 0,
-      delay: 0,
-    };
-    const visit = advance(schedule, vehicleOrder);
-    if (visit) arrivals.push(visit);
-  });
-
-  for (let visit = arrivals.pop(); visit; visit = arrivals.pop()) {
-    if (Date.now() >= deadline) throw new Error('站内周转试算达到时限，未发布阶段结果');
-    const { schedule, event, arrivalMinute, vehicleOrder } = visit;
-    const service = station.scheduleSwap(
-      {
-        stationId: event.stationId!,
-        vehicleId: schedule.vehicle.vehicleId,
-        eventId: event.id,
-        arrivalMinute,
-        returnedKwh: event.startKwh,
-      },
-      schedule.shift!.endMinute,
-    );
-    if (service.endMinute > event.endMinute + schedule.delay + TIME_TOLERANCE) {
-      schedule.lastDelayedSwap = {
-        ...service,
-        siteName: sites.get(service.stationId) ?? service.stationId,
-      };
-    }
-    checkShift(schedule, event, service.endMinute);
-    schedule.timeline.events[schedule.index++] = {
-      ...event,
-      startMinute: arrivalMinute,
-      endMinute: service.endMinute,
-      detour: { ...event.detour!, serviceStartMinute: service.serviceStartMinute },
-    };
-    schedule.delay = service.endMinute - event.endMinute;
-    const next = advance(schedule, vehicleOrder);
-    if (next) arrivals.push(next);
-  }
-
-  for (const timeline of energy.vehicles)
-    timeline.workingMinutes = timeline.events.reduce(
-      (sum, event) => sum + (event.endMinute - event.startMinute),
-      0,
-    );
   result.algorithmVersion = sharedPower
     ? DAILY_SHARED_POWER_ALGORITHM_VERSION
     : DAILY_STATION_TURNOVER_ALGORITHM_VERSION;
   energy.stationCapacityStatus = 'checked';
   energy.batteryInventoryStatus = 'checked';
-  result.stationTurnover = station.finish();
   if (sharedPower) {
     energy.sharedPowerStatus = 'checked';
-    result.sharedPower = buildSharedPowerLedger(snapshot, result.stationTurnover);
+    result.sharedPower = buildSharedPowerLedger(snapshot, result.stationTurnover!);
   }
   result.limitations = [
     sharedPower
@@ -277,4 +222,87 @@ function validateDailyStationTurnover(
   const stations = validateStationTurnover(snapshot, energy, ledger);
   if (!stations.valid || !sharedPower) return stations;
   return validateSharedPower(snapshot, ledger, result.sharedPower!);
+}
+
+/** Reuse the same arrival queue, wait propagation and station calendars for a finite witness. */
+export function scheduleStationVisits(
+  snapshot: DailyTransportSnapshot,
+  result: DailyTransportResult,
+  sharedPower: boolean,
+  repetitions: number,
+  deadline: number,
+): void {
+  const energy = result.vehicleEnergy!;
+  const station = createStationTurnover(snapshot, sharedPower, repetitions);
+  const sites = new Map(snapshot.context.stationNetwork?.sites.map((site) => [site.id, site.name]));
+  const trips = new Map(result.trips.map((trip) => [trip.id, trip]));
+  const vehicles = new Map(result.vehicles.map((vehicle) => [vehicle.vehicleId, vehicle]));
+  const arrivals = new Arrivals();
+
+  energy.vehicles.forEach((timeline, vehicleOrder) => {
+    const day = Math.floor(vehicleOrder / (energy.vehicles.length / repetitions));
+    const vehicle = vehicles.get(timeline.vehicleId)!;
+    const shifted = new Map<OperatingShift, OperatingShift>();
+    const shifts = new Map(
+      [...dailyTransportEventShifts(vehicle, trips)].map(([id, shift]) => {
+        if (!shift) return [id, undefined] as const;
+        let moved = shifted.get(shift);
+        if (!moved) {
+          moved = {
+            startMinute: shift.startMinute + day * 1440,
+            endMinute: shift.endMinute + day * 1440,
+          };
+          shifted.set(shift, moved);
+        }
+        return [id, moved] as const;
+      }),
+    );
+    const schedule: VehicleSchedule = {
+      vehicle,
+      timeline,
+      shifts,
+      index: 0,
+      delay: 0,
+    };
+    const visit = advance(schedule, vehicleOrder);
+    if (visit) arrivals.push(visit);
+  });
+
+  for (let visit = arrivals.pop(); visit; visit = arrivals.pop()) {
+    if (Date.now() >= deadline) throw new Error('站内周转试算达到时限，未发布阶段结果');
+    const { schedule, event, arrivalMinute, vehicleOrder } = visit;
+    const service = station.scheduleSwap(
+      {
+        stationId: event.stationId!,
+        vehicleId: schedule.vehicle.vehicleId,
+        eventId: event.id,
+        arrivalMinute,
+        returnedKwh: event.startKwh,
+      },
+      schedule.shift!.endMinute,
+    );
+    if (service.endMinute > event.endMinute + schedule.delay + TIME_TOLERANCE) {
+      schedule.lastDelayedSwap = {
+        ...service,
+        siteName: sites.get(service.stationId) ?? service.stationId,
+      };
+    }
+    checkShift(schedule, event, service.endMinute);
+    schedule.timeline.events[schedule.index++] = {
+      ...event,
+      startMinute: arrivalMinute,
+      endMinute: service.endMinute,
+      detour: { ...event.detour!, serviceStartMinute: service.serviceStartMinute },
+    };
+    schedule.delay = service.endMinute - event.endMinute;
+    const next = advance(schedule, vehicleOrder);
+    if (next) arrivals.push(next);
+  }
+
+  for (const timeline of energy.vehicles)
+    timeline.workingMinutes = timeline.events.reduce(
+      (sum, event) => sum + (event.endMinute - event.startMinute),
+      0,
+    );
+  result.stationTurnover = station.finish();
 }
