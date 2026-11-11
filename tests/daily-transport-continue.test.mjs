@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { waitSearch } from './helpers/daily-search-fixture.mjs';
+import { stationTurnoverFixture } from './helpers/station-turnover-fixture.mjs';
 import { repeatableFixture } from './helpers/repeatable-day-fixture.mjs';
 import { startVehicleEnergyApplication } from './helpers/vehicle-energy-fixture.mjs';
 import { waitDailyTransportTask } from './helpers/daily-transport-fixture.mjs';
@@ -180,5 +181,55 @@ test(
         assert.deepEqual((await request(`${model.path}/daily-transport/${id}`)).body, superseded);
       }
     }
+  },
+);
+
+test(
+  'a running search with no complete candidate resumes its checkpoint without promoting partial work',
+  { timeout: 180000 },
+  async (t) => {
+    const { request } = await startVehicleEnergyApplication(t);
+    const model = await stationTurnoverFixture(request, {
+      count: 9,
+      bays: 9,
+      batteryInventory: 9,
+      chargePowerKw: 720,
+    });
+    await model.prepare();
+    const launch = await request(`${model.path}/daily-transport`, 'POST', {
+      expectedRevision: model.scenario.revision,
+      config: { stage: 'repeatable-day' },
+    });
+    const id = launch.body.task.taskId;
+    await waitSearch(
+      request,
+      model,
+      id,
+      (task) => task.status === 'running' && task.search.attempts > 0,
+    );
+    await request(`${model.path}/daily-transport/${id}/stop`, 'POST');
+    const stopped = (await request(`${model.path}/daily-transport/${id}`)).body;
+    assert.equal(stopped.status, 'stopped');
+    assert.equal(stopped.result, null);
+    assert.equal(stopped.search.best, null);
+    const continued = await request(`${model.path}/daily-transport/${id}/continue`, 'POST', {
+      expectedRevision: model.scenario.revision,
+    });
+    assert.equal(continued.status, 202);
+    const nextId = continued.body.task.taskId;
+    assert.equal(continued.body.task.search.nextOrder, stopped.search.nextOrder);
+    await waitSearch(
+      request,
+      model,
+      nextId,
+      (task) => task.search.attempts > stopped.search.attempts,
+    );
+    await request(`${model.path}/daily-transport/${nextId}/stop`, 'POST');
+    const next = (await request(`${model.path}/daily-transport/${nextId}`)).body;
+    assert.deepEqual(next.snapshot, stopped.snapshot);
+    assert.equal(next.result, null);
+    assert.equal(next.search.best, null);
+    assert.equal((await request(`${model.path}/daily-transport`)).body.resultTask, null);
+    assert.deepEqual((await request(`${model.path}/daily-transport/${id}`)).body, stopped);
   },
 );

@@ -87,6 +87,10 @@ test(
           ),
           true,
         );
+        if (qa)
+          await region
+            .getByRole('region', { name: '完整候选与搜索进度' })
+            .screenshot({ path: join(qa, `search-panel-${width}.png`) });
         if (qa) await page.screenshot({ path: join(qa, `search-${width}.png`), fullPage: true });
       }
       await page.close();
