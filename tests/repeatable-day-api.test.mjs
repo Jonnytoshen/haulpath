@@ -91,6 +91,13 @@ test(
     near(initial.vehicles[0].remainingMinutes, 2);
     assert.equal(initial.stations[0].full, 0);
     assert.equal(initial.stations[0].packs[0].kind, 'in-service');
+    const services = task.result.stationTurnover.stations[0].swaps;
+    assert.ok(
+      services.some((service) => service.serviceStartMinute === -4 && service.endMinute === 2),
+    );
+    assert.ok(
+      services.some((service) => service.serviceStartMinute === 1436 && service.endMinute === 1442),
+    );
     near(initial.stations[0].storedKwh, 500);
     assert.deepEqual(initial, task.result.periodicity.final);
     near(task.result.periodicity.energy.consumedKwh, 341);
@@ -182,5 +189,26 @@ test(
     } finally {
       await reopened.stop();
     }
+  },
+);
+
+test(
+  'a low-consumption direct first day does not discard the swap needed to restore the periodic departure charge',
+  { timeout: 180000 },
+  async (t) => {
+    const { request } = await startVehicleEnergyApplication(t);
+    const model = await repeatableFixture(request);
+    const operations = operationInputs(model.scenario.context.operations);
+    const forward = operations.measuredSegments.find(
+      (s) => s.fromPositionId === model.cycle.positions[0].id,
+    );
+    forward.emptyKwh = forward.fullKwh = 10;
+    await model.save('/operations', 'PUT', { operations });
+    // Direct travel consumes 71 kWh. From a free 500 kWh start it dominates a slower
+    // detour, but cannot repeat. The same 341 kWh swap itinerary still closes at 290.
+    const task = await model.startPeriodic();
+    near(task.result.vehicleEnergy.vehicles[0].initialKwh, 290);
+    near(task.result.vehicleEnergy.vehicles[0].finalKwh, 290);
+    assert.equal(task.result.vehicleEnergy.swapCount, 1);
   },
 );

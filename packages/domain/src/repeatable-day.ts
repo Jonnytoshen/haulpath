@@ -229,7 +229,7 @@ function projectStationDay(
           charging: last.packs.filter((p) => p.kind === 'charging').length,
         },
         swaps: station.swaps
-          .filter((swap) => swap.serviceStartMinute >= start && swap.serviceStartMinute < end)
+          .filter((swap) => swap.endMinute > start && swap.serviceStartMinute < end)
           .map((swap) => ({
             ...swap,
             arrivalMinute: swap.arrivalMinute - start,

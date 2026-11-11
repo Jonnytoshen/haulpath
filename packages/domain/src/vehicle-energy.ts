@@ -417,7 +417,7 @@ function startOfStep(step: Step, previousStep: Step | undefined, previousMinute:
   return previousStep?.shift === step.shift ? previousMinute : step.shift.startMinute;
 }
 
-function preferredLabels(labels: Label[]): Label[] {
+function preferredLabels(labels: Label[], requireSwap = false): Label[] {
   // Earlier arrival with at least as much energy and no additional swaps dominates.
   // Calendar waiting preserves that property even at a station that is not yet open.
   labels.sort(
@@ -429,6 +429,7 @@ function preferredLabels(labels: Label[]): Label[] {
     if (
       !kept.some(
         (earlier) =>
+          (!requireSwap || label.swapCount === 0 || earlier.swapCount > 0) &&
           earlier.swapCount <= label.swapCount &&
           compareConsumption(earlier.charge, label.charge) <= 0,
       )
@@ -505,7 +506,7 @@ function solveVehicle(
         `车辆 ${vehicle.vehicleId}（${vehicle.vehicleGroupName}）${step.description}：本次未找到通过车辆电量校核的安排。${shown.join('；')}`,
       );
     }
-    frontier = preferredLabels(next);
+    frontier = preferredLabels(next, requireSwap);
   }
   if (requireSwap) frontier = frontier.filter((label) => label.swapCount > 0);
   if (!frontier.length)
