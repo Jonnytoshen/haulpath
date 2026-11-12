@@ -194,6 +194,22 @@ test(
       ).body.resultTask,
       null,
     );
+    const copyPath = `/api/projects/${model.project.id}/scenarios/${copy.body.id}`;
+    const changed = await request(`${copyPath}/annual-transport`, 'PUT', {
+      expectedRevision: copy.body.revision,
+      years: [{ ...years[0], operatingDays: 100 }],
+    });
+    assert.equal(changed.status, 200);
+    const compared = await request(
+      `/api/projects/${model.project.id}/scenarios/compare?left=${model.scenario.id}&right=${copy.body.id}`,
+    );
+    assert.equal(compared.status, 200);
+    assert.deepEqual(
+      compared.body.differences
+        .filter((d) => d.path === 'annualTransport[2030].operatingDays')
+        .map((d) => [d.left, d.right]),
+      [[0, 100]],
+    );
   },
 );
 

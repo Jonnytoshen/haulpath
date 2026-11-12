@@ -170,22 +170,29 @@ function object(value: JsonValue | undefined): value is Record<string, JsonValue
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function identity(value: JsonValue): string | null {
+function identity(value: JsonValue, path: string): string | null {
   if (!object(value)) return null;
   if (typeof value.id === 'string') return value.id;
   if (typeof value.siteId === 'string') return value.siteId;
-  if (typeof value.year === 'number') return String(value.year);
-  if (typeof value.demandId === 'string') return value.demandId;
+  if (path === 'annualTransport' && typeof value.year === 'number') return String(value.year);
+  if (path.startsWith('annualTransport[') && typeof value.demandId === 'string')
+    return value.demandId;
   if (typeof value.fromPositionId === 'string' && typeof value.toPositionId === 'string')
     return `${value.fromPositionId}:${value.toPositionId}`;
   return null;
 }
 
-function itemName(value: JsonValue, fallback: string, names: Map<string, string>): string {
+function itemName(
+  value: JsonValue,
+  fallback: string,
+  names: Map<string, string>,
+  path: string,
+): string {
   if (!object(value)) return fallback;
   if (typeof value.name === 'string') return value.name;
-  if (typeof value.year === 'number') return `${value.year} 年`;
-  if (typeof value.demandId === 'string') return names.get(value.demandId) ?? value.demandId;
+  if (path === 'annualTransport' && typeof value.year === 'number') return `${value.year} 年`;
+  if (path.startsWith('annualTransport[') && typeof value.demandId === 'string')
+    return names.get(value.demandId) ?? value.demandId;
   if (object(value.point) && typeof value.point.name === 'string') return value.point.name;
   if (typeof value.loadingPositionId === 'string' && typeof value.unloadingPositionId === 'string')
     return `${names.get(value.loadingPositionId) ?? value.loadingPositionId} → ${names.get(value.unloadingPositionId) ?? value.unloadingPositionId}`;
@@ -226,8 +233,8 @@ export function scenarioInputDifferences(
   ) {
     if (before === after) return;
     if (Array.isArray(before) && Array.isArray(after)) {
-      const beforeIds = before.map(identity);
-      const afterIds = after.map(identity);
+      const beforeIds = before.map((value) => identity(value, path));
+      const afterIds = after.map((value) => identity(value, path));
       if (
         beforeIds.every((id) => id !== null) &&
         afterIds.every((id) => id !== null) &&
@@ -237,8 +244,8 @@ export function scenarioInputDifferences(
         if (JSON.stringify(beforeIds) !== JSON.stringify(afterIds)) {
           const order = (values: JsonValue[]) =>
             values.map((value) => ({
-              id: identity(value)!,
-              name: itemName(value, identity(value)!, names),
+              id: identity(value, path)!,
+              name: itemName(value, identity(value, path)!, names, path),
             }));
           differences.push({
             kind: 'changed',
@@ -249,12 +256,12 @@ export function scenarioInputDifferences(
             right: order(after),
           });
         }
-        const beforeItems = new Map(before.map((value) => [identity(value)!, value]));
-        const afterItems = new Map(after.map((value) => [identity(value)!, value]));
+        const beforeItems = new Map(before.map((value) => [identity(value, path)!, value]));
+        const afterItems = new Map(after.map((value) => [identity(value, path)!, value]));
         for (const id of new Set([...beforeItems.keys(), ...afterItems.keys()])) {
           const oldValue = beforeItems.get(id);
           const newValue = afterItems.get(id);
-          const name = itemName(newValue ?? oldValue!, id, names);
+          const name = itemName(newValue ?? oldValue!, id, names, path);
           visit(oldValue, newValue, section, `${path}[${id}]`, `${label} · ${name}`);
         }
         return;
