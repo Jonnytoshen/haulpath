@@ -104,7 +104,9 @@ export function roadRequirements(context: PlanningScenarioContext): RoadRequirem
     else requirements.set(key, { key, from, to, strategy, uses: [use] });
   }
   const cycles = context.transportCycles ?? [];
-  const sites = context.stationNetwork?.sites ?? [];
+  // Draft locations may prepare roads before engineering confirmation; forbidden sites need no roads.
+  const excluded = new Set(context.stationNetwork?.constraints?.excludedSiteIds ?? []);
+  const sites = (context.stationNetwork?.sites ?? []).filter((site) => !excluded.has(site.id));
   for (const cycle of cycles) {
     for (let index = 1; index < cycle.positions.length; index++) {
       const from = cycle.positions[index - 1];

@@ -97,3 +97,7 @@ Worker 的完整候选消息与结束消息分开。每个改进候选在主线�
 应用启动适配层在开发启动与生产构建时，将应用 Worker 和引用的领域源码打包成 `apps/web/.haulpath-workers/daily-transport.cjs`；开发每次启动试算还在独立进程重建，以采用最新领域源码。领域包仍直接消费 TypeScript，不增加预构建。普通生产启动使用构建产物，standalone tracing 和 Docker 显式携带该文件。
 
 产物目标为 Node 22.12 的 JavaScript，不要求 Node 直接读取 TypeScript。[Node Worker 文档](https://nodejs.org/download/release/v22.12.0/docs/api/worker_threads.html)与 [esbuild Node 平台选项](https://esbuild.github.io/api/#platform)是实现依据。实际运行范围与未验证边界见[验收记录](acceptance.md)，不得以加载测试代替整套最低 Node 验收。
+
+## 选址硬约束的试算保护
+
+站网启用投资、站数及必选禁选后，当前固定布局必须满足这些条件才可启动每日试算。冲突草稿保留可修复资料，但不会作为当前就绪输入；车辆电量、站内及周期的独立校验再次核对硬约束。必要投资价格缺失时不能启用预算，未启用预算仍允许缺价的物理分析。投资与候选资格口径见[站网说明](fixed-station-layout.md#选址硬约束与投资口径)。修改约束或禁选范围形成新输入版本，旧任务及候选仍按原输入标识展示，不能向新版本续搜。

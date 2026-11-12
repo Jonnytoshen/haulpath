@@ -2,6 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import {
   candidateSiteReadiness,
+  sitingBudgetPriceReadiness,
+  sitingConstraintReadiness,
+  type SitingConstraints,
   emptyStationNetwork,
   stationTypeReadiness,
   type CandidateSite,
@@ -219,7 +222,7 @@ export async function stationNetworkOf(
   powers: PowerConnectionPointSet,
 ): Promise<StationNetwork> {
   const value = objectOf(input, '站网');
-  scenarioFields(value, ['stationTypes', 'sites', 'powerSources', 'fixedLayout']);
+  scenarioFields(value, ['stationTypes', 'sites', 'powerSources', 'fixedLayout', 'constraints']);
   const current = scenario.context.stationNetwork ?? emptyStationNetwork();
   const typesSeen = new Set<string>();
   const stationTypes = listOf(value.stationTypes, '站型').map((item, index) =>
@@ -256,8 +259,16 @@ export async function stationNetworkOf(
         'siteNotes',
         'siteConfirmed',
         'connection',
+        'generationBasis',
       ]);
       const previous = identity(row, current.sites, sitesSeen, '候选站址');
+      if (
+        row.generationBasis !== undefined &&
+        !isDeepStrictEqual(row.generationBasis, previous?.generationBasis)
+      )
+        throw new HttpError(400, '候选生成依据由服务端维护，不可改写');
+      if (row.source === 'generated' && !previous?.generationBasis)
+        throw new HttpError(400, '系统候选须通过生成入口创建');
       const id = previous?.id ?? randomUUID();
       const point = pointOf({
         ...row,
@@ -310,6 +321,7 @@ export async function stationNetworkOf(
         siteNotes,
         siteConfirmed,
         connection,
+        ...(previous?.generationBasis ? { generationBasis: previous.generationBasis } : {}),
       };
       if (!unchangedCoordinates) pending.push(site);
       return site;
@@ -342,10 +354,65 @@ export async function stationNetworkOf(
       return { siteId: row.siteId, stationTypeId: row.stationTypeId };
     }),
   );
+  const constraints = constraintsOf(value.constraints, current, sites);
+  if (constraints) network.constraints = constraints;
+  const updatedContext = { ...scenario.context, stationNetwork: network };
+  const prices = sitingBudgetPriceReadiness(updatedContext);
+  if (prices.length) throw new HttpError(400, prices.join('；'));
+  // Editing inputs/constraints may invalidate a retained layout. Adding/changing a selection is adoption.
+  const adopts = network.fixedLayout.some(
+    (selection) =>
+      !current.fixedLayout.some(
+        (previous) =>
+          previous.siteId === selection.siteId &&
+          previous.stationTypeId === selection.stationTypeId,
+      ),
+  );
+  const conflicts = sitingConstraintReadiness(updatedContext);
+  if (adopts && conflicts.length)
+    throw new HttpError(400, `固定布局违反选址硬约束：${conflicts.join('；')}`);
   const normalized = await normalizeCoordinates(pending);
   pending.forEach((site, index) => {
     site.longitude = normalized[index].longitude;
     site.latitude = normalized[index].latitude;
   });
   return network;
+}
+
+function constraintsOf(
+  input: unknown,
+  current: StationNetwork,
+  sites: CandidateSite[],
+): SitingConstraints | undefined {
+  if (input === undefined) return current.constraints;
+  const value = objectOf(input, '选址硬约束');
+  scenarioFields(value, ['maxInvestment', 'maxStations', 'requiredSiteIds', 'excludedSiteIds']);
+  function ids(field: 'requiredSiteIds' | 'excludedSiteIds'): string[] {
+    const seen = new Set<string>();
+    const rows = listOf(value[field], '站址约束');
+    for (const id of rows) {
+      if (typeof id !== 'string' || !id.trim() || seen.has(id))
+        throw new HttpError(400, '站址约束标识无效或重复');
+      if (!sites.some((site) => site.id === id) && !current.constraints?.[field].includes(id))
+        throw new HttpError(400, '站址约束标识不属于当前规划方案');
+      seen.add(id);
+    }
+    return [...seen].sort();
+  }
+  const constraints: SitingConstraints = {
+    maxInvestment: numberOf(value.maxInvestment, '总新增投资上限', false, true),
+    maxStations: numberOf(value.maxStations, '新建站数上限', true, true),
+    requiredSiteIds: ids('requiredSiteIds'),
+    excludedSiteIds: ids('excludedSiteIds'),
+  };
+  if (constraints.requiredSiteIds.some((id) => constraints.excludedSiteIds.includes(id)))
+    throw new HttpError(400, '同一站址不能同时必选与禁选');
+  if (
+    constraints.maxInvestment === null &&
+    constraints.maxStations === null &&
+    !constraints.requiredSiteIds.length &&
+    !constraints.excludedSiteIds.length
+  )
+    return undefined;
+  return constraints;
 }

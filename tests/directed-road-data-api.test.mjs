@@ -883,3 +883,106 @@ test(
     );
   },
 );
+
+test(
+  'forbidden candidate sites leave road scope while draft candidates may prepare roads before confirmation',
+  { timeout: 120000 },
+  async () => {
+    const calls = [];
+    await withRoadApplication(
+      (url, response) => {
+        calls.push(url);
+        roadResponse(url, response);
+      },
+      async (request) => {
+        const fixture = await roadFixture(request);
+        const { path } = fixture;
+        let scenario = (
+          await request(`${path}/station-network`, 'PUT', {
+            expectedRevision: fixture.scenario.revision,
+            network: {
+              stationTypes: [],
+              powerSources: [],
+              fixedLayout: [],
+              sites: [
+                {
+                  name: '尚未确认的建议位置',
+                  longitude: 121.55,
+                  latitude: 31.23,
+                  coordinateSystem: 'GCJ-02',
+                  siteNotes: '',
+                  siteConfirmed: false,
+                  connection: null,
+                },
+              ],
+            },
+          })
+        ).body;
+        assert.equal(
+          (await request(`${path}/roads`)).body.total,
+          6,
+          'business directions and candidate entry/exit',
+        );
+        const network = scenario.context.stationNetwork;
+        const site = network.sites[0];
+        const { originalLongitude, originalLatitude, ...input } = site;
+        scenario = (
+          await request(`${path}/station-network`, 'PUT', {
+            expectedRevision: scenario.revision,
+            network: {
+              ...network,
+              sites: [{ ...input, longitude: originalLongitude, latitude: originalLatitude }],
+              constraints: {
+                maxInvestment: null,
+                maxStations: null,
+                requiredSiteIds: [],
+                excludedSiteIds: [site.id],
+              },
+            },
+          })
+        ).body;
+        const launch = await request(`${path}/roads`, 'POST', {
+          expectedRevision: scenario.revision,
+        });
+        assert.equal(launch.status, 202, JSON.stringify(launch.body));
+        const done = await waitRoadTask(request, path, launch.body.task.taskId, 'completed');
+        assert.equal(done.total, 2);
+        assert.ok(
+          done.snapshot.requirements.every((row) =>
+            row.uses.every((use) => use.kind === 'business'),
+          ),
+        );
+        assert.equal(calls.length, 2);
+        assert.equal((await request(`${path}/roads`)).body.currentReady, true);
+        const unblocked = {
+          ...scenario.context.stationNetwork,
+          sites: [{ ...input, longitude: originalLongitude, latitude: originalLatitude }],
+          constraints: {
+            maxInvestment: null,
+            maxStations: null,
+            requiredSiteIds: [],
+            excludedSiteIds: [],
+          },
+        };
+        scenario = (
+          await request(`${path}/station-network`, 'PUT', {
+            expectedRevision: scenario.revision,
+            network: unblocked,
+          })
+        ).body;
+        const current = (await request(`${path}/roads`)).body;
+        assert.equal(current.total, 6);
+        assert.equal(
+          current.currentReady,
+          false,
+          'restoring a candidate requires new-version road adoption',
+        );
+        assert.equal(
+          (await request(`${path}/roads/${done.taskId}`)).body.total,
+          2,
+          'old snapshot retains its own scope',
+        );
+      },
+    );
+  },
+);

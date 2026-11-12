@@ -291,3 +291,32 @@
     min-height: 44px;
   }
 }
+
+.generation,
+.constraintCheck {
+  padding-block: 12px 18px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.generation h4,
+.constraintCheck h4 {
+  font-size: 14px;
+  font-weight: 600;
+}
+.generation button {
+  margin-top: 12px;
+}
+.provenance {
+  margin-bottom: 10px;
+  color: var(--secondary-ink, #5d6e65);
+  font-size: 13px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.constraintCheck ul {
+  padding-left: 20px;
+  list-style: disc;
+  color: var(--notice-ink, #735d2e);
+  font-size: 13px;
+  line-height: 1.8;
+}
