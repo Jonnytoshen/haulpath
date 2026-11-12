@@ -300,6 +300,15 @@ export class DailyTransportStorage {
         return existing;
       }
       if (source?.result) this.validateResult(source, source.result);
+      // Keep inherited evidence in the creation transaction, including while queued. The new
+      // evaluation cursor remains separate so a chain of stopped continuations cannot lose it.
+      const retainedAnnual = source?.annualResult
+        ? {
+            ...source.annualResult,
+            complete: false,
+            years: source.annualResult.years.map((year) => ({ ...year, budgetMs: 0 })),
+          }
+        : null;
       const task: DailyTransportTaskSummary = {
         taskId: randomUUID(),
         projectId,
@@ -314,7 +323,7 @@ export class DailyTransportStorage {
                 currentYear: null,
                 completedYears: 0,
                 totalYears: snapshot.context.annualTransport!.length,
-                validatedYears: 0,
+                validatedYears: retainedAnnual?.years.filter((year) => year.evidence).length ?? 0,
                 publication: 0,
               },
               evidenceVersion: ANNUAL_TRANSPORT_EVIDENCE_VERSION,
@@ -359,7 +368,11 @@ export class DailyTransportStorage {
         .run(
           task.taskId,
           JSON.stringify(snapshot),
-          source?.result ? JSON.stringify(source.result) : null,
+          retainedAnnual
+            ? JSON.stringify(retainedAnnual)
+            : source?.result
+              ? JSON.stringify(source.result)
+              : null,
         );
       return task;
     })();
@@ -486,24 +499,25 @@ export class DailyTransportStorage {
       const years = detail.annualResult?.years ?? [];
       const expected = detail.snapshot.context.annualTransport!;
       const index = years.findIndex((y) => y.year === row.year);
-      const cursor = index < 0 ? years.length : index;
+      const cursor = task.annualProgress?.completedYears ?? 0;
       if (
         expected[cursor]?.year !== row.year ||
-        (index >= 0 && index !== years.length - 1) ||
-        (index < 0 && years.at(-1)?.status === 'searching')
+        (index >= 0 ? index !== cursor : cursor !== years.length)
       )
         throw new Error('年度发布顺序与任务快照不匹配');
       validateAnnualYear(detail.snapshot, task.config, row, years);
       if (this.getSummary(projectId, scenarioId, taskId).status !== 'running') return false;
       if (index < 0) years.push(row);
       else years[index] = row;
+      const completedYears = cursor + (row.status === 'searching' ? 0 : 1);
       const result = annualTransportResult(years, expected.length);
+      result.complete = result.complete && completedYears === expected.length;
       this.db
         .prepare('UPDATE daily_transport_task_details SET result = ? WHERE task_id = ?')
         .run(JSON.stringify(result), taskId);
       task.annualProgress = {
         currentYear: row.year,
-        completedYears: years.filter((y) => y.status !== 'searching').length,
+        completedYears,
         totalYears: expected.length,
         validatedYears: years.filter((y) => y.evidence).length,
         publication: (task.annualProgress?.publication ?? 0) + 1,

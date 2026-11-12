@@ -415,3 +415,68 @@ test(
     assert.equal(task.annualResult.totalCompletedTonnes, 300);
   },
 );
+
+test(
+  'a queued annual continuation retains upstream evidence when stopped and continued again before Worker start',
+  { timeout: 240000 },
+  async (t) => {
+    const { request } = await startVehicleEnergyApplication(t);
+    const model = await repeatableFixture(request);
+    const demands = model.scenario.context.transportDemands.map((d) => ({
+      demandId: d.id,
+      dailyTonnes: 10,
+    }));
+    await model.save('/annual-transport', 'PUT', {
+      years: [{ year: 2030, operatingDays: 300, demands }],
+    });
+    await model.prepare();
+    const start = await request(`${model.path}/annual-transport`, 'POST', {
+      expectedRevision: model.scenario.revision,
+    });
+    const { waitDailyTransportTask } = await import('./helpers/daily-transport-fixture.mjs');
+    const source = await waitDailyTransportTask(request, model.path, start.body.task.taskId);
+    const blocker = await repeatableFixture(request, {
+      count: 9,
+      bays: 9,
+      batteryInventory: 9,
+      chargePowerKw: 720,
+    });
+    await blocker.prepare();
+    const blocked = await request(`${blocker.path}/daily-transport`, 'POST', {
+      expectedRevision: blocker.scenario.revision,
+      config: { stage: 'repeatable-day' },
+    });
+    const { waitSearch } = await import('./helpers/daily-search-fixture.mjs');
+    await waitSearch(
+      request,
+      blocker,
+      blocked.body.task.taskId,
+      (task) => task.status === 'running',
+    );
+    const next = await request(`${model.path}/annual-transport/${source.taskId}/continue`, 'POST', {
+      expectedRevision: model.scenario.revision,
+    });
+    const nextId = next.body.task.taskId;
+    assert.equal(next.body.task.status, 'queued');
+    const nextDetail = (await request(`${model.path}/annual-transport/${nextId}`)).body;
+    assert.deepEqual(
+      nextDetail.annualResult.years[0].evidence,
+      source.annualResult.years[0].evidence,
+    );
+    assert.equal(nextDetail.annualResult.complete, false);
+    await request(`${model.path}/annual-transport/${nextId}/stop`, 'POST');
+    const again = await request(`${model.path}/annual-transport/${nextId}/continue`, 'POST', {
+      expectedRevision: model.scenario.revision,
+    });
+    const againId = again.body.task.taskId;
+    assert.equal(again.body.task.status, 'queued');
+    const againDetail = (await request(`${model.path}/annual-transport/${againId}`)).body;
+    assert.deepEqual(
+      againDetail.annualResult.years[0].evidence,
+      source.annualResult.years[0].evidence,
+    );
+    assert.equal(againDetail.continuedFromTaskId, nextId);
+    await request(`${model.path}/annual-transport/${againId}/stop`, 'POST');
+    await request(`${blocker.path}/daily-transport/${blocked.body.task.taskId}/stop`, 'POST');
+  },
+);
