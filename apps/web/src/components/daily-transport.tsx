@@ -49,7 +49,7 @@ const kinds: Record<DailyTransportEventKind | VehicleEnergyEvent['kind'], string
   swap: '换电',
   'station-exit': '驶离站址',
 };
-type Mutation = DailyTransportStage | 'stop' | 'save-limits';
+type Mutation = DailyTransportStage | 'stop' | 'continue' | 'save-limits';
 type DetourDraft = { revision: number; kilometers: string; minutes: string };
 const active = (status?: RoadTaskStatus) => status === 'queued' || status === 'running';
 const tonnes = (value: number) =>
@@ -99,17 +99,32 @@ export default function DailyTransport({
   const [history, setHistory] = useState<DailyTransportTask | null>(null);
   const [historyReading, setHistoryReading] = useState(false);
   const [vehicleId, setVehicleId] = useState('');
+  const [now, setNow] = useState(0);
   const [runtime, setRuntime] = useState('10');
   const [seed, setSeed] = useState('1');
   const [detourDraft, setDetourDraft] = useState<DetourDraft | null>(null);
   const [savedLimitsRevision, setSavedLimitsRevision] = useState<number | null>(null);
   const alive = useRef(false);
   const reads = useRef(0);
+  const candidateKey = useRef('');
   const historyReads = useRef(0);
   const writing = useRef(false);
   const controller = useRef<AbortController | null>(null);
   const task = view?.task;
   const running = active(task?.status);
+  const search = task?.search;
+  const resumeSource = historyId ? history : task;
+  const canContinue =
+    resumeSource?.config.stage === 'repeatable-day' &&
+    resumeSource.search &&
+    !active(resumeSource.status) &&
+    resumeSource.inputVersion === scenario.inputVersion;
+  const elapsed =
+    task?.startedAt && running
+      ? now
+        ? Math.max(0, now - Date.parse(task.startedAt))
+        : (task.elapsedMs ?? 0)
+      : (task?.elapsedMs ?? 0);
   const baselineProgress = task?.config.stage && task.config.stage !== 'transport';
   const runningTaskId = running ? task?.taskId : undefined;
   const frozen = scenario.status === 'frozen';
@@ -177,7 +192,10 @@ export default function DailyTransport({
             abort.signal,
           );
           if (!alive.current || read !== reads.current) return;
-          if (active(summary.status)) {
+          if (
+            active(summary.status) &&
+            (summary.search?.best?.foundAt ?? '') === candidateKey.current
+          ) {
             setView((previous) =>
               previous?.task?.taskId === taskId ? { ...previous, task: summary } : previous,
             );
@@ -187,6 +205,7 @@ export default function DailyTransport({
         }
         const next = await request<DailyTransportView>(path, 'GET', undefined, abort.signal);
         if (!alive.current || read !== reads.current) return;
+        candidateKey.current = next.task?.search?.best?.foundAt ?? '';
         setView(next);
         setError('');
       } catch (failure) {
@@ -232,6 +251,12 @@ export default function DailyTransport({
     };
   }, [refresh, runningTaskId]);
 
+  useEffect(() => {
+    if (!runningTaskId) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [runningTaskId]);
+
   async function mutate(operation: Mutation) {
     if (writing.current || disabled || frozen) return;
     writing.current = true;
@@ -255,18 +280,24 @@ export default function DailyTransport({
         return;
       }
       const next = await request<DailyTransportView>(
-        operation === 'stop' ? `${path}/${task!.taskId}/stop` : path,
+        operation === 'stop'
+          ? `${path}/${task!.taskId}/stop`
+          : operation === 'continue'
+            ? `${path}/${resumeSource!.taskId}/continue`
+            : path,
         'POST',
-        operation !== 'stop'
-          ? {
-              expectedRevision: scenario.revision,
-              config: {
-                seed: Number(seed),
-                maxRuntimeMs: Number(runtime) * 60000,
-                ...(operation === 'transport' ? {} : { stage: operation }),
-              },
-            }
-          : undefined,
+        operation === 'continue'
+          ? { expectedRevision: scenario.revision, maxRuntimeMs: Number(runtime) * 60000 }
+          : operation !== 'stop'
+            ? {
+                expectedRevision: scenario.revision,
+                config: {
+                  seed: Number(seed),
+                  maxRuntimeMs: Number(runtime) * 60000,
+                  ...(operation === 'transport' ? {} : { stage: operation }),
+                },
+              }
+            : undefined,
       );
       if (alive.current) {
         setView(next);
@@ -439,11 +470,57 @@ export default function DailyTransport({
           </strong>
           <span>当前输入版本 {scenario.inputVersion}</span>
         </div>
+        {view?.roadTask && (
+          <p className={styles.caption}>
+            道路准备 · {statuses[view.roadTask.status].replace('试算', '准备')}
+            {view.roadTask.startedAt &&
+            view.roadTask.finishedAt &&
+            view.roadTask.status !== 'interrupted'
+              ? ` · 道路准备耗时 ${minutes((Date.parse(view.roadTask.finishedAt) - Date.parse(view.roadTask.startedAt)) / 1000)} 秒（不计搜索预算）`
+              : ' · 在输入资料中查看道路进度'}
+          </p>
+        )}
+        {task && (
+          <p className={styles.caption}>
+            {task.status === 'queued'
+              ? '排队等待，尚未开始计时'
+              : `本次运行 ${minutes(elapsed / 1000)} 秒 / 预算 ${minutes(task.config.maxRuntimeMs / 60000)} 分钟`}
+            {' · '}道路准备单独计时
+            {task.previousRuntimeMs !== undefined &&
+              ` · 含来源累计 ${minutes((task.previousRuntimeMs + elapsed) / 1000)} 秒`}
+          </p>
+        )}
+        {search && (
+          <section aria-label="完整候选与搜索进度" className={styles.searchProgress}>
+            <p role="status">
+              {running
+                ? {
+                    constructing: '构造周期安排',
+                    validating: '独立组合校核',
+                    searching: '探索出发与循环优先组合',
+                    finished: '有限搜索已结束',
+                  }[search.phase]
+                : '本次搜索已结束'}
+              {' · '}已完成 {search.attempts} 个组合，改进 {search.improvements} 次
+            </p>
+            {search.best ? (
+              <p>
+                <strong>最佳完整候选：{tonnes(search.best.completedTonnes)} 吨</strong>
+                {' · '}实际行驶 {formatKilometers(search.best.distanceMeters)} km ·
+                完整物理校核通过，财务尚未校核。
+                {running && '搜索仍在运行，停止后保留此候选。'}
+              </p>
+            ) : (
+              <p>本次尚未找到完整可行候选。运输基线进度不表示周期校核完成，不证明全局无解。</p>
+            )}
+            <p className={styles.caption}>固定布局内优先比较完成吨数，其次比较实际行驶里程。</p>
+          </section>
+        )}
         {running && (
           <>
             <p role="status">
               {baselineProgress && '运输基线 · '}
-              已安排 {task!.progress.completedTrips} 个完整循环，完成{' '}
+              本轮已安排 {task!.progress.completedTrips} 个完整循环，完成{' '}
               {tonnes(task!.progress.completedTonnes)} / {tonnes(task!.progress.totalTonnes)}{' '}
               吨。关闭页面后继续试算。
             </p>
@@ -514,8 +591,18 @@ export default function DailyTransport({
               </Button>
             </>
           )}
+          {!running && canContinue && (
+            <Button
+              className="button"
+              disabled={busy || disabled || frozen || !configValid || dirtyLimits}
+              onClick={() => void mutate('continue')}
+            >
+              <RefreshCw aria-hidden="true" />
+              {operation === 'continue' ? '正在启动…' : '继续搜索'}
+            </Button>
+          )}
           <span>
-            {frozen ? '冻结版本只读，可复制为新草案调整。' : '单任务队列，试算完成后提前结束。'}
+            {frozen ? '冻结版本只读，可复制为新草案调整。' : '单任务队列，有限搜索穷尽后提前结束。'}
           </span>
         </div>
         <details className={styles.detourLimits}>
@@ -647,6 +734,11 @@ export default function DailyTransport({
             </ul>
           </details>
         )}
+        {canContinue && !running && (
+          <p className={styles.caption}>
+            续搜复用所选任务的输入与实际道路快照、最佳完整候选和已完成组合；创建新任务，不恢复计算指令。种子沿用来源任务。
+          </p>
+        )}
         {task && (
           <details className={styles.record}>
             <summary>任务与算法依据</summary>
@@ -673,6 +765,20 @@ export default function DailyTransport({
                   {task.config.seed} / {minutes(task.config.maxRuntimeMs / 60000)} 分钟
                 </dd>
               </div>
+              {task.continuedFromTaskId && (
+                <div>
+                  <dt>续搜来源任务</dt>
+                  <dd>{task.continuedFromTaskId}</dd>
+                </div>
+              )}
+              {search && (
+                <div>
+                  <dt>搜索算法 / 已完成组合</dt>
+                  <dd>
+                    {search.algorithmVersion} / {search.nextOrder}（共 {search.totalOrders}）
+                  </dd>
+                </div>
+              )}
               <div>
                 <dt>创建时间</dt>
                 <dd>{savedTime(task.createdAt)}</dd>
@@ -1121,7 +1227,12 @@ export default function DailyTransport({
                 </p>
                 {turnover ? (
                   <p>
-                    独立校验已核对工位占用、满电库存与站内充电。共享电源及 24 小时周期尚未校核。
+                    独立校验已核对工位占用、满电库存与站内充电。
+                    {result.periodicity
+                      ? '共享电源与 24 小时周期均已校核。'
+                      : result.sharedPower
+                        ? '24 小时周期尚未校核。'
+                        : '共享电源及 24 小时周期尚未校核。'}
                   </p>
                 ) : (
                   <p>工位、库存、共享电源及 24 小时周期尚未校核。</p>

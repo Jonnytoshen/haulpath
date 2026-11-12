@@ -59,6 +59,7 @@ export default function DirectedRoadData({
   onViewChange: (view: RoadPreparationView | null) => void;
 }) {
   const path = `/api/projects/${encodeURIComponent(scenario.projectId)}/scenarios/${encodeURIComponent(scenario.id)}`;
+  const [now, setNow] = useState(0);
   const [view, setView] = useState<RoadPreparationView | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -69,9 +70,23 @@ export default function DirectedRoadData({
   const currentRequest = useRef<AbortController | null>(null);
   const task = view?.task;
   const running = activeTask(task?.status);
+  const roadElapsed =
+    task?.startedAt && task.status !== 'interrupted'
+      ? Math.max(
+          0,
+          (task.finishedAt ? Date.parse(task.finishedAt) : now || Date.parse(task.startedAt)) -
+            Date.parse(task.startedAt),
+        )
+      : null;
   const current = view?.inputVersion === scenario.inputVersion;
   const ready = current && view.currentReady && view.total > 0;
   const frozen = scenario.status === 'frozen';
+
+  useEffect(() => {
+    if (!running) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [running]);
 
   const refresh = useCallback(async () => {
     if (writing.current) return;
@@ -269,6 +284,13 @@ export default function DirectedRoadData({
       )}
       {task && (
         <div className={styles.task}>
+          <p>
+            {task.status === 'queued'
+              ? '排队等待，尚未开始计时'
+              : roadElapsed === null
+                ? '服务中断，未记录完整道路运行耗时'
+                : `道路准备耗时 ${(roadElapsed / 1000).toLocaleString('zh-CN', { maximumFractionDigits: 1 })} 秒，不计入搜索预算`}
+          </p>
           <div className={styles.statusHeading}>
             <strong>{taskLabels[task.status]}</strong>
             <span>任务输入版本 {task.inputVersion}</span>

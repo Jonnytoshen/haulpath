@@ -669,3 +669,15 @@
     align-content: center;
   }
 }
+
+.searchProgress {
+  display: grid;
+  gap: 6px;
+  padding: 12px 0;
+  border-block: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+.searchProgress p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}

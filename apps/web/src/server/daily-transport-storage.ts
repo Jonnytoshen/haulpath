@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type {
   DailyTransportConfig,
   DailyTransportProgress,
+  DailyTransportSearch,
   DailyTransportResult,
   DailyTransportSnapshot,
   DailyTransportStage,
@@ -20,6 +21,10 @@ import {
   VEHICLE_ENERGY_ALGORITHM_VERSION,
   REPEATABLE_DAY_ALGORITHM_VERSION,
   validateRepeatableDay,
+  initialDailyTransportSearch,
+  FIXED_LAYOUT_SEARCH_VERSION,
+  improvesDailyTransport,
+  improvesDailyTransportMetrics,
   dailyTransportReadiness,
   stationNetworkReadiness,
   stationTurnoverReadiness,
@@ -94,7 +99,7 @@ export class DailyTransportStorage {
         this.finish(
           JSON.parse(row.summary),
           'interrupted',
-          '上次运输试算因服务中断而停止，请重新试算',
+          '上次试算因服务中断而停止，完整候选已保留，可手动续搜',
         );
     })();
   }
@@ -108,6 +113,8 @@ export class DailyTransportStorage {
     status: RoadTaskStatus,
     error: string | null,
   ): void {
+    if (status !== 'interrupted' && task.startedAt)
+      task.elapsedMs = Math.max(0, Date.now() - Date.parse(task.startedAt));
     task.status = status;
     task.error = error;
     task.finishedAt = new Date().toISOString();
@@ -121,7 +128,7 @@ export class DailyTransportStorage {
     if (task.inputVersion !== scenario.inputVersion || scenario.status !== 'draft')
       this.finish(task, 'superseded', '方案输入已变化或版本已冻结，本次运输试算已停止');
     else if (task.startedAt && Date.now() - Date.parse(task.startedAt) >= task.config.maxRuntimeMs)
-      this.finish(task, 'timed-out', '运输试算已达到时限，请重新试算');
+      this.finish(task, 'timed-out', '试算已达到时限，完整候选继续保留，可手动续搜');
     return task;
   }
   private list(scenario: PlanningScenario): DailyTransportTaskSummary[] {
@@ -141,6 +148,17 @@ export class DailyTransportStorage {
       .get(taskId, projectId, scenarioId) as SummaryRow | undefined;
     if (!row) throw new HttpError(404, '该规划方案下的运输试算任务不存在');
     return this.settle(JSON.parse(row.summary), scenario);
+  }
+  heartbeat(projectId: string, scenarioId: string, taskId: string): DailyTransportTaskSummary {
+    const task = this.getSummary(projectId, scenarioId, taskId);
+    if (task.status === 'running' && task.startedAt) {
+      const elapsedMs = Date.now() - Date.parse(task.startedAt);
+      if (elapsedMs - (task.elapsedMs ?? 0) >= 1000) {
+        task.elapsedMs = elapsedMs;
+        this.writeSummary(task);
+      }
+    }
+    return task;
   }
   private details(task: DailyTransportTaskSummary): DailyTransportTask {
     const row = this.db
@@ -171,7 +189,16 @@ export class DailyTransportStorage {
   getView(projectId: string, scenarioId: string): DailyTransportView {
     const scenario = this.scenario(projectId, scenarioId);
     const tasks = this.list(scenario);
-    const resultTask = tasks.find((task) => task.status === 'completed');
+    const candidates = tasks.filter(
+      (task) => task.search?.best && task.inputVersion === scenario.inputVersion,
+    );
+    const best = candidates.reduce<DailyTransportTaskSummary | undefined>((best, task) => {
+      const a = task.search!.best!;
+      const b = best?.search?.best;
+      return improvesDailyTransportMetrics(a, b) ? task : best;
+    }, undefined);
+    const resultTask =
+      best ?? tasks.find((task) => task.search?.best || task.status === 'completed');
     const roads = this.roads.getView(projectId, scenarioId);
     const snapshot = this.snapshot(scenario, roads);
     return {
@@ -181,6 +208,7 @@ export class DailyTransportStorage {
       gaps: this.gaps(snapshot, roads.currentReady),
       vehicleEnergyGaps: vehicleEnergyReadiness(snapshot),
       stationTurnoverGaps: stationTurnoverReadiness(snapshot),
+      roadTask: roads.tasks.find((task) => task.inputVersion === scenario.inputVersion) ?? null,
       task: tasks[0] ?? null,
       tasks,
       resultTask: resultTask ? this.details(resultTask) : null,
@@ -191,6 +219,7 @@ export class DailyTransportStorage {
     scenarioId: string,
     expectedRevision: unknown,
     config: DailyTransportConfig,
+    sourceTaskId?: string,
   ): DailyTransportTaskSummary {
     return this.db.transaction(() => {
       const scenario = this.scenario(projectId, scenarioId);
@@ -198,8 +227,18 @@ export class DailyTransportStorage {
       if (scenarioRevision(expectedRevision) !== scenario.revision)
         throw new HttpError(409, '规划方案已被更新，请重新加载后试算');
       const roads = this.roads.getView(projectId, scenarioId);
-      const snapshot = this.snapshot(scenario, roads);
-      const gaps = this.gaps(snapshot, roads.currentReady);
+      const source = sourceTaskId ? this.getTask(projectId, scenarioId, sourceTaskId) : null;
+      if (
+        source &&
+        (active(source) ||
+          source.inputVersion !== scenario.inputVersion ||
+          source.config.stage !== 'repeatable-day' ||
+          source.algorithmVersion !== REPEATABLE_DAY_ALGORITHM_VERSION ||
+          source.search?.algorithmVersion !== FIXED_LAYOUT_SEARCH_VERSION)
+      )
+        throw new HttpError(409, '续搜须采用同一输入版本、兼容算法且已结束的周期搜索任务');
+      const snapshot = source?.snapshot ?? this.snapshot(scenario, roads);
+      const gaps = this.gaps(snapshot, source ? true : roads.currentReady);
       const stage = config.stage ?? 'transport';
       if (stage !== 'transport') gaps.push(...vehicleEnergyReadiness(snapshot));
       if (stage === 'station-turnover' || stage === 'shared-power' || stage === 'repeatable-day')
@@ -207,10 +246,12 @@ export class DailyTransportStorage {
       if (gaps.length) throw new HttpError(400, gaps.join('；'));
       const existing = this.list(scenario).find(active);
       if (existing) {
+        if (source) throw new HttpError(409, '当前方案已有活动试算，请完成或停止后续搜');
         if ((existing.config.stage ?? 'transport') !== stage)
           throw new HttpError(409, '当前方案已有另一阶段的试算，请等待完成或停止后再启动');
         return existing;
       }
+      if (source?.result) this.validateResult(source, source.result);
       const task: DailyTransportTaskSummary = {
         taskId: randomUUID(),
         projectId,
@@ -219,6 +260,20 @@ export class DailyTransportStorage {
         status: 'queued',
         algorithmVersion: algorithmVersions[stage],
         config,
+        ...(stage === 'repeatable-day'
+          ? {
+              search: source?.search
+                ? { ...source.search, phase: 'searching' as const }
+                : initialDailyTransportSearch(snapshot),
+            }
+          : {}),
+        ...(source
+          ? {
+              continuedFromTaskId: source.taskId,
+              previousRuntimeMs: (source.previousRuntimeMs ?? 0) + (source.elapsedMs ?? 0),
+            }
+          : {}),
+        elapsedMs: 0,
         progress: {
           completedTrips: 0,
           completedTonnes: 0,
@@ -238,8 +293,14 @@ export class DailyTransportStorage {
         )
         .run(task.taskId, projectId, scenarioId, JSON.stringify(task));
       this.db
-        .prepare('INSERT INTO daily_transport_task_details (task_id, snapshot) VALUES (?, ?)')
-        .run(task.taskId, JSON.stringify(snapshot));
+        .prepare(
+          'INSERT INTO daily_transport_task_details (task_id, snapshot, result) VALUES (?, ?, ?)',
+        )
+        .run(
+          task.taskId,
+          JSON.stringify(snapshot),
+          source?.result ? JSON.stringify(source.result) : null,
+        );
       return task;
     })();
   }
@@ -263,9 +324,102 @@ export class DailyTransportStorage {
       const task = this.getSummary(projectId, scenarioId, taskId);
       if (task.status !== 'running') return false;
       task.progress = progress;
+      task.elapsedMs = Date.now() - Date.parse(task.startedAt!);
       this.writeSummary(task);
       return true;
     })();
+  }
+  private validateResult(task: DailyTransportTaskSummary, result: DailyTransportResult): void {
+    const stage = task.config.stage ?? 'transport';
+    const energy = result.vehicleEnergy;
+    const periodic = stage === 'repeatable-day';
+    const sharedPower = stage === 'shared-power' || periodic;
+    const station = stage === 'station-turnover' || sharedPower;
+    const stationStatus = station ? 'checked' : 'not-checked';
+    if (
+      (stage === 'transport'
+        ? result.energyStatus !== 'not-checked' || energy !== undefined
+        : result.energyStatus !== 'checked' ||
+          !energy ||
+          energy.stationCapacityStatus !== stationStatus ||
+          energy.batteryInventoryStatus !== stationStatus ||
+          energy.sharedPowerStatus !== (sharedPower ? 'checked' : 'not-checked') ||
+          energy.periodicityStatus !== (periodic ? 'checked' : 'not-checked')) ||
+      (station ? !result.stationTurnover : result.stationTurnover !== undefined) ||
+      (sharedPower ? !result.sharedPower : result.sharedPower !== undefined) ||
+      result.physicalFeasibility !== (periodic ? 'feasible' : 'not-established') ||
+      (periodic
+        ? !validateRepeatableDay(this.details(task).snapshot, result).valid
+        : result.periodicity !== undefined) ||
+      !result.validation.valid ||
+      result.validation.issues.length ||
+      result.algorithmVersion !== task.algorithmVersion ||
+      result.seed !== task.config.seed
+    )
+      throw new Error('每日计划独立校验未通过或阶段依据不匹配');
+  }
+  continue(
+    projectId: string,
+    scenarioId: string,
+    taskId: string,
+    expectedRevision: unknown,
+    maxRuntimeMs: unknown,
+  ): DailyTransportTaskSummary {
+    const source = this.getTask(projectId, scenarioId, taskId);
+    const config = dailyTransportConfig({
+      ...source.config,
+      ...(maxRuntimeMs === undefined ? {} : { maxRuntimeMs }),
+    });
+    return this.begin(projectId, scenarioId, expectedRevision, config, taskId);
+  }
+  searchProgress(
+    projectId: string,
+    scenarioId: string,
+    taskId: string,
+    search: DailyTransportSearch,
+    result?: DailyTransportResult,
+  ): boolean {
+    return this.db.transaction(() => {
+      const task = this.getSummary(projectId, scenarioId, taskId);
+      if (task.status !== 'running' || !task.search) return false;
+      if (
+        search.algorithmVersion !== task.search.algorithmVersion ||
+        search.totalOrders !== task.search.totalOrders ||
+        BigInt(search.nextOrder) < BigInt(task.search.nextOrder) ||
+        BigInt(search.nextOrder) > BigInt(search.totalOrders)
+      )
+        throw new Error('搜索检查点不匹配');
+      if (result) {
+        if (result.totalCompletedTonnes <= 0) throw new Error('完整候选须实际服务正运量');
+        this.validateResult(task, result);
+        // Validation is synchronous; recheck the deadline before publishing.
+        if (this.getSummary(projectId, scenarioId, taskId).status !== 'running') return false;
+        if (!improvesDailyTransport(result, task.search.best)) return true;
+        task.search.best = {
+          sourceTaskId: taskId,
+          order: (BigInt(search.nextOrder) - 1n).toString(),
+          foundAt: new Date().toISOString(),
+          completedTonnes: result.totalCompletedTonnes,
+          distanceMeters: result.vehicleEnergy!.totalDistanceMeters,
+        };
+        task.search.improvements++;
+        this.db
+          .prepare('UPDATE daily_transport_task_details SET result = ? WHERE task_id = ?')
+          .run(JSON.stringify(result), taskId);
+      }
+      task.search = { ...search, best: task.search.best, improvements: task.search.improvements };
+      task.elapsedMs = Date.now() - Date.parse(task.startedAt!);
+      this.writeSummary(task);
+      return true;
+    })();
+  }
+  finishSearch(projectId: string, scenarioId: string, taskId: string): void {
+    const task = this.getSummary(projectId, scenarioId, taskId);
+    if (task.status !== 'running') return;
+    if (!task.search?.best || task.search.nextOrder !== task.search.totalOrders)
+      throw new Error('搜索未完成或未找到完整候选');
+    task.search.phase = 'finished';
+    this.finish(task, 'completed', null);
   }
   complete(
     projectId: string,
@@ -276,33 +430,7 @@ export class DailyTransportStorage {
     return this.db.transaction(() => {
       const task = this.getSummary(projectId, scenarioId, taskId);
       if (task.status !== 'running') return false;
-      const stage = task.config.stage ?? 'transport';
-      const energy = result.vehicleEnergy;
-      const periodic = stage === 'repeatable-day';
-      const sharedPower = stage === 'shared-power' || periodic;
-      const station = stage === 'station-turnover' || sharedPower;
-      const stationStatus = station ? 'checked' : 'not-checked';
-      if (
-        (stage === 'transport'
-          ? result.energyStatus !== 'not-checked' || energy !== undefined
-          : result.energyStatus !== 'checked' ||
-            !energy ||
-            energy.stationCapacityStatus !== stationStatus ||
-            energy.batteryInventoryStatus !== stationStatus ||
-            energy.sharedPowerStatus !== (sharedPower ? 'checked' : 'not-checked') ||
-            energy.periodicityStatus !== (periodic ? 'checked' : 'not-checked')) ||
-        (station ? !result.stationTurnover : result.stationTurnover !== undefined) ||
-        (sharedPower ? !result.sharedPower : result.sharedPower !== undefined) ||
-        result.physicalFeasibility !== (periodic ? 'feasible' : 'not-established') ||
-        (periodic
-          ? !validateRepeatableDay(this.details(task).snapshot, result).valid
-          : result.periodicity !== undefined) ||
-        !result.validation.valid ||
-        result.validation.issues.length ||
-        result.algorithmVersion !== task.algorithmVersion ||
-        result.seed !== task.config.seed
-      )
-        throw new Error('每日计划独立校验未通过或阶段依据不匹配');
+      this.validateResult(task, result);
       task.progress = {
         completedTrips: result.trips.length,
         completedTonnes: result.totalCompletedTonnes,

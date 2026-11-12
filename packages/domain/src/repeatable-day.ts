@@ -457,7 +457,10 @@ export function generateRepeatableDay(
   snapshot: DailyTransportSnapshot,
   onProgress?: (progress: DailyTransportProgress) => void,
   config: DailyTransportConfig = { seed: 1, maxRuntimeMs: 600000 },
+  onPhase?: (phase: 'constructing' | 'validating') => void,
+  notBefore?: ReadonlyMap<string, number>,
 ): DailyTransportResult {
+  onPhase?.('constructing');
   const deadline = Date.now() + config.maxRuntimeMs;
   let initialKwh = new Map<string, number>();
   let result: DailyTransportResult | undefined;
@@ -469,7 +472,7 @@ export function generateRepeatableDay(
         snapshot,
         onProgress,
         { ...config, maxRuntimeMs: deadline - Date.now() },
-        { initialKwh, requireSwap: true },
+        { initialKwh, requireSwap: true, notBefore },
       );
       const next = new Map(result.vehicleEnergy!.vehicles.map((v) => [v.vehicleId, v.finalKwh]));
       if (result.vehicleEnergy!.vehicles.every((v) => numericEqual(v.initialKwh, v.finalKwh)))
@@ -517,6 +520,7 @@ export function generateRepeatableDay(
         '沿固定车次、班次及换电访问求周期状态，不保证最优；未找到闭合状态不证明全局无解。财务尚未校核。',
         ...result.limitations.slice(3),
       ];
+      onPhase?.('validating');
       candidate.validation = validateRepeatableDay(snapshot, candidate);
       if (candidate.validation.valid) return candidate;
       reason = candidate.validation.issues.slice(0, 4).join('；');

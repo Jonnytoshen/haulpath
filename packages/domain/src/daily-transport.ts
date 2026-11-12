@@ -4,7 +4,7 @@ import { cycleHasAdjacentOverlap, cycleIsClosed } from './index';
 import type { FleetOperations, OperatingShift, VehicleGroup } from './fleet-operations';
 import { measuredSegmentIssue, vehicleGroupIssue } from './fleet-operations';
 import { transportDemandIssue } from './transport-demands';
-import type { PreparedRoad, RoadTaskStatus } from './directed-roads';
+import type { PreparedRoad, RoadTaskStatus, RoadTaskSummary } from './directed-roads';
 import { directedRoadKey } from './directed-roads';
 import type { VehicleEnergyResult } from './vehicle-energy';
 import type { StationTurnoverResult } from './station-turnover';
@@ -124,6 +124,22 @@ export interface DailyTransportResult {
   periodicity?: RepeatableDayResult;
   limitations: string[];
 }
+export interface DailyTransportBest {
+  sourceTaskId: string;
+  order: string;
+  foundAt: string;
+  completedTonnes: number;
+  distanceMeters: number;
+}
+export interface DailyTransportSearch {
+  algorithmVersion: string;
+  nextOrder: string;
+  totalOrders: string;
+  attempts: number;
+  improvements: number;
+  phase: 'constructing' | 'validating' | 'searching' | 'finished';
+  best: DailyTransportBest | null;
+}
 export interface DailyTransportTaskSummary {
   taskId: string;
   projectId: string;
@@ -133,6 +149,10 @@ export interface DailyTransportTaskSummary {
   algorithmVersion: string;
   config: DailyTransportConfig;
   progress: DailyTransportProgress;
+  search?: DailyTransportSearch;
+  continuedFromTaskId?: string;
+  elapsedMs?: number;
+  previousRuntimeMs?: number;
   error: string | null;
   createdAt: string;
   startedAt: string | null;
@@ -149,6 +169,7 @@ export interface DailyTransportView {
   gaps: string[];
   vehicleEnergyGaps: string[];
   stationTurnoverGaps: string[];
+  roadTask?: RoadTaskSummary | null;
   task: DailyTransportTaskSummary | null;
   tasks: DailyTransportTaskSummary[];
   resultTask: DailyTransportTask | null;
@@ -542,6 +563,7 @@ export function generateDailyTransport(
   snapshot: DailyTransportSnapshot,
   onProgress?: (progress: DailyTransportProgress) => void,
   config: DailyTransportConfig = { seed: 1, maxRuntimeMs: 10 * 60 * 1000 },
+  notBefore?: ReadonlyMap<string, number>,
 ): DailyTransportResult {
   const gaps = dailyTransportReadiness(snapshot);
   if (gaps.length) throw new Error(gaps.join('；'));
@@ -576,7 +598,15 @@ export function generateDailyTransport(
         returnedToBase: true,
       };
       vehicles.push(vehicle);
-      return { group, base, vehicle, shifts, shift: 0, time: shifts[0].startMinute, current: base };
+      return {
+        group,
+        base,
+        vehicle,
+        shifts,
+        shift: 0,
+        time: Math.max(shifts[0].startMinute, notBefore?.get(vehicleId) ?? shifts[0].startMinute),
+        current: base,
+      };
     }),
   );
   const trips: DailyTransportTrip[] = [];

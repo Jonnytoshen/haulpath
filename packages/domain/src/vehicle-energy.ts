@@ -660,6 +660,7 @@ function inputMaps(snapshot: DailyTransportSnapshot, result: DailyTransportResul
 export interface VehicleEnergyStart {
   initialKwh: ReadonlyMap<string, number>;
   requireSwap: boolean;
+  notBefore?: ReadonlyMap<string, number>;
 }
 
 /** Keep the checked 09 schedule as the direct basis, then look ahead along each vehicle's work. */
@@ -672,7 +673,7 @@ export function generateVehicleEnergy(
   const deadline = Date.now() + config.maxRuntimeMs;
   const gaps = vehicleEnergyReadiness(snapshot);
   if (gaps.length) throw new Error(gaps.join('；'));
-  const baseline = generateDailyTransport(snapshot, onProgress, config);
+  const baseline = generateDailyTransport(snapshot, onProgress, config, start?.notBefore);
   const inputs = inputMaps(snapshot, baseline);
   const capacityKwh = snapshot.context.operations!.battery!.capacityKwh!;
   const vehicles: VehicleEnergyTimeline[] = [];

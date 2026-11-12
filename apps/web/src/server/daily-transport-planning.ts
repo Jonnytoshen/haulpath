@@ -72,6 +72,7 @@ async function execute(projectId: string, scenarioId: string, taskId: string): P
       inputVersion: task.inputVersion,
       snapshot: task.snapshot,
       config: task.config,
+      search: task.search,
     });
     state.workers.set(taskId, worker);
     const runningWorker = worker;
@@ -85,7 +86,7 @@ async function execute(projectId: string, scenarioId: string, taskId: string): P
       };
       deadline = setTimeout(
         () => {
-          fail(projectId, scenarioId, taskId, true, '运输试算已达到时限，请重新试算');
+          fail(projectId, scenarioId, taskId, true, '试算已达到时限，完整候选继续保留，可手动续搜');
           void runningWorker.terminate();
           finish();
         },
@@ -94,7 +95,7 @@ async function execute(projectId: string, scenarioId: string, taskId: string): P
       monitor = setInterval(() => {
         try {
           if (
-            storage.dailyTransport.getSummary(projectId, scenarioId, taskId).status !== 'running'
+            storage.dailyTransport.heartbeat(projectId, scenarioId, taskId).status !== 'running'
           ) {
             void runningWorker.terminate();
             finish();
@@ -121,6 +122,22 @@ async function execute(projectId: string, scenarioId: string, taskId: string): P
               void runningWorker.terminate();
               finish();
             }
+          } else if (message.type === 'candidate' || message.type === 'search') {
+            if (
+              !storage.dailyTransport.searchProgress(
+                projectId,
+                scenarioId,
+                taskId,
+                message.search,
+                message.type === 'candidate' ? message.result : undefined,
+              )
+            ) {
+              void runningWorker.terminate();
+              finish();
+            }
+          } else if (message.type === 'finished') {
+            storage.dailyTransport.finishSearch(projectId, scenarioId, taskId);
+            finish();
           } else if (message.type === 'result') {
             storage.dailyTransport.complete(projectId, scenarioId, taskId, message.result);
             finish();
