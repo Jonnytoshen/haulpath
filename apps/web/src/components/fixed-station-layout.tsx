@@ -550,7 +550,7 @@ export default function FixedStationLayout({
       setSearch('');
       setFilter('all');
       setGenerationNotice(
-        `已保存新增 ${count} 个初步候选。重复来源及相同坐标已跳过；请核实场地与接电，并为新输入版本准备对应道路资料。`,
+        `已保存新增 ${count} 个初步候选。重复来源保留原站址，同址系统建议已合并来源；请核实场地与接电，并为新输入版本准备对应道路资料。`,
       );
     } catch (failure) {
       if (alive.current) setError(message(failure));
@@ -659,14 +659,37 @@ export default function FixedStationLayout({
     if (!saved) return ['新位置待保存和确认'];
     const power = draft?.powers.find((item) => item.id === site.powerSourceId);
     const savedPower = network.powerSources.find((item) => item.id === site.powerSourceId);
-    const changedPower =
-      !power ||
-      power.refreshSource ||
-      (savedPower &&
-        (power.availableCapacityKw !== text(savedPower.point.availableCapacityKw) ||
-          power.capacitySource !== savedPower.point.capacitySource ||
-          power.longitude !== String(savedPower.point.originalLongitude) ||
-          power.latitude !== String(savedPower.point.originalLatitude)));
+    let changedPower = !power || !savedPower;
+    if (power && savedPower) {
+      try {
+        const proposed = power.refreshSource
+          ? resources.find((point) => point.id === power.sourcePointId)
+          : {
+              ...pointInput(power),
+              originalLongitude: Number(power.longitude),
+              originalLatitude: Number(power.latitude),
+              availableCapacityKw: numberOf(power.availableCapacityKw, '可用容量'),
+              capacitySource: power.capacitySource.trim(),
+              connectionNotes: power.connectionNotes.trim(),
+            };
+        changedPower =
+          !proposed ||
+          (
+            [
+              'name',
+              'source',
+              'coordinateSystem',
+              'originalLongitude',
+              'originalLatitude',
+              'availableCapacityKw',
+              'capacitySource',
+              'connectionNotes',
+            ] as const
+          ).some((field) => proposed[field] !== savedPower.point[field]);
+      } catch {
+        changedPower = true;
+      }
+    }
     const connection = site.powerSourceId
       ? {
           powerSourceId: site.powerSourceId,
@@ -1496,7 +1519,7 @@ export default function FixedStationLayout({
                     </label>
                   </div>
                   <p className="helper">
-                    投资按每个新建站的站型建站投资＋接电投资，逐项四舍五入至分后合计。建站投资需完整涵盖本站新建配置（含备电池等必要投入）；本票不计算逐年现金流。启用预算前须补齐所有正式可选站址及可用站型的必要价格；年度运维费不计入新增投资。
+                    投资按每个新建站的站型建站投资＋接电投资，逐项四舍五入至分后合计。建站投资需完整涵盖本站新建配置（含备电池等必要投入）；逐年现金流另行核对。启用预算前须补齐所有正式可选站址及可用站型的必要价格；年度运维费不计入新增投资。
                   </p>
                   {draft.sites.map((site) =>
                     site.id ? (

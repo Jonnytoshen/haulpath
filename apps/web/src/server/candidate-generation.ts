@@ -16,17 +16,20 @@ export function generateCandidateSites(context: PlanningScenarioContext) {
       (site) => site.generationBasis?.origins.map((origin) => origin.key) ?? [],
     ),
   );
+  const existingSites = structuredClone(network.sites);
   const locations = new Map<string, CandidateSite>();
   function suggest(point: Point, key: string, label: string) {
     if (usedOrigins.has(key)) return;
     const location = JSON.stringify([point.longitude, point.latitude]);
     // Exact locations are collapsed only for proposing suggestions, never for engineering associations.
-    if (
-      network.sites.some(
-        (site) => site.longitude === point.longitude && site.latitude === point.latitude,
-      )
-    )
+    const existing = existingSites.find(
+      (site) => site.longitude === point.longitude && site.latitude === point.latitude,
+    );
+    if (existing) {
+      // A newly adopted co-located source must remain recognized after a later manual move.
+      existing.generationBasis?.origins.push({ key, label });
       return;
+    }
     const previous = locations.get(location);
     if (previous) {
       previous.generationBasis!.origins.push({ key, label });
@@ -51,7 +54,7 @@ export function generateCandidateSites(context: PlanningScenarioContext) {
       );
   for (const source of network.powerSources)
     suggest(source.point, `power:${source.id}`, `方案电源快照「${source.point.name}」`);
-  const sites = [...network.sites, ...locations.values()];
+  const sites = [...existingSites, ...locations.values()];
   if (sites.length > 1000)
     throw new HttpError(400, '生成后超过1000个候选，请先缩减候选或输入范围；本次未保存');
   return { ...network, sites };

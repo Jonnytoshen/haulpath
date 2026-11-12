@@ -221,6 +221,13 @@ export function sitingBudgetPriceReadiness(context: PlanningScenarioContext): st
   const gaps: string[] = [];
   if (investmentCents(network.constraints.maxInvestment) === null)
     gaps.push('新增投资上限超出可核对的金额范围');
+  for (const selection of network.fixedLayout) {
+    if (
+      !network.sites.some((site) => site.id === selection.siteId) ||
+      !network.stationTypes.some((type) => type.id === selection.stationTypeId)
+    )
+      gaps.push('固定布局的站址或站型已删除，必要投资缺失，不能启用预算上限');
+  }
   const selected = new Set(network.fixedLayout.map((selection) => selection.siteId));
   const formal = new Set(formalCandidateSites(network).map((site) => site.id));
   for (const site of network.sites.filter((site) => formal.has(site.id) || selected.has(site.id)))

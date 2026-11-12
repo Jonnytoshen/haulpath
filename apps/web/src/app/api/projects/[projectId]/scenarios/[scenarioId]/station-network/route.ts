@@ -58,8 +58,7 @@ export function POST(request: Request, context: Context) {
     if (revision !== scenario.revision)
       throw new HttpError(409, '规划方案已被更新，请重新加载后生成');
     const network = generateCandidateSites(scenario.context);
-    if (network.sites.length === (scenario.context.stationNetwork?.sites.length ?? 0))
-      return Response.json(scenario);
+    if (!scenario.context.stationNetwork && !network.sites.length) return Response.json(scenario);
     return Response.json(
       storage.replaceStationNetwork(projectId, scenarioId, revision, network, null),
     );

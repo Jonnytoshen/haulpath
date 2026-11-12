@@ -803,6 +803,30 @@ test('generate preliminary candidates from imported business locations and adopt
     );
     assert.equal(saved.context.stationNetwork.fixedLayout.length, 0);
     assert.equal(saved.context.transportCycles[0].roads.length, 0);
+    // A later adopted source at an existing suggested location must become traceable too.
+    const laterRoute = (
+      await request(`/api/projects/${project.id}/routes`, 'POST', {
+        name: '后来引入的同址业务',
+        points: [
+          {
+            ...site('同址装货', 121.47),
+            id: 'later',
+            originalLongitude: 121.47,
+            originalLatitude: 31.23,
+          },
+        ],
+      })
+    ).body;
+    saved = (
+      await request(`${path}/cycles`, 'POST', {
+        expectedRevision: saved.revision,
+        sourceRouteId: laterRoute.id,
+      })
+    ).body;
+    saved = (await request(`${path}/station-network`, 'POST', { expectedRevision: saved.revision }))
+      .body;
+    assert.equal(saved.context.stationNetwork.sites.length, 3);
+    assert.equal(saved.context.stationNetwork.sites[0].generationBasis.origins.length, 3);
     const edited = inputsOf(saved.context.stationNetwork);
     edited.sites[0].name = '人工修正名称';
     edited.sites[0].longitude = 121.48;
@@ -1061,6 +1085,38 @@ test('generated candidates and constraints survive restart, freezing, copying an
       ).status,
       404,
     );
+  } finally {
+    await app.stop();
+    await app.cleanup();
+  }
+});
+
+test('budget cannot be enabled when a retained fixed layout has deleted site or station type price references', async () => {
+  const app = await startApplication();
+  const request = (path, method, body) => jsonRequest(app.baseUrl, path, method, body);
+  try {
+    const { path, scenario, powers } = await setup(request);
+    let saved = await confirmedNetwork(request, path, scenario, powers);
+    const lost = inputsOf(saved.context.stationNetwork);
+    lost.sites = [];
+    lost.stationTypes = [];
+    saved = await save(request, path, saved, lost);
+    assert.equal(saved.context.stationNetwork.fixedLayout.length, 2);
+    const budget = await request(`${path}/station-network`, 'PUT', {
+      expectedRevision: saved.revision,
+      network: {
+        ...inputsOf(saved.context.stationNetwork),
+        constraints: {
+          maxInvestment: 1,
+          maxStations: null,
+          requiredSiteIds: [],
+          excludedSiteIds: [],
+        },
+      },
+    });
+    assert.equal(budget.status, 400);
+    assert.match(budget.body.error, /固定布局.*已删除.*投资/);
+    assert.deepEqual((await request(path)).body, saved);
   } finally {
     await app.stop();
     await app.cleanup();

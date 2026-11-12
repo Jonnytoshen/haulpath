@@ -228,6 +228,27 @@ test(
       dialog = await edit(page);
       await tab(dialog, '电源快照');
       await dialog.getByLabel('电源 1 显式引入更新', { exact: true }).check();
+      await tab(dialog, '候选站址');
+      await dialog.getByLabel('场地状态', { exact: true }).selectOption('formal');
+      assert.equal(
+        await dialog.getByLabel('站址 1 名称', { exact: true }).count(),
+        1,
+        'same-value refresh preserves formal eligibility in the draft preview',
+      );
+      await tab(dialog, '电源快照');
+      await dialog.getByLabel('电源 1 显式引入更新', { exact: true }).uncheck();
+      await dialog.getByLabel('电源 1 接入资料说明', { exact: true }).fill('修订接入说明');
+      await tab(dialog, '候选站址');
+      assert.equal(
+        await dialog.getByLabel('站址 1 名称', { exact: true }).count(),
+        0,
+        'editing supply notes invalidates formal eligibility in preview',
+      );
+      await tab(dialog, '电源快照');
+      await dialog
+        .getByLabel('电源 1 接入资料说明', { exact: true })
+        .fill(power.points[0].connectionNotes);
+      await dialog.getByLabel('电源 1 显式引入更新', { exact: true }).check();
       await save(dialog);
       const unchangedRefresh = (await request(path)).body;
       assert.equal(
