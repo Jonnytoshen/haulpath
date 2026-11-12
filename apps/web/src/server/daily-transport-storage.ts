@@ -26,6 +26,13 @@ import {
   improvesDailyTransport,
   improvesDailyTransportMetrics,
   dailyTransportReadiness,
+  annualTransportInputIssues,
+  annualDaySnapshot,
+  annualTransportResult,
+  validateAnnualYear,
+  ANNUAL_TRANSPORT_ALGORITHM_VERSION,
+  ANNUAL_TRANSPORT_EVIDENCE_VERSION,
+  type AnnualTransportYearResult,
   stationNetworkReadiness,
   stationTurnoverReadiness,
   vehicleEnergyReadiness,
@@ -45,6 +52,7 @@ const algorithmVersions: Record<DailyTransportStage, string> = {
   'station-turnover': DAILY_STATION_TURNOVER_ALGORITHM_VERSION,
   'shared-power': DAILY_SHARED_POWER_ALGORITHM_VERSION,
   'repeatable-day': REPEATABLE_DAY_ALGORITHM_VERSION,
+  'annual-transport': ANNUAL_TRANSPORT_ALGORITHM_VERSION,
 };
 
 export function dailyTransportConfig(value: unknown): DailyTransportConfig {
@@ -61,7 +69,8 @@ export function dailyTransportConfig(value: unknown): DailyTransportConfig {
     stage !== 'vehicle-energy' &&
     stage !== 'station-turnover' &&
     stage !== 'shared-power' &&
-    stage !== 'repeatable-day'
+    stage !== 'repeatable-day' &&
+    stage !== 'annual-transport'
   )
     throw new HttpError(400, '每日计划试算阶段无效');
   const seed = input.seed ?? 1;
@@ -167,7 +176,13 @@ export class DailyTransportStorage {
     return {
       ...task,
       snapshot: JSON.parse(row.snapshot),
-      result: row.result === null ? null : JSON.parse(row.result),
+      result:
+        task.config.stage === 'annual-transport' || row.result === null
+          ? null
+          : JSON.parse(row.result),
+      ...(task.config.stage === 'annual-transport'
+        ? { annualResult: row.result === null ? null : JSON.parse(row.result) }
+        : {}),
     };
   }
   getTask(projectId: string, scenarioId: string, taskId: string): DailyTransportTask {
@@ -186,9 +201,11 @@ export class DailyTransportStorage {
     if (!currentReady) gaps.unshift('当前输入版本的有向道路尚未完成显式准备');
     return gaps;
   }
-  getView(projectId: string, scenarioId: string): DailyTransportView {
+  getView(projectId: string, scenarioId: string, annual = false): DailyTransportView {
     const scenario = this.scenario(projectId, scenarioId);
-    const tasks = this.list(scenario);
+    const tasks = this.list(scenario).filter(
+      (task) => (task.config.stage === 'annual-transport') === annual,
+    );
     const candidates = tasks.filter(
       (task) => task.search?.best && task.inputVersion === scenario.inputVersion,
     );
@@ -198,14 +215,25 @@ export class DailyTransportStorage {
       return improvesDailyTransportMetrics(a, b) ? task : best;
     }, undefined);
     const resultTask =
-      best ?? tasks.find((task) => task.search?.best || task.status === 'completed');
+      best ??
+      tasks.find(
+        (task) =>
+          task.search?.best ||
+          task.status === 'completed' ||
+          (annual &&
+            ((task.annualProgress?.completedYears ?? 0) > 0 ||
+              (task.annualProgress?.validatedYears ?? 0) > 0)),
+      );
     const roads = this.roads.getView(projectId, scenarioId);
     const snapshot = this.snapshot(scenario, roads);
     return {
       projectId,
       scenarioId,
       inputVersion: scenario.inputVersion,
-      gaps: this.gaps(snapshot, roads.currentReady),
+      gaps: [
+        ...this.gaps(snapshot, roads.currentReady),
+        ...(annual ? annualTransportInputIssues(snapshot.context) : []),
+      ],
       vehicleEnergyGaps: vehicleEnergyReadiness(snapshot),
       stationTurnoverGaps: stationTurnoverReadiness(snapshot),
       roadTask: roads.tasks.find((task) => task.inputVersion === scenario.inputVersion) ?? null,
@@ -232,18 +260,38 @@ export class DailyTransportStorage {
         source &&
         (active(source) ||
           source.inputVersion !== scenario.inputVersion ||
-          source.config.stage !== 'repeatable-day' ||
-          source.algorithmVersion !== REPEATABLE_DAY_ALGORITHM_VERSION ||
-          source.search?.algorithmVersion !== FIXED_LAYOUT_SEARCH_VERSION)
+          (source.config.stage === 'annual-transport'
+            ? source.algorithmVersion !== ANNUAL_TRANSPORT_ALGORITHM_VERSION ||
+              source.evidenceVersion !== ANNUAL_TRANSPORT_EVIDENCE_VERSION
+            : source.config.stage !== 'repeatable-day' ||
+              source.algorithmVersion !== REPEATABLE_DAY_ALGORITHM_VERSION ||
+              source.search?.algorithmVersion !== FIXED_LAYOUT_SEARCH_VERSION))
       )
         throw new HttpError(409, '续搜须采用同一输入版本、兼容算法且已结束的周期搜索任务');
       const snapshot = source?.snapshot ?? this.snapshot(scenario, roads);
       const gaps = this.gaps(snapshot, source ? true : roads.currentReady);
       const stage = config.stage ?? 'transport';
       if (stage !== 'transport') gaps.push(...vehicleEnergyReadiness(snapshot));
-      if (stage === 'station-turnover' || stage === 'shared-power' || stage === 'repeatable-day')
+      if (
+        stage === 'station-turnover' ||
+        stage === 'shared-power' ||
+        stage === 'repeatable-day' ||
+        stage === 'annual-transport'
+      )
         gaps.push(...stationTurnoverReadiness(snapshot));
-      if (gaps.length) throw new HttpError(400, gaps.join('；'));
+      if (stage === 'annual-transport') {
+        gaps.push(...annualTransportInputIssues(snapshot.context));
+        if (!gaps.length)
+          for (const year of snapshot.context.annualTransport!) {
+            const day = annualDaySnapshot(snapshot, year);
+            gaps.push(
+              ...dailyTransportReadiness(day),
+              ...vehicleEnergyReadiness(day),
+              ...stationTurnoverReadiness(day),
+            );
+          }
+      }
+      if (gaps.length) throw new HttpError(400, [...new Set(gaps)].join('；'));
       const existing = this.list(scenario).find(active);
       if (existing) {
         if (source) throw new HttpError(409, '当前方案已有活动试算，请完成或停止后续搜');
@@ -260,6 +308,18 @@ export class DailyTransportStorage {
         status: 'queued',
         algorithmVersion: algorithmVersions[stage],
         config,
+        ...(stage === 'annual-transport'
+          ? {
+              annualProgress: {
+                currentYear: null,
+                completedYears: 0,
+                totalYears: snapshot.context.annualTransport!.length,
+                validatedYears: 0,
+                publication: 0,
+              },
+              evidenceVersion: ANNUAL_TRANSPORT_EVIDENCE_VERSION,
+            }
+          : {}),
         ...(stage === 'repeatable-day'
           ? {
               search: source?.search
@@ -412,6 +472,56 @@ export class DailyTransportStorage {
       this.writeSummary(task);
       return true;
     })();
+  }
+  annualYear(
+    projectId: string,
+    scenarioId: string,
+    taskId: string,
+    row: AnnualTransportYearResult,
+  ): boolean {
+    return this.db.transaction(() => {
+      const task = this.getSummary(projectId, scenarioId, taskId);
+      if (task.status !== 'running' || task.config.stage !== 'annual-transport') return false;
+      const detail = this.details(task);
+      const years = detail.annualResult?.years ?? [];
+      const expected = detail.snapshot.context.annualTransport!;
+      const index = years.findIndex((y) => y.year === row.year);
+      const cursor = index < 0 ? years.length : index;
+      if (
+        expected[cursor]?.year !== row.year ||
+        (index >= 0 && index !== years.length - 1) ||
+        (index < 0 && years.at(-1)?.status === 'searching')
+      )
+        throw new Error('年度发布顺序与任务快照不匹配');
+      validateAnnualYear(detail.snapshot, task.config, row, years);
+      if (this.getSummary(projectId, scenarioId, taskId).status !== 'running') return false;
+      if (index < 0) years.push(row);
+      else years[index] = row;
+      const result = annualTransportResult(years, expected.length);
+      this.db
+        .prepare('UPDATE daily_transport_task_details SET result = ? WHERE task_id = ?')
+        .run(JSON.stringify(result), taskId);
+      task.annualProgress = {
+        currentYear: row.year,
+        completedYears: years.filter((y) => y.status !== 'searching').length,
+        totalYears: expected.length,
+        validatedYears: years.filter((y) => y.evidence).length,
+        publication: (task.annualProgress?.publication ?? 0) + 1,
+      };
+      task.elapsedMs = Date.now() - Date.parse(task.startedAt!);
+      this.writeSummary(task);
+      return true;
+    })();
+  }
+  finishAnnual(projectId: string, scenarioId: string, taskId: string): void {
+    const task = this.getSummary(projectId, scenarioId, taskId);
+    if (task.status !== 'running') return;
+    if (
+      task.config.stage !== 'annual-transport' ||
+      task.annualProgress?.completedYears !== task.annualProgress?.totalYears
+    )
+      throw new Error('年度分析尚未完成');
+    this.finish(task, 'completed', null);
   }
   finishSearch(projectId: string, scenarioId: string, taskId: string): void {
     const task = this.getSummary(projectId, scenarioId, taskId);

@@ -9,6 +9,7 @@ import type {
   StationNetwork,
   RoadSettings,
   SwapDetourLimits,
+  AnnualTransportYear,
 } from '@haulpath/domain';
 import { isStrategy } from '@haulpath/domain';
 import { HttpError } from './http';
@@ -81,6 +82,7 @@ export function scenarioContext(input: unknown): PlanningScenarioContext {
     'roadSettings',
     'swapDetourLimits',
     'annual',
+    'annualTransport',
     'results',
   ]);
   if (
@@ -92,6 +94,8 @@ export function scenarioContext(input: unknown): PlanningScenarioContext {
       (!Array.isArray(context.transportDemands) || !jsonValue(context.transportDemands))) ||
     (context.operations !== undefined && !jsonObject(context.operations)) ||
     (context.stationNetwork !== undefined && !jsonObject(context.stationNetwork)) ||
+    (context.annualTransport !== undefined &&
+      (!Array.isArray(context.annualTransport) || !jsonValue(context.annualTransport))) ||
     !Array.isArray(context.annual) ||
     !context.annual.every((year) => jsonObject(year)) ||
     !Array.isArray(context.results) ||
@@ -125,6 +129,9 @@ export function scenarioContext(input: unknown): PlanningScenarioContext {
     ...(context.swapDetourLimits === undefined
       ? {}
       : { swapDetourLimits: swapDetourLimitsOf(context.swapDetourLimits) }),
+    ...(context.annualTransport === undefined
+      ? {}
+      : { annualTransport: context.annualTransport as unknown as AnnualTransportYear[] }),
     annual: context.annual,
     results: context.results,
   };

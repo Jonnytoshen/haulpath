@@ -26,6 +26,10 @@ export function scenarioInputNames(context: PlanningScenarioContext): Record<str
       names[position.id] = `${cycle.name} · ${index + 1} ${position.point.name}`;
     });
   }
+  for (const demand of context.transportDemands ?? []) {
+    names[demand.id] =
+      `${names[demand.loadingPositionId] ?? '装货位置'} → ${names[demand.unloadingPositionId] ?? '卸货位置'}`;
+  }
   return names;
 }
 

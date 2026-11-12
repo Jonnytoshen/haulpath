@@ -1,3 +1,4 @@
+import type { AnnualTransportResult } from './annual-transport';
 import type { RepeatableDayResult } from './repeatable-day';
 import type { PlanningScenarioContext, Point, TransportCycle } from './index';
 import { cycleHasAdjacentOverlap, cycleIsClosed } from './index';
@@ -18,7 +19,12 @@ export interface DailyTransportSnapshot {
   revision: number;
 }
 export type DailyTransportStage =
-  'transport' | 'vehicle-energy' | 'station-turnover' | 'shared-power' | 'repeatable-day';
+  | 'transport'
+  | 'vehicle-energy'
+  | 'station-turnover'
+  | 'shared-power'
+  | 'repeatable-day'
+  | 'annual-transport';
 
 export interface DailyTransportConfig {
   seed: number;
@@ -150,6 +156,14 @@ export interface DailyTransportTaskSummary {
   config: DailyTransportConfig;
   progress: DailyTransportProgress;
   search?: DailyTransportSearch;
+  annualProgress?: {
+    currentYear: number | null;
+    completedYears: number;
+    totalYears: number;
+    validatedYears: number;
+    publication: number;
+  };
+  evidenceVersion?: string;
   continuedFromTaskId?: string;
   elapsedMs?: number;
   previousRuntimeMs?: number;
@@ -161,6 +175,7 @@ export interface DailyTransportTaskSummary {
 export interface DailyTransportTask extends DailyTransportTaskSummary {
   snapshot: DailyTransportSnapshot;
   result: DailyTransportResult | null;
+  annualResult?: AnnualTransportResult | null;
 }
 export interface DailyTransportView {
   projectId: string;

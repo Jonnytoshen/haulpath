@@ -1,0 +1,61 @@
+.fieldset {
+  min-width: 0;
+  margin: 16px 0 0;
+  padding: 0;
+  border: 0;
+}
+.fieldset input {
+  min-width: 110px;
+}
+.paste {
+  margin: 20px 0;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.paste textarea {
+  display: block;
+  width: 100%;
+  margin: 12px 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--background);
+  color: var(--foreground);
+  resize: vertical;
+}
+.history {
+  display: grid;
+  gap: 8px;
+  margin: 20px 0;
+  font-size: 13px;
+}
+.history select {
+  max-width: 100%;
+}
+
+.summary table {
+  min-width: 920px;
+  font-variant-numeric: tabular-nums;
+}
+.summary th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 64px;
+  background: var(--background);
+}
+.summary td:nth-child(n + 2):nth-child(-n + 6),
+.summary thead th:nth-child(n + 2):nth-child(-n + 6) {
+  text-align: right;
+}
+.summary td:nth-child(7) {
+  min-width: 190px;
+  max-width: 280px;
+  white-space: normal;
+}
+
+.quantities th,
+.quantities td {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}

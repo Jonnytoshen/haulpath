@@ -61,6 +61,7 @@ const stages: Record<DailyTransportStage, string> = {
   'station-turnover': '站内周转试算',
   'shared-power': '共享电源试算',
   'repeatable-day': '24 小时周期校核',
+  'annual-transport': '年度能力校核',
 };
 const stageName = (task?: DailyTransportTaskSummary | null) =>
   stages[task?.config.stage ?? 'transport'];

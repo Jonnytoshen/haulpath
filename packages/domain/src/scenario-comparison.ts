@@ -20,6 +20,10 @@ const fieldLabels: Record<string, string> = {
   name: '名称',
   resources: '其他资源',
   annual: '年度参数',
+  annualTransport: '年度运输能力',
+  operatingDays: '年运营天数（天）',
+  demandId: '运输需求',
+  demands: '年度需求',
   transportCycles: '运输循环',
   transportDemands: '运输需求',
   operations: '车辆与运营',
@@ -159,6 +163,7 @@ const sections: [keyof PlanningScenarioContext, string][] = [
   ['swapDetourLimits', '换电绕行限额'],
   ['resources', '其他资源'],
   ['annual', '年度参数'],
+  ['annualTransport', '年度运输能力'],
 ];
 
 function object(value: JsonValue | undefined): value is Record<string, JsonValue> {
@@ -169,6 +174,8 @@ function identity(value: JsonValue): string | null {
   if (!object(value)) return null;
   if (typeof value.id === 'string') return value.id;
   if (typeof value.siteId === 'string') return value.siteId;
+  if (typeof value.year === 'number') return String(value.year);
+  if (typeof value.demandId === 'string') return value.demandId;
   if (typeof value.fromPositionId === 'string' && typeof value.toPositionId === 'string')
     return `${value.fromPositionId}:${value.toPositionId}`;
   return null;
@@ -177,6 +184,8 @@ function identity(value: JsonValue): string | null {
 function itemName(value: JsonValue, fallback: string, names: Map<string, string>): string {
   if (!object(value)) return fallback;
   if (typeof value.name === 'string') return value.name;
+  if (typeof value.year === 'number') return `${value.year} 年`;
+  if (typeof value.demandId === 'string') return names.get(value.demandId) ?? value.demandId;
   if (object(value.point) && typeof value.point.name === 'string') return value.point.name;
   if (typeof value.loadingPositionId === 'string' && typeof value.unloadingPositionId === 'string')
     return `${names.get(value.loadingPositionId) ?? value.loadingPositionId} → ${names.get(value.unloadingPositionId) ?? value.unloadingPositionId}`;

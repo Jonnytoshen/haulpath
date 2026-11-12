@@ -9,6 +9,13 @@ export function POST(_request: Request, context: Context) {
     const { projectId, scenarioId, taskId } = await context.params;
     storage.dailyTransport.stop(projectId, scenarioId, taskId);
     abortDailyTransportTask(taskId);
-    return Response.json(storage.dailyTransport.getView(projectId, scenarioId));
+    return Response.json(
+      storage.dailyTransport.getView(
+        projectId,
+        scenarioId,
+        storage.dailyTransport.getSummary(projectId, scenarioId, taskId).config.stage ===
+          'annual-transport',
+      ),
+    );
   });
 }

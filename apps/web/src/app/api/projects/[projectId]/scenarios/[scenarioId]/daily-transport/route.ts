@@ -1,5 +1,5 @@
 import { after } from 'next/server';
-import { api, readJson } from '@/server/http';
+import { api, readJson, HttpError } from '@/server/http';
 import { scenarioFields } from '@/server/scenario-validation';
 import { dailyTransportConfig } from '@/server/daily-transport-storage';
 import { runDailyTransportTask } from '@/server/daily-transport-planning';
@@ -27,12 +27,9 @@ export function POST(request: Request, context: Context) {
     const { projectId, scenarioId } = await context.params;
     const body = await readJson(request);
     scenarioFields(body, ['expectedRevision', 'config']);
-    const task = storage.dailyTransport.begin(
-      projectId,
-      scenarioId,
-      body.expectedRevision,
-      dailyTransportConfig(body.config),
-    );
+    const config = dailyTransportConfig(body.config);
+    if (config.stage === 'annual-transport') throw new HttpError(400, '年度分析请使用年度能力入口');
+    const task = storage.dailyTransport.begin(projectId, scenarioId, body.expectedRevision, config);
     after(() => runDailyTransportTask(projectId, scenarioId, task.taskId));
     return Response.json(storage.dailyTransport.getView(projectId, scenarioId), { status: 202 });
   });

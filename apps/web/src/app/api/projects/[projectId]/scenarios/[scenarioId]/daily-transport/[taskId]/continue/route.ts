@@ -19,6 +19,14 @@ export function POST(request: Request, context: Context) {
       body.maxRuntimeMs,
     );
     after(() => runDailyTransportTask(projectId, scenarioId, task.taskId));
-    return Response.json(storage.dailyTransport.getView(projectId, scenarioId), { status: 202 });
+    return Response.json(
+      storage.dailyTransport.getView(
+        projectId,
+        scenarioId,
+        storage.dailyTransport.getSummary(projectId, scenarioId, taskId).config.stage ===
+          'annual-transport',
+      ),
+      { status: 202 },
+    );
   });
 }

@@ -3,6 +3,7 @@ import {
   generateDailyStationTurnover,
   generateDailySharedPower,
   generateDailyTransport,
+  generateAnnualTransport,
   searchDailyTransport,
   generateVehicleEnergy,
 } from '@haulpath/domain';
@@ -35,7 +36,16 @@ try {
     lastProgressAt = now;
     send({ ...identity, type: 'progress', progress });
   };
-  if (data.config.stage === 'repeatable-day' && data.search) {
+  if (data.config.stage === 'annual-transport') {
+    generateAnnualTransport(
+      data.snapshot,
+      data.config,
+      (year) => send({ ...identity, type: 'annual-year', year }),
+      progress,
+      data.annualResult,
+    );
+    send({ ...identity, type: 'annual-finished' });
+  } else if (data.config.stage === 'repeatable-day' && data.search) {
     let lastSearchAt = -Infinity;
     searchDailyTransport(
       data.snapshot,
