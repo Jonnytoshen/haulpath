@@ -1,3 +1,4 @@
+import type { AnnualTransportYear } from './annual-transport';
 import type { TransportDemand } from './transport-demands';
 import type { FleetOperations } from './fleet-operations';
 import type { StationNetwork } from './station-network';
@@ -159,6 +160,7 @@ export interface PlanningScenarioContext {
   stationNetwork?: StationNetwork;
   roadSettings?: RoadSettings;
   swapDetourLimits?: SwapDetourLimits;
+  annualTransport?: AnnualTransportYear[];
   annual: JsonObject[];
   results: JsonObject[];
 }
@@ -285,3 +287,5 @@ export function cycleReadiness(cycle: TransportCycle, operations?: FleetOperatio
 export * from './repeatable-day';
 
 export * from './daily-transport-search';
+
+export * from './annual-transport';

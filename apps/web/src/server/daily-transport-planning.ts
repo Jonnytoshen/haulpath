@@ -73,6 +73,11 @@ async function execute(projectId: string, scenarioId: string, taskId: string): P
       snapshot: task.snapshot,
       config: task.config,
       search: task.search,
+      annualResult:
+        task.continuedFromTaskId && task.config.stage === 'annual-transport'
+          ? storage.dailyTransport.getTask(projectId, scenarioId, task.continuedFromTaskId)
+              .annualResult
+          : null,
     });
     state.workers.set(taskId, worker);
     const runningWorker = worker;
@@ -135,6 +140,14 @@ async function execute(projectId: string, scenarioId: string, taskId: string): P
               void runningWorker.terminate();
               finish();
             }
+          } else if (message.type === 'annual-year') {
+            if (!storage.dailyTransport.annualYear(projectId, scenarioId, taskId, message.year)) {
+              void runningWorker.terminate();
+              finish();
+            }
+          } else if (message.type === 'annual-finished') {
+            storage.dailyTransport.finishAnnual(projectId, scenarioId, taskId);
+            finish();
           } else if (message.type === 'finished') {
             storage.dailyTransport.finishSearch(projectId, scenarioId, taskId);
             finish();
