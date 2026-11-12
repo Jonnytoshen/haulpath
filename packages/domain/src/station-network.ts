@@ -48,11 +48,13 @@ export interface StationConnection {
   confirmed: boolean;
 }
 export interface CandidateSite extends Point {
+  generationBasis?: CandidateGenerationBasis;
   siteNotes: string;
   siteConfirmed: boolean;
   connection: StationConnection | null;
 }
 export interface CandidateSiteInput {
+  generationBasis?: CandidateGenerationBasis;
   id?: string;
   name: string;
   longitude: number;
@@ -67,13 +69,25 @@ export interface FixedStationSelection {
   siteId: string;
   stationTypeId: string;
 }
+export interface CandidateGenerationBasis {
+  algorithm: 'input-locations-v1';
+  origins: { key: string; label: string }[];
+}
+export interface SitingConstraints {
+  maxInvestment: number | null;
+  maxStations: number | null;
+  requiredSiteIds: string[];
+  excludedSiteIds: string[];
+}
 export interface StationNetwork {
+  constraints?: SitingConstraints;
   stationTypes: StationType[];
   sites: CandidateSite[];
   powerSources: ScenarioPowerSource[];
   fixedLayout: FixedStationSelection[];
 }
 export interface StationNetworkInput {
+  constraints?: SitingConstraints;
   stationTypes: StationTypeInput[];
   sites: CandidateSiteInput[];
   powerSources: ScenarioPowerSourceInput[];
@@ -152,7 +166,7 @@ export function stationNetworkReadiness(
 ): string[] {
   const network = context.stationNetwork;
   if (!network) return ['站网资料待配置'];
-  const gaps: string[] = [];
+  const gaps: string[] = sitingConstraintReadiness(context);
   if (!network.fixedLayout.length) gaps.push('尚未选择固定布局（空布局不表示已完成试算）');
   for (const selection of network.fixedLayout) {
     const site = network.sites.find((item) => item.id === selection.siteId);
@@ -177,6 +191,103 @@ export function stationNetworkFinancialReadiness(network: StationNetwork): strin
     if (type?.investment === null) gaps.push(`${type.name}：建站投资待填写`);
     if (type?.annualOperatingCost === null) gaps.push(`${type.name}：年度运维费用待填写`);
     if (site?.connection?.connectionInvestment === null) gaps.push(`${site.name}：接电投资待填写`);
+  }
+  return gaps;
+}
+
+export function emptySitingConstraints(): SitingConstraints {
+  return { maxInvestment: null, maxStations: null, requiredSiteIds: [], excludedSiteIds: [] };
+}
+
+/** Formal eligibility is derived from current confirmations, never from a view filter. */
+export function formalCandidateSites(network: StationNetwork): CandidateSite[] {
+  const excluded = new Set(network.constraints?.excludedSiteIds ?? []);
+  return network.sites.filter(
+    (site) => !excluded.has(site.id) && !candidateSiteReadiness(site, network).length,
+  );
+}
+
+/** Each supplied investment is rounded to cents before aggregation. No missing price becomes zero. */
+function investmentCents(value: number | null | undefined): number | null {
+  if (value == null || !Number.isFinite(value) || value < 0) return null;
+  const [coefficient, exponent = '0'] = value.toString().split('e');
+  const cents = Math.round(Number(`${coefficient}e${Number(exponent) + 2}`));
+  return Number.isSafeInteger(cents) ? cents : null;
+}
+
+export function sitingBudgetPriceReadiness(context: PlanningScenarioContext): string[] {
+  const network = context.stationNetwork;
+  if (!network || network.constraints?.maxInvestment == null) return [];
+  const gaps: string[] = [];
+  if (investmentCents(network.constraints.maxInvestment) === null)
+    gaps.push('新增投资上限超出可核对的金额范围');
+  for (const selection of network.fixedLayout) {
+    if (
+      !network.sites.some((site) => site.id === selection.siteId) ||
+      !network.stationTypes.some((type) => type.id === selection.stationTypeId)
+    )
+      gaps.push('固定布局的站址或站型已删除，必要投资缺失，不能启用预算上限');
+  }
+  const selected = new Set(network.fixedLayout.map((selection) => selection.siteId));
+  const formal = new Set(formalCandidateSites(network).map((site) => site.id));
+  for (const site of network.sites.filter((site) => formal.has(site.id) || selected.has(site.id)))
+    if (investmentCents(site.connection?.connectionInvestment) === null)
+      gaps.push(`${site.name}：接电投资待填写或超出金额范围，不能启用预算上限`);
+  const types = network.stationTypes.filter(
+    (type) =>
+      network.fixedLayout.some((selection) => selection.stationTypeId === type.id) ||
+      !stationTypeReadiness(type, context.operations?.battery ?? null).length,
+  );
+  if (formal.size && !types.length) gaps.push('正式候选缺少可用站型及建站投资，不能启用预算上限');
+  for (const type of types)
+    if (investmentCents(type.investment) === null)
+      gaps.push(`${type.name}：建站投资待填写或超出金额范围，不能启用预算上限`);
+  return gaps;
+}
+
+/** Draft conflicts remain repairable, but every adoption and calculation must satisfy these limits. */
+export function sitingConstraintReadiness(context: PlanningScenarioContext): string[] {
+  const network = context.stationNetwork;
+  const constraints = network?.constraints;
+  if (!network || !constraints) return [];
+  const priceGaps = sitingBudgetPriceReadiness(context);
+  const gaps = [...priceGaps];
+  const selected = new Set(network.fixedLayout.map((selection) => selection.siteId));
+  const excluded = new Set(constraints.excludedSiteIds);
+  if (constraints.maxStations !== null) {
+    if (constraints.requiredSiteIds.length > constraints.maxStations)
+      gaps.push('必选站址数量超过新建站数上限');
+    if (selected.size > constraints.maxStations) gaps.push('固定布局超过新建站数上限');
+  }
+  for (const id of constraints.requiredSiteIds) {
+    const site = network.sites.find((site) => site.id === id);
+    const label = `必选站址「${site?.name ?? id}」`;
+    if (!site) gaps.push(`${label}已删除，须修复必选约束`);
+    else if (candidateSiteReadiness(site, network).length)
+      gaps.push(`${label}尚未进入正式候选集，须修复确认条件`);
+    if (excluded.has(id)) gaps.push(`${label}同时禁选`);
+    if (!selected.has(id)) gaps.push(`${label}未纳入固定布局`);
+  }
+  for (const id of selected)
+    if (excluded.has(id))
+      gaps.push(
+        `固定布局包含禁选站址「${network.sites.find((site) => site.id === id)?.name ?? id}」`,
+      );
+  if (constraints.maxInvestment !== null && !priceGaps.length) {
+    let cents = 0;
+    for (const selection of network.fixedLayout) {
+      const site = network.sites.find((site) => site.id === selection.siteId);
+      const type = network.stationTypes.find((type) => type.id === selection.stationTypeId);
+      const construction = investmentCents(type?.investment);
+      const connection = investmentCents(site?.connection?.connectionInvestment);
+      if (construction === null || connection === null) {
+        gaps.push('固定布局缺少建站或接电投资，无法核对新增投资上限');
+        return gaps;
+      }
+      cents += construction + connection;
+    }
+    if (!Number.isSafeInteger(cents) || cents > investmentCents(constraints.maxInvestment)!)
+      gaps.push('固定布局总新增投资超过上限（逐站建站投资＋接电投资）');
   }
   return gaps;
 }

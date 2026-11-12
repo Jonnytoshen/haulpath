@@ -1,14 +1,18 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Check, MapPin, Plus, Save, Trash2 } from 'lucide-react';
+import { Check, MapPin, Plus, Save, Sparkles, Trash2 } from 'lucide-react';
 import {
   candidateSiteReadiness,
   emptyStationNetwork,
+  emptySitingConstraints,
+  formalCandidateSites,
+  sitingConstraintReadiness,
   stationNetworkFinancialReadiness,
   stationNetworkReadiness,
   stationTypeReadiness,
   type CandidateSite,
+  type SitingConstraints,
   type CoordinateSystem,
   type OperatingShift,
   type PlanningScenario,
@@ -51,6 +55,7 @@ type PointDraft = {
   saved?: Point;
 };
 type SiteDraft = PointDraft & {
+  generationBasis?: CandidateSite['generationBasis'];
   siteNotes: string;
   siteConfirmed: boolean;
   powerSourceId: string;
@@ -68,18 +73,23 @@ type PowerDraft = PointDraft & {
 };
 type Draft = {
   revision: number;
+  constraints: Omit<SitingConstraints, 'maxInvestment' | 'maxStations'> & {
+    maxInvestment: string;
+    maxStations: string;
+  };
   types: TypeDraft[];
   sites: SiteDraft[];
   powers: PowerDraft[];
   fixedLayout: StationNetwork['fixedLayout'];
 };
-type Tab = 'sites' | 'types' | 'powers' | 'layout';
+type Tab = 'sites' | 'types' | 'powers' | 'layout' | 'constraints';
 type PasteRow = { line: number; value?: SiteDraft | TypeDraft; error?: string };
 const tabs: [Tab, string][] = [
   ['sites', '候选站址'],
   ['types', '站型'],
   ['powers', '电源快照'],
   ['layout', '固定布局'],
+  ['constraints', '选址约束'],
 ];
 const text = (value: number | null | undefined) => (value == null ? '' : String(value));
 const message = (error: unknown) => (error instanceof Error ? error.message : '操作失败，请重试。');
@@ -214,6 +224,7 @@ function pointDraft(point: Point): PointDraft {
 function siteDraft(site: CandidateSite): SiteDraft {
   return {
     ...pointDraft(site),
+    generationBasis: site.generationBasis,
     siteNotes: site.siteNotes,
     siteConfirmed: site.siteConfirmed,
     powerSourceId: site.connection?.powerSourceId ?? '',
@@ -227,6 +238,11 @@ function draftOf(scenario: PlanningScenario): Draft {
   const network = scenario.context.stationNetwork ?? emptyStationNetwork();
   return {
     revision: scenario.revision,
+    constraints: {
+      ...(network.constraints ?? emptySitingConstraints()),
+      maxInvestment: text(network.constraints?.maxInvestment),
+      maxStations: text(network.constraints?.maxStations),
+    },
     types: network.stationTypes.map((type) => ({
       ...type,
       key: type.id,
@@ -254,8 +270,16 @@ function draftOf(scenario: PlanningScenario): Draft {
     fixedLayout: network.fixedLayout.map((selection) => ({ ...selection })),
   };
 }
+function constraintsInput(draft: Draft): SitingConstraints {
+  return {
+    ...draft.constraints,
+    maxInvestment: numberOf(draft.constraints.maxInvestment, '总新增投资上限'),
+    maxStations: numberOf(draft.constraints.maxStations, '新建站数上限', true),
+  };
+}
 function inputOf(draft: Draft): StationNetworkInput {
   return {
+    constraints: constraintsInput(draft),
     stationTypes: draft.types.map((row, i) => {
       try {
         return typeInput(row);
@@ -268,6 +292,7 @@ function inputOf(draft: Draft): StationNetworkInput {
         return {
           ...pointInput(row),
           ...(row.id ? { id: row.id } : {}),
+          ...(row.generationBasis ? { generationBasis: row.generationBasis } : {}),
           siteNotes: row.siteNotes,
           siteConfirmed: row.siteConfirmed,
           connection: row.powerSourceId
@@ -361,6 +386,7 @@ export default function FixedStationLayout({
   const [preview, setPreview] = useState<PasteRow[] | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [generationNotice, setGenerationNotice] = useState('');
   const [saving, setSaving] = useState(false);
   const [discarding, setDiscarding] = useState(false);
   const writing = useRef(false);
@@ -426,6 +452,9 @@ export default function FixedStationLayout({
     setPaste('');
     setPreview(null);
     setMoving(null);
+    setSearch('');
+    setFilter('all');
+    setGenerationNotice('');
     setDiscarding(false);
     setLoadingResources(true);
     setResourceError('');
@@ -498,6 +527,38 @@ export default function FixedStationLayout({
           },
         ],
       });
+  }
+  async function generate() {
+    if (!draft || dirty || writing.current) return;
+    writing.current = true;
+    setSaving(true);
+    onWritingChange(true);
+    setError('');
+    setGenerationNotice('');
+    try {
+      const next = await request<PlanningScenario>(
+        `/api/projects/${scenario.projectId}/scenarios/${scenario.id}/station-network`,
+        'POST',
+        { expectedRevision: draft.revision },
+      );
+      if (!alive.current) return;
+      const count = (next.context.stationNetwork?.sites.length ?? 0) - network.sites.length;
+      onChange(next);
+      const updated = draftOf(next);
+      setDraft(updated);
+      setBaseline(JSON.stringify(updated));
+      setSearch('');
+      setFilter('all');
+      setGenerationNotice(
+        `已保存新增 ${count} 个初步候选。重复来源保留原站址，同址系统建议已合并来源；请核实场地与接电，并为新输入版本准备对应道路资料。`,
+      );
+    } catch (failure) {
+      if (alive.current) setError(message(failure));
+    } finally {
+      writing.current = false;
+      if (alive.current) setSaving(false);
+      onWritingChange(false);
+    }
   }
   async function save() {
     if (!draft || writing.current) return;
@@ -593,11 +654,90 @@ export default function FixedStationLayout({
       }),
     );
   }
+  function draftSiteGaps(site: SiteDraft): string[] {
+    const saved = network.sites.find((item) => item.id === site.id);
+    if (!saved) return ['新位置待保存和确认'];
+    const power = draft?.powers.find((item) => item.id === site.powerSourceId);
+    const savedPower = network.powerSources.find((item) => item.id === site.powerSourceId);
+    let changedPower = !power || !savedPower;
+    if (power && savedPower) {
+      try {
+        const proposed = power.refreshSource
+          ? resources.find((point) => point.id === power.sourcePointId)
+          : {
+              ...pointInput(power),
+              originalLongitude: Number(power.longitude),
+              originalLatitude: Number(power.latitude),
+              availableCapacityKw: numberOf(power.availableCapacityKw, '可用容量'),
+              capacitySource: power.capacitySource.trim(),
+              connectionNotes: power.connectionNotes.trim(),
+            };
+        changedPower =
+          !proposed ||
+          (
+            [
+              'name',
+              'source',
+              'coordinateSystem',
+              'originalLongitude',
+              'originalLatitude',
+              'availableCapacityKw',
+              'capacitySource',
+              'connectionNotes',
+            ] as const
+          ).some((field) => proposed[field] !== savedPower.point[field]);
+      } catch {
+        changedPower = true;
+      }
+    }
+    const connection = site.powerSourceId
+      ? {
+          powerSourceId: site.powerSourceId,
+          availablePowerKw: site.availablePowerKw.trim() ? Number(site.availablePowerKw) : null,
+          connectionInvestment: site.connectionInvestment.trim()
+            ? Number(site.connectionInvestment)
+            : null,
+          notes: site.connectionNotes,
+          confirmed: site.connectionConfirmed && !changedPower,
+        }
+      : null;
+    return candidateSiteReadiness(
+      { ...saved, siteConfirmed: site.siteConfirmed, connection },
+      network,
+    );
+  }
+  const draftConstraints = (() => {
+    if (!draft) return null;
+    try {
+      return constraintsInput(draft);
+    } catch {
+      return null;
+    }
+  })();
+  const constraintGaps =
+    draft && draftConstraints
+      ? sitingConstraintReadiness({
+          ...scenario.context,
+          stationNetwork: {
+            ...network,
+            fixedLayout: draft.fixedLayout,
+            constraints: draftConstraints,
+          },
+        })
+      : [];
   const shownSites =
     draft?.sites.filter(
       (site) =>
         site.name.toLowerCase().includes(search.toLowerCase()) &&
-        (filter === 'all' || (filter === 'confirmed' ? site.siteConfirmed : !site.siteConfirmed)),
+        (filter === 'all' ||
+          (filter === 'confirmed'
+            ? site.siteConfirmed
+            : filter === 'formal'
+              ? !draftSiteGaps(site).length &&
+                !draft?.constraints.excludedSiteIds.includes(site.id ?? '')
+              : filter === 'excluded'
+                ? draft?.constraints.excludedSiteIds.includes(site.id ?? '')
+                : !site.siteConfirmed)),
     ) ?? [];
   const markers = shownSites.map(mapPoint).filter((point): point is Point => !!point);
   return (
@@ -613,6 +753,7 @@ export default function FixedStationLayout({
       </div>
       <div className={styles.summary} aria-label="站网确认进度">
         <span>{network.sites.length} 个候选</span>
+        <span>{formalCandidateSites(network).length} 个正式候选</span>
         <span>{network.sites.filter((site) => site.siteConfirmed).length} 个场地已确认</span>
         <span>
           {network.sites.filter((site) => site.connection?.confirmed).length} 个接电已确认
@@ -689,6 +830,34 @@ export default function FixedStationLayout({
             <fieldset disabled={saving} className={styles.fields}>
               {tab === 'sites' && (
                 <>
+                  <div className={styles.generation}>
+                    <div>
+                      <h4>从业务点与电源提出初步候选</h4>
+                      <p className="helper">
+                        在已引入线路的业务位置和方案电源快照位置提出建议；相同坐标只建议一次。来源已生成时保留人工修正，不重复追加。几何位置不证明道路可达、场地可用或接电可行。
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      className="button"
+                      disabled={dirty || saving}
+                      onClick={() => void generate()}
+                    >
+                      <Sparkles aria-hidden="true" />
+                      生成并保存初步候选
+                    </Button>
+                    {dirty && <p className="helper">先保存当前站网草稿，再按已保存资料生成。</p>}
+                    {!scenario.context.transportCycles?.length && !network.powerSources.length && (
+                      <p className="helper">
+                        先引入运输循环或在电源快照分区引入并保存电源；无需先准备道路。
+                      </p>
+                    )}
+                    {generationNotice && (
+                      <p role="status" className={styles.note}>
+                        {generationNotice}
+                      </p>
+                    )}
+                  </div>
                   <div className={styles.toolbar}>
                     <Button
                       type="button"
@@ -705,15 +874,21 @@ export default function FixedStationLayout({
                     <label className="field">
                       场地状态
                       <NativeSelect
+                        aria-label="场地状态"
                         value={filter}
                         onChange={(event) => setFilter(event.target.value)}
                       >
                         <option value="all">全部候选</option>
                         <option value="pending">待确认位置</option>
                         <option value="confirmed">已确认场地</option>
+                        <option value="formal">正式候选</option>
+                        <option value="excluded">禁选站址</option>
                       </NativeSelect>
                     </label>
                   </div>
+                  <p className="helper">
+                    筛选只改变列表和地图显示；持久禁选请到“选址约束”。新增或移动位置保存后，须为当前输入版本准备对应道路资料。
+                  </p>
                   <p className="helper">
                     {moving
                       ? `正在移动「${draft.sites.find((site) => site.key === moving)?.name}」：点击地图或选择搜索地点。移动后须重新确认场地及接电。`
@@ -771,6 +946,20 @@ export default function FixedStationLayout({
                             <Trash2 />
                           </Button>
                         </div>
+                        {row.generationBasis && (
+                          <p className={styles.provenance}>
+                            系统初步建议 ·{' '}
+                            {row.generationBasis.origins.map((origin) => origin.label).join('；')}
+                            。原始生成依据保留，当前位置可人工修正。
+                          </p>
+                        )}
+                        <p className={styles.note}>
+                          {draft.constraints.excludedSiteIds.includes(row.id ?? '')
+                            ? '已禁选，不进入正式候选集'
+                            : draftSiteGaps(row).length
+                              ? `尚非正式候选：${draftSiteGaps(row).join('；')}`
+                              : '正式候选：场地与供电关系已确认'}
+                        </p>
                         <div className={styles.grid}>
                           <label className="field">
                             名称
@@ -1289,10 +1478,152 @@ export default function FixedStationLayout({
                   ))}
                 </>
               )}
+              {tab === 'constraints' && (
+                <>
+                  <h4>选址硬约束</h4>
+                  <p className="helper">
+                    留空表示不限制，0
+                    表示上限为零。可保存冲突草稿以继续修复；新增固定布局选择和每日试算必须满足已启用约束。
+                  </p>
+                  <div className={styles.grid}>
+                    <label className="field">
+                      总新增投资上限（元）
+                      <Input
+                        aria-label="总新增投资上限（元）"
+                        inputMode="decimal"
+                        value={draft.constraints.maxInvestment}
+                        onChange={(event) =>
+                          setDraft({
+                            ...draft,
+                            constraints: {
+                              ...draft.constraints,
+                              maxInvestment: event.target.value,
+                            },
+                          })
+                        }
+                      />
+                    </label>
+                    <label className="field">
+                      新建站数上限
+                      <Input
+                        aria-label="新建站数上限"
+                        inputMode="numeric"
+                        value={draft.constraints.maxStations}
+                        onChange={(event) =>
+                          setDraft({
+                            ...draft,
+                            constraints: { ...draft.constraints, maxStations: event.target.value },
+                          })
+                        }
+                      />
+                    </label>
+                  </div>
+                  <p className="helper">
+                    投资按每个新建站的站型建站投资＋接电投资，逐项四舍五入至分后合计。建站投资需完整涵盖本站新建配置（含备电池等必要投入）；逐年现金流另行核对。启用预算前须补齐所有正式可选站址及可用站型的必要价格；年度运维费不计入新增投资。
+                  </p>
+                  {draft.sites.map((site) =>
+                    site.id ? (
+                      <div key={site.key} className={styles.layoutRow}>
+                        <div>
+                          <h4>{site.name}</h4>
+                          <p className={styles.note}>
+                            {draftSiteGaps(site).join('；') || '场地与接电已确认'}
+                          </p>
+                        </div>
+                        <label className="field">
+                          站址选择约束
+                          <NativeSelect
+                            aria-label={`选址约束 ${site.name}`}
+                            value={
+                              draft.constraints.requiredSiteIds.includes(site.id!)
+                                ? 'required'
+                                : draft.constraints.excludedSiteIds.includes(site.id!)
+                                  ? 'excluded'
+                                  : 'optional'
+                            }
+                            onChange={(event) =>
+                              setDraft({
+                                ...draft,
+                                constraints: {
+                                  ...draft.constraints,
+                                  requiredSiteIds: [
+                                    ...draft.constraints.requiredSiteIds.filter(
+                                      (id) => id !== site.id,
+                                    ),
+                                    ...(event.target.value === 'required' ? [site.id!] : []),
+                                  ],
+                                  excludedSiteIds: [
+                                    ...draft.constraints.excludedSiteIds.filter(
+                                      (id) => id !== site.id,
+                                    ),
+                                    ...(event.target.value === 'excluded' ? [site.id!] : []),
+                                  ],
+                                },
+                              })
+                            }
+                          >
+                            <option value="optional">可选</option>
+                            <option value="required">必选</option>
+                            <option value="excluded">禁选</option>
+                          </NativeSelect>
+                        </label>
+                      </div>
+                    ) : (
+                      <p key={site.key} className={styles.note}>
+                        {site.name || '新候选'}：先保存取得站址身份，再设置必选或禁选。
+                      </p>
+                    ),
+                  )}
+                  {(['requiredSiteIds', 'excludedSiteIds'] as const).flatMap((field) =>
+                    draft.constraints[field]
+                      .filter((id) => !draft.sites.some((site) => site.id === id))
+                      .map((id) => (
+                        <div key={`${field}:${id}`} className={styles.layoutRow}>
+                          <p className={styles.gap}>
+                            {field === 'requiredSiteIds' ? '必选' : '禁选'}站址已删除（{id}
+                            ），请修复约束。
+                          </p>
+                          <Button
+                            type="button"
+                            className="button"
+                            onClick={() =>
+                              setDraft({
+                                ...draft,
+                                constraints: {
+                                  ...draft.constraints,
+                                  [field]: draft.constraints[field].filter((item) => item !== id),
+                                },
+                              })
+                            }
+                          >
+                            移除失效约束
+                          </Button>
+                        </div>
+                      )),
+                  )}
+                  <section className={styles.constraintCheck} aria-label="选址约束核对">
+                    <h4>选址约束核对</h4>
+                    <p className="helper">
+                      按已保存场地、接电及投资资料核对当前约束与布局；其他资料变更在保存时重新校验。
+                    </p>
+                    {!draftConstraints ? (
+                      <p role="alert">请填写非负有效上限；站数须为整数。</p>
+                    ) : constraintGaps.length ? (
+                      <ul>
+                        {constraintGaps.map((gap, i) => (
+                          <li key={i}>{gap}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p>当前约束与布局未发现冲突。</p>
+                    )}
+                  </section>
+                </>
+              )}
               {tab === 'layout' && (
                 <>
                   <p className="helper">
-                    每站选择一个已确认电源关系和一种离散站型；允许多站共用同一电源。新选择须先保存场地、接电确认与站型。价格缺失可保存，保留财务缺口。
+                    仅正式候选可选入，禁选站址不能采用。每站选择一个已确认电源关系和一种离散站型；允许多站共用同一电源。新选择须先保存场地、接电确认与站型。价格缺失可保存，保留财务缺口。
                   </p>
                   {!network.sites.length && (
                     <p className={styles.empty}>先保存候选站址与站型，再选择固定布局。</p>

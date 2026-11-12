@@ -33,7 +33,9 @@ export function pointOf(input: unknown): Point {
   }
   if (value.coordinateSystem !== 'GCJ-02' && value.coordinateSystem !== 'WGS84')
     throw new HttpError(400, '点位坐标系无效');
-  if (!['manual', 'map', 'search', 'import', 'library'].includes(value.source as string))
+  if (
+    !['manual', 'map', 'search', 'import', 'library', 'generated'].includes(value.source as string)
+  )
     throw new HttpError(400, '点位来源无效');
   if (value.poiId !== undefined && typeof value.poiId !== 'string')
     throw new HttpError(400, '地点标识无效');

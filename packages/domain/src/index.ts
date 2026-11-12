@@ -61,7 +61,7 @@ export const strategyGroups = [
 ] as const;
 
 export type Strategy = (typeof strategyGroups)[number]['options'][number]['value'];
-export type PointSource = 'manual' | 'map' | 'search' | 'import' | 'library';
+export type PointSource = 'manual' | 'map' | 'search' | 'import' | 'library' | 'generated';
 
 export interface Project {
   id: string;

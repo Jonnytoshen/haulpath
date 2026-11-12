@@ -19,7 +19,11 @@ import { directedRoadKey } from './directed-roads';
 import type { PreparedRoad } from './directed-roads';
 import { measuredSegmentIssue } from './fleet-operations';
 import type { OperatingShift, VehicleGroup } from './fleet-operations';
-import { candidateSiteReadiness, stationBatteryMatches } from './station-network';
+import {
+  candidateSiteReadiness,
+  sitingConstraintReadiness,
+  stationBatteryMatches,
+} from './station-network';
 import type { CandidateSite } from './station-network';
 
 export const VEHICLE_ENERGY_ALGORITHM_VERSION = 'daily-vehicle-energy-1';
@@ -341,7 +345,7 @@ function stationOption(
 
 export function vehicleEnergyReadiness(snapshot: DailyTransportSnapshot): string[] {
   const battery = snapshot.context.operations?.battery;
-  const gaps: string[] = [];
+  const gaps: string[] = sitingConstraintReadiness(snapshot.context);
   if (!positive(battery?.capacityKwh)) gaps.push('统一电池容量待配置');
   if (!battery?.source.trim()) gaps.push('统一电池参数来源待填写');
   return gaps;

@@ -5,6 +5,7 @@ import {
   scenarioRevision,
 } from '@/server/scenario-validation';
 import { stationNetworkOf } from '@/server/station-network-validation';
+import { generateCandidateSites } from '@/server/candidate-generation';
 import { storage } from '@/server/storage';
 
 type Context = { params: Promise<{ projectId: string; scenarioId: string }> };
@@ -41,6 +42,25 @@ export function PUT(request: Request, context: Context) {
         network,
         importsSource ? powers.revision : null,
       ),
+    );
+  });
+}
+
+/** Explicit generation saves suggestions against the current immutable input basis. */
+export function POST(request: Request, context: Context) {
+  return api(async () => {
+    const { projectId, scenarioId } = await context.params;
+    const body = await readJson(request);
+    scenarioFields(body, ['expectedRevision']);
+    const revision = scenarioRevision(body.expectedRevision);
+    const scenario = storage.getScenario(projectId, scenarioId);
+    assertScenarioEditable(scenario);
+    if (revision !== scenario.revision)
+      throw new HttpError(409, '规划方案已被更新，请重新加载后生成');
+    const network = generateCandidateSites(scenario.context);
+    if (!scenario.context.stationNetwork && !network.sites.length) return Response.json(scenario);
+    return Response.json(
+      storage.replaceStationNetwork(projectId, scenarioId, revision, network, null),
     );
   });
 }

@@ -34,6 +34,7 @@ const site = (name = '人工站址', longitude = 121.47) => ({
 });
 const emptyNetwork = () => ({ stationTypes: [], sites: [], powerSources: [], fixedLayout: [] });
 const inputsOf = (network) => ({
+  ...(network.constraints ? { constraints: network.constraints } : {}),
   stationTypes: network.stationTypes.map(({ batteryBasis, ...input }) => {
     assert.ok(batteryBasis === null || typeof batteryBasis === 'object');
     return input;
@@ -739,5 +740,385 @@ test('station original WGS84 coordinates normalize once and conversion failures 
     await application.stop();
     await application.cleanup();
     await new Promise((resolve) => upstream.close(resolve));
+  }
+});
+
+test('generate preliminary candidates from imported business locations and adopted power without roads, preserving edits on repeat', async () => {
+  const application = await startApplication();
+  const request = (path, method, body) => jsonRequest(application.baseUrl, path, method, body);
+  try {
+    const { project, path, scenario, powers } = await setup(request);
+    const route = (
+      await request(`/api/projects/${project.id}/routes`, 'POST', {
+        name: '候选依据线路',
+        points: [
+          {
+            ...site('装货场', 121.47),
+            id: 'a',
+            originalLongitude: 121.47,
+            originalLatitude: 31.23,
+          },
+          { ...site('卸货场', 121.6), id: 'b', originalLongitude: 121.6, originalLatitude: 31.23 },
+          {
+            ...site('回程装货场', 121.47),
+            id: 'c',
+            originalLongitude: 121.47,
+            originalLatitude: 31.23,
+          },
+        ],
+      })
+    ).body;
+    let saved = (
+      await request(`${path}/cycles`, 'POST', {
+        expectedRevision: scenario.revision,
+        sourceRouteId: route.id,
+      })
+    ).body;
+    saved = await save(request, path, saved, {
+      ...emptyNetwork(),
+      powerSources: [{ sourcePointId: powers.points[0].id }],
+    });
+    const generated = await request(`${path}/station-network`, 'POST', {
+      expectedRevision: saved.revision,
+    });
+    assert.equal(generated.status, 200, JSON.stringify(generated.body));
+    saved = generated.body;
+    assert.equal(
+      saved.context.stationNetwork.sites.length,
+      3,
+      'same exact location is proposed once',
+    );
+    assert.deepEqual(
+      saved.context.stationNetwork.sites.map((s) => s.longitude),
+      [121.47, 121.6, 121.5],
+    );
+    assert.ok(
+      saved.context.stationNetwork.sites.every(
+        (s) =>
+          s.source === 'generated' &&
+          s.generationBasis &&
+          !s.siteConfirmed &&
+          s.connection === null,
+      ),
+    );
+    assert.equal(saved.context.stationNetwork.fixedLayout.length, 0);
+    assert.equal(saved.context.transportCycles[0].roads.length, 0);
+    // A later adopted source at an existing suggested location must become traceable too.
+    const laterRoute = (
+      await request(`/api/projects/${project.id}/routes`, 'POST', {
+        name: '后来引入的同址业务',
+        points: [
+          {
+            ...site('同址装货', 121.47),
+            id: 'later',
+            originalLongitude: 121.47,
+            originalLatitude: 31.23,
+          },
+        ],
+      })
+    ).body;
+    saved = (
+      await request(`${path}/cycles`, 'POST', {
+        expectedRevision: saved.revision,
+        sourceRouteId: laterRoute.id,
+      })
+    ).body;
+    saved = (await request(`${path}/station-network`, 'POST', { expectedRevision: saved.revision }))
+      .body;
+    assert.equal(saved.context.stationNetwork.sites.length, 3);
+    assert.equal(saved.context.stationNetwork.sites[0].generationBasis.origins.length, 3);
+    const edited = inputsOf(saved.context.stationNetwork);
+    edited.sites[0].name = '人工修正名称';
+    edited.sites[0].longitude = 121.48;
+    saved = await save(request, path, saved, edited);
+    assert.deepEqual(
+      (await request(`${path}/station-network`, 'POST', { expectedRevision: saved.revision })).body,
+      saved,
+    );
+    assert.equal(
+      (await request(`${path}/station-network`, 'POST', { expectedRevision: 1 })).status,
+      409,
+    );
+    assert.deepEqual((await request(path)).body, saved);
+  } finally {
+    await application.stop();
+    await application.cleanup();
+  }
+});
+
+test('hard siting constraints preserve zero limits, block missing budget prices and report saved layout conflicts through public readiness', async () => {
+  const application = await startApplication();
+  const request = (path, method, body) => jsonRequest(application.baseUrl, path, method, body);
+  try {
+    const { path, scenario, powers } = await setup(request);
+    let saved = await confirmedNetwork(request, path, scenario, powers);
+    const constraints = {
+      maxInvestment: 0,
+      maxStations: null,
+      requiredSiteIds: [],
+      excludedSiteIds: [],
+    };
+    const missing = await request(`${path}/station-network`, 'PUT', {
+      expectedRevision: saved.revision,
+      network: { ...inputsOf(saved.context.stationNetwork), constraints },
+    });
+    assert.equal(missing.status, 400);
+    assert.match(missing.body.error, /投资.*待填写|投资.*缺失/);
+    assert.deepEqual((await request(path)).body, saved);
+    const priced = inputsOf(saved.context.stationNetwork);
+    priced.stationTypes[0].investment = 0;
+    priced.sites.forEach((s) => {
+      s.connection.connectionInvestment = 0;
+    });
+    saved = await save(request, path, saved, priced);
+    const confirming = inputsOf(saved.context.stationNetwork);
+    confirming.sites.forEach((s) => {
+      s.connection.confirmed = true;
+    });
+    saved = await save(request, path, saved, { ...confirming, constraints });
+    assert.equal(saved.context.stationNetwork.constraints.maxInvestment, 0);
+    const [first, second] = saved.context.stationNetwork.sites;
+    saved = await save(request, path, saved, {
+      ...inputsOf(saved.context.stationNetwork),
+      constraints: {
+        ...constraints,
+        maxStations: 0,
+        requiredSiteIds: [first.id],
+        excludedSiteIds: [second.id],
+      },
+    });
+    let view = (await request(`${path}/daily-transport`)).body;
+    assert.match(view.gaps.join('；'), /必选.*站数上限/);
+    assert.match(view.gaps.join('；'), /固定布局.*站数上限/);
+    assert.match(view.gaps.join('；'), /禁选/);
+    const invalid = await request(`${path}/daily-transport`, 'POST', {
+      expectedRevision: saved.revision,
+      config: { stage: 'vehicle-energy' },
+    });
+    assert.equal(invalid.status, 400);
+    assert.match(invalid.body.error, /站数上限/);
+    // A deleted required identity remains explicit until the user removes the constraint.
+    const removed = inputsOf(saved.context.stationNetwork);
+    removed.sites = removed.sites.filter((s) => s.id !== first.id);
+    removed.fixedLayout = [];
+    saved = await save(request, path, saved, {
+      ...removed,
+      constraints: saved.context.stationNetwork.constraints,
+    });
+    view = (await request(`${path}/daily-transport`)).body;
+    assert.match(view.gaps.join('；'), /必选站址.*已删除/);
+  } finally {
+    await application.stop();
+    await application.cleanup();
+  }
+});
+
+test('budget sums every station and connection in cents and rejects constraint and provenance bypasses atomically', async () => {
+  const app = await startApplication();
+  const request = (path, method, body) => jsonRequest(app.baseUrl, path, method, body);
+  try {
+    const { path, scenario, powers } = await setup(request);
+    let saved = await confirmedNetwork(request, path, scenario, powers);
+    const priced = inputsOf(saved.context.stationNetwork);
+    priced.stationTypes[0].investment = 1.005;
+    priced.sites.forEach((s) => {
+      s.connection.connectionInvestment = 0;
+    });
+    saved = await save(request, path, saved, priced);
+    const confirmed = inputsOf(saved.context.stationNetwork);
+    confirmed.sites.forEach((s) => {
+      s.connection.confirmed = true;
+    });
+    const constraints = {
+      maxInvestment: 2.02,
+      maxStations: 2,
+      requiredSiteIds: [],
+      excludedSiteIds: [],
+    };
+    saved = await save(request, path, saved, { ...confirmed, constraints });
+    assert.doesNotMatch(
+      (await request(`${path}/daily-transport`)).body.gaps.join('；'),
+      /投资.*超过上限/,
+    );
+    saved = await save(request, path, saved, {
+      ...inputsOf(saved.context.stationNetwork),
+      constraints: { ...constraints, maxInvestment: 2.01 },
+    });
+    assert.match(
+      (await request(`${path}/daily-transport`)).body.gaps.join('；'),
+      /总新增投资超过上限/,
+    );
+    const id = saved.context.stationNetwork.sites[0].id;
+    for (const invalid of [
+      { ...constraints, maxStations: -1 },
+      { ...constraints, maxStations: 1.5 },
+      { ...constraints, maxInvestment: -1 },
+      { ...constraints, maxInvestment: '0' },
+      { ...constraints, maxInvestment: 1e20 },
+      { ...constraints, requiredSiteIds: [id, id] },
+      { ...constraints, requiredSiteIds: ['foreign-id'] },
+      { ...constraints, excludedSiteIds: ['foreign-id'] },
+      { ...constraints, requiredSiteIds: [id], excludedSiteIds: [id] },
+    ]) {
+      const response = await request(`${path}/station-network`, 'PUT', {
+        expectedRevision: saved.revision,
+        network: { ...inputsOf(saved.context.stationNetwork), constraints: invalid },
+      });
+      assert.equal(response.status, 400, JSON.stringify(response));
+      assert.deepEqual((await request(path)).body, saved);
+    }
+    const context = structuredClone(saved.context);
+    context.stationNetwork.constraints.maxStations = null;
+    assert.equal(
+      (await request(path, 'PATCH', { expectedRevision: saved.revision, context })).status,
+      400,
+    );
+    const forged = inputsOf(saved.context.stationNetwork);
+    forged.sites[0].generationBasis = { algorithm: 'input-locations-v1', origins: [] };
+    assert.equal(
+      (
+        await request(`${path}/station-network`, 'PUT', {
+          expectedRevision: saved.revision,
+          network: forged,
+        })
+      ).status,
+      400,
+    );
+    const omitted = inputsOf(saved.context.stationNetwork);
+    delete omitted.constraints;
+    assert.deepEqual(
+      await save(request, path, saved, omitted),
+      saved,
+      'omitting constraints cannot silently turn them off',
+    );
+    // Removing the retained layout is repair, but re-adoption must enforce the active budget.
+    const removed = { ...inputsOf(saved.context.stationNetwork), fixedLayout: [] };
+    const oldLayout = saved.context.stationNetwork.fixedLayout;
+    saved = await save(request, path, saved, removed);
+    const overBudget = await request(`${path}/station-network`, 'PUT', {
+      expectedRevision: saved.revision,
+      network: { ...inputsOf(saved.context.stationNetwork), fixedLayout: oldLayout },
+    });
+    assert.equal(overBudget.status, 400);
+    assert.match(overBudget.body.error, /投资.*超过上限/);
+  } finally {
+    await app.stop();
+    await app.cleanup();
+  }
+});
+
+test('generated candidates and constraints survive restart, freezing, copying and input comparison without weakening write protection', async () => {
+  let app = await startApplication();
+  const request = (path, method, body) => jsonRequest(app.baseUrl, path, method, body);
+  try {
+    const { project, path, scenario, powers } = await setup(request);
+    assert.deepEqual(
+      (await request(`${path}/station-network`, 'POST', { expectedRevision: scenario.revision }))
+        .body,
+      scenario,
+      'empty generation is a no-op',
+    );
+    let saved = await save(request, path, scenario, {
+      ...emptyNetwork(),
+      powerSources: [{ sourcePointId: powers.points[0].id }],
+    });
+    saved = (await request(`${path}/station-network`, 'POST', { expectedRevision: saved.revision }))
+      .body;
+    const constraints = {
+      maxInvestment: null,
+      maxStations: 0,
+      requiredSiteIds: [saved.context.stationNetwork.sites[0].id],
+      excludedSiteIds: [],
+    };
+    saved = await save(request, path, saved, {
+      ...inputsOf(saved.context.stationNetwork),
+      constraints,
+    });
+    const directory = app.directory;
+    await app.stop();
+    app = await startApplication({}, directory);
+    assert.deepEqual((await request(path)).body, saved);
+    const frozen = (await request(`${path}/freeze`, 'POST', { expectedRevision: saved.revision }))
+      .body;
+    assert.equal(
+      (await request(`${path}/station-network`, 'POST', { expectedRevision: frozen.revision }))
+        .status,
+      409,
+    );
+    assert.equal(
+      (
+        await request(`${path}/station-network`, 'PUT', {
+          expectedRevision: frozen.revision,
+          network: inputsOf(frozen.context.stationNetwork),
+        })
+      ).status,
+      409,
+    );
+    const copied = (
+      await request(`${path}/copy`, 'POST', {
+        expectedRevision: frozen.revision,
+        name: '约束调整副本',
+      })
+    ).body;
+    assert.deepEqual(copied.context.stationNetwork, saved.context.stationNetwork);
+    const comparePath = `/api/projects/${project.id}/scenarios/compare?left=${frozen.id}&right=${copied.id}`;
+    assert.deepEqual((await request(comparePath)).body.differences, []);
+    const copyPath = `/api/projects/${project.id}/scenarios/${copied.id}`;
+    const changed = await save(request, copyPath, copied, {
+      ...inputsOf(copied.context.stationNetwork),
+      constraints: { ...constraints, maxStations: 1 },
+    });
+    assert.equal(changed.inputVersion, copied.inputVersion + 1);
+    const diff = (await request(comparePath)).body.differences;
+    assert.ok(
+      diff.some((item) => item.path.includes('maxStations') && item.label.includes('新建站数上限')),
+    );
+    assert.deepEqual((await request(path)).body, frozen);
+    const foreign = await setup(request, '生成跨项目检查');
+    assert.equal(
+      (
+        await request(
+          `/api/projects/${foreign.project.id}/scenarios/${frozen.id}/station-network`,
+          'POST',
+          { expectedRevision: frozen.revision },
+        )
+      ).status,
+      404,
+    );
+  } finally {
+    await app.stop();
+    await app.cleanup();
+  }
+});
+
+test('budget cannot be enabled when a retained fixed layout has deleted site or station type price references', async () => {
+  const app = await startApplication();
+  const request = (path, method, body) => jsonRequest(app.baseUrl, path, method, body);
+  try {
+    const { path, scenario, powers } = await setup(request);
+    let saved = await confirmedNetwork(request, path, scenario, powers);
+    const lost = inputsOf(saved.context.stationNetwork);
+    lost.sites = [];
+    lost.stationTypes = [];
+    saved = await save(request, path, saved, lost);
+    assert.equal(saved.context.stationNetwork.fixedLayout.length, 2);
+    const budget = await request(`${path}/station-network`, 'PUT', {
+      expectedRevision: saved.revision,
+      network: {
+        ...inputsOf(saved.context.stationNetwork),
+        constraints: {
+          maxInvestment: 1,
+          maxStations: null,
+          requiredSiteIds: [],
+          excludedSiteIds: [],
+        },
+      },
+    });
+    assert.equal(budget.status, 400);
+    assert.match(budget.body.error, /固定布局.*已删除.*投资/);
+    assert.deepEqual((await request(path)).body, saved);
+  } finally {
+    await app.stop();
+    await app.cleanup();
   }
 });

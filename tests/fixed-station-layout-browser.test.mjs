@@ -204,8 +204,50 @@ test(
       assert.equal(selected.context.stationNetwork.sites[0].connection.connectionInvestment, null);
       const region = page.getByRole('region', { name: '方案人工固定站网', exact: true });
       assert.match(await region.innerText(), /财务价格待补/);
+      assert.match(await region.innerText(), /1 个正式候选/);
+      dialog = await edit(page);
+      await tab(dialog, '选址约束');
+      await dialog.getByLabel('总新增投资上限（元）', { exact: true }).fill('0');
+      await dialog.getByRole('button', { name: '保存全部站网资料', exact: true }).click();
+      await dialog.getByRole('alert').waitFor();
+      assert.match(await dialog.getByRole('alert').innerText(), /投资待填写/);
+      assert.deepEqual(
+        (await request(path)).body,
+        selected,
+        'budget with missing prices cannot be enabled',
+      );
+      await dialog.getByLabel('总新增投资上限（元）', { exact: true }).fill('');
+      await tab(dialog, '候选站址');
+      await dialog.getByLabel('场地状态', { exact: true }).selectOption('formal');
+      assert.equal(
+        await dialog.getByLabel('站址 1 名称', { exact: true }).inputValue(),
+        '港区候选场地',
+      );
+      await dialog.getByRole('button', { name: '关闭', exact: true }).click();
+      await dialog.waitFor({ state: 'hidden' });
       dialog = await edit(page);
       await tab(dialog, '电源快照');
+      await dialog.getByLabel('电源 1 显式引入更新', { exact: true }).check();
+      await tab(dialog, '候选站址');
+      await dialog.getByLabel('场地状态', { exact: true }).selectOption('formal');
+      assert.equal(
+        await dialog.getByLabel('站址 1 名称', { exact: true }).count(),
+        1,
+        'same-value refresh preserves formal eligibility in the draft preview',
+      );
+      await tab(dialog, '电源快照');
+      await dialog.getByLabel('电源 1 显式引入更新', { exact: true }).uncheck();
+      await dialog.getByLabel('电源 1 接入资料说明', { exact: true }).fill('修订接入说明');
+      await tab(dialog, '候选站址');
+      assert.equal(
+        await dialog.getByLabel('站址 1 名称', { exact: true }).count(),
+        0,
+        'editing supply notes invalidates formal eligibility in preview',
+      );
+      await tab(dialog, '电源快照');
+      await dialog
+        .getByLabel('电源 1 接入资料说明', { exact: true })
+        .fill(power.points[0].connectionNotes);
       await dialog.getByLabel('电源 1 显式引入更新', { exact: true }).check();
       await save(dialog);
       const unchangedRefresh = (await request(path)).body;
@@ -530,6 +572,94 @@ test(
         .waitFor({ state: 'visible' });
     } finally {
       releasePut();
+      await browser.close();
+      await app.stop();
+      await app.cleanup();
+    }
+  },
+);
+
+test(
+  'candidate generation and hard constraint forms retain provenance and conflicts after restart',
+  { timeout: 150000 },
+  async () => {
+    let app = await startApplication(noMap);
+    const browser = await launch();
+    try {
+      const request = (path, method, body) => jsonRequest(app.baseUrl, path, method, body);
+      const {
+        project,
+        path,
+        scenario: initial,
+        power,
+      } = await baseFixture(request, '候选生成与约束验收');
+      const adopted = await request(`${path}/station-network`, 'PUT', {
+        expectedRevision: initial.revision,
+        network: {
+          stationTypes: [],
+          sites: [],
+          fixedLayout: [],
+          powerSources: [{ sourcePointId: power.points[0].id }],
+        },
+      });
+      assert.equal(adopted.status, 200);
+      let page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+      await openStationScenario(page, app.baseUrl, project, adopted.body);
+      let dialog = await edit(page);
+      await dialog.getByRole('button', { name: '生成并保存初步候选', exact: true }).click();
+      await dialog.getByLabel('站址 1 名称', { exact: true }).waitFor();
+      assert.match(await dialog.getByRole('status').innerText(), /新增 1/);
+      assert.match(await dialog.innerText(), /方案电源快照「港区共享电源」/);
+      const generated = (await request(path)).body;
+      assert.equal(generated.context.stationNetwork.sites[0].source, 'generated');
+      assert.equal(generated.context.stationNetwork.sites[0].connection, null);
+      await dialog.getByLabel('站址 1 名称', { exact: true }).fill('人工修正候选');
+      assert.equal(
+        await dialog.getByRole('button', { name: '生成并保存初步候选', exact: true }).isEnabled(),
+        false,
+      );
+      await save(dialog);
+      dialog = await edit(page);
+      await dialog.getByRole('button', { name: '生成并保存初步候选', exact: true }).click();
+      await dialog.getByRole('status').filter({ hasText: '新增 0' }).waitFor();
+      assert.equal(
+        await dialog.getByLabel('站址 1 名称', { exact: true }).inputValue(),
+        '人工修正候选',
+      );
+      await tab(dialog, '选址约束');
+      await dialog.getByLabel('新建站数上限', { exact: true }).fill('0');
+      await dialog.getByLabel('选址约束 人工修正候选', { exact: true }).selectOption('required');
+      assert.match(
+        await dialog.getByRole('region', { name: '选址约束核对' }).innerText(),
+        /必选.*站数上限/,
+      );
+      await save(dialog);
+      const saved = (await request(path)).body;
+      assert.equal(saved.context.stationNetwork.constraints.maxStations, 0);
+      assert.deepEqual(saved.context.stationNetwork.constraints.requiredSiteIds, [
+        saved.context.stationNetwork.sites[0].id,
+      ]);
+      await page.close();
+      const directory = app.directory;
+      await app.stop();
+      app = await startApplication(noMap, directory);
+      page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+      await openStationScenario(page, app.baseUrl, project, saved);
+      dialog = await edit(page);
+      await tab(dialog, '选址约束');
+      assert.equal(await dialog.getByLabel('新建站数上限', { exact: true }).inputValue(), '0');
+      assert.equal(
+        await dialog.getByLabel('选址约束 人工修正候选', { exact: true }).inputValue(),
+        'required',
+      );
+      assert.match(await dialog.innerText(), /尚未进入正式候选集/);
+      assert.equal(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+        ),
+        true,
+      );
+    } finally {
       await browser.close();
       await app.stop();
       await app.cleanup();
