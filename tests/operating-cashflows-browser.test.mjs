@@ -107,6 +107,12 @@ test(
       const summary = region.getByRole('table', { name: '逐年运营收支汇总', exact: true });
       await summary.waitFor();
       assert.match(await summary.innerText(), /-80\.67/);
+      const refreshed = page.waitForResponse(
+        (r) =>
+          r.url().endsWith(`${model.path}/operating-cashflows`) && r.request().method() === 'GET',
+      );
+      await region.getByRole('button', { name: '刷新收支状态', exact: true }).click();
+      assert.equal((await refreshed).status(), 200);
       assert.match(await region.innerText(), /内部抵销/);
       assert.match(await region.innerText(), /未校核税费、投资及融资/);
       await region.getByRole('button', { name: '编辑运营收支', exact: true }).click();

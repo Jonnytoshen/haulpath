@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import {
   operatingFlows,
@@ -54,22 +54,7 @@ export default function OperatingCashflows({
   const alive = useRef(false);
   const writing = useRef(false);
   const reads = useRef(0);
-  const load = useCallback(async () => {
-    const read = ++reads.current;
-    try {
-      const [next, annual] = await Promise.all([
-        request<OperatingCashflowView>(`${path}/operating-cashflows`),
-        request<DailyTransportView>(`${path}/annual-transport`),
-      ]);
-      if (alive.current && read === reads.current) {
-        setView(next);
-        setTransport(annual);
-        setError('');
-      }
-    } catch (e) {
-      if (alive.current && read === reads.current) setError((e as Error).message);
-    }
-  }, [path]);
+  const [refreshRevision, setRefreshRevision] = useState(0);
   useEffect(() => {
     const lifecycle = reads;
     const read = ++lifecycle.current;
@@ -94,7 +79,7 @@ export default function OperatingCashflows({
       alive.current = false;
       lifecycle.current++;
     };
-  }, [path, scenario.inputVersion]);
+  }, [path, scenario.inputVersion, refreshRevision]);
   useEffect(() => {
     if (!draft) return;
     const protect = (e: BeforeUnloadEvent) => e.preventDefault();
@@ -178,7 +163,11 @@ export default function OperatingCashflows({
             {scenario.inputVersion}
           </p>
         </div>
-        <Button className="text-button" disabled={busy || !!draft} onClick={() => void load()}>
+        <Button
+          className="text-button"
+          disabled={busy || !!draft}
+          onClick={() => setRefreshRevision((value) => value + 1)}
+        >
           <RefreshCw />
           刷新收支状态
         </Button>
