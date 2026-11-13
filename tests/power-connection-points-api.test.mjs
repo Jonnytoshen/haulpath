@@ -101,7 +101,7 @@ test('twenty project power points retain explicit capacity, source and stable id
     await application.stop();
     const database = new Database(join(directory, 'test.sqlite'), { readonly: true });
     try {
-      assert.equal(database.pragma('user_version', { simple: true }), 7);
+      assert.equal(database.pragma('user_version', { simple: true }), 8);
       const row = database
         .prepare('SELECT payload FROM project_power_connection_points WHERE project_id = ?')
         .get(project.id);
@@ -317,7 +317,7 @@ test('schema 3 project, route, point library and scenario inputs survive the pow
     const database = new Database(join(directory, 'test.sqlite'));
     try {
       database.exec(
-        'DROP TABLE operating_cashflow_results; DROP TABLE daily_transport_task_details; DROP TABLE daily_transport_tasks; DROP TABLE road_preparation_tasks; DROP TABLE directed_roads; DROP TABLE project_power_connection_points; PRAGMA user_version = 3;',
+        'DROP TABLE asset_cashflow_results; DROP TABLE operating_cashflow_results; DROP TABLE daily_transport_task_details; DROP TABLE daily_transport_tasks; DROP TABLE road_preparation_tasks; DROP TABLE directed_roads; DROP TABLE project_power_connection_points; PRAGMA user_version = 3;',
       );
     } finally {
       database.close();
