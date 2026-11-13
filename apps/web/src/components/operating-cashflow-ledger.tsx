@@ -20,17 +20,23 @@ export function CashflowTable({
   label,
   columns,
   rows,
+  numericColumns,
 }: {
   label: string;
   columns: string[];
   rows: ReactNode[][];
+  numericColumns?: number[];
 }) {
+  const alignment = (index: number) =>
+    numericColumns
+      ? { textAlign: numericColumns.includes(index) ? ('right' as const) : ('left' as const) }
+      : undefined;
   return (
     <LedgerTable label={label}>
       <thead>
         <tr>
-          {columns.map((col) => (
-            <th key={col} scope="col">
+          {columns.map((col, index) => (
+            <th key={col} scope="col" style={alignment(index)}>
               {col}
             </th>
           ))}
@@ -41,11 +47,13 @@ export function CashflowTable({
           <tr key={i}>
             {row.map((cell, j) =>
               j === 0 ? (
-                <th key={j} scope="row">
+                <th key={j} scope="row" style={alignment(j)}>
                   {cell}
                 </th>
               ) : (
-                <td key={j}>{cell}</td>
+                <td key={j} style={alignment(j)}>
+                  {cell}
+                </td>
               ),
             )}
           </tr>

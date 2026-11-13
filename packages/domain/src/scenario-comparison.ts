@@ -22,6 +22,25 @@ const fieldLabels: Record<string, string> = {
   annual: '年度参数',
   annualTransport: '年度运输能力',
   operatingCashflows: '年度运营收支',
+  assetCashflows: '资产与资本收付',
+  initialYear: '初始建设年份',
+  assets: '分类资产',
+  category: '资产分类',
+  owner: '收付归属',
+  acquisition: '取得方式',
+  amount: '取得或收付金额（元）',
+  serviceYear: '投运年份',
+  budgetBucket: '站网预算归集',
+  replacements: '设备更换',
+  disposal: '旧件回收（元）',
+  residual: '末期残值',
+  workingCapital: '营运资金余额计划',
+  openingBalance: '期初余额（元）',
+  balance: '期末余额（元）',
+  overrides: '特殊年度替代',
+  assetId: '目标资产',
+  kind: '替代项目',
+  reason: '替代原因',
   boundary: '业务边界',
   scopeSource: '收支范围依据',
   stationCostMode: '站点运维口径',
@@ -157,6 +176,11 @@ const fieldLabels: Record<string, string> = {
 
 /** Shared input vocabulary; station totals and per-battery equivalent power remain distinct. */
 export function scenarioInputFieldLabel(key: string, path = ''): string {
+  if (path.startsWith('assetCashflows') && key === 'scopeSource')
+    return '全部资产及营运资金范围依据';
+  if (path.startsWith('assetCashflows') && key === 'years') return '评价年份及资金余额';
+  if (path.startsWith('assetCashflows') && key === 'amount' && path.includes('.residual'))
+    return '残值（元）';
   if (key === 'basis' && path.startsWith('operatingCashflows')) return '计费单位';
   if (key === 'chargePowerKw')
     return path.includes('stationTypes') && !path.includes('batteryBasis')
@@ -176,6 +200,7 @@ const sections: [keyof PlanningScenarioContext, string][] = [
   ['annual', '年度参数'],
   ['annualTransport', '年度运输能力'],
   ['operatingCashflows', '年度运营收支'],
+  ['assetCashflows', '资产与资本收付'],
 ];
 
 function object(value: JsonValue | undefined): value is Record<string, JsonValue> {
@@ -184,6 +209,16 @@ function object(value: JsonValue | undefined): value is Record<string, JsonValue
 
 function identity(value: JsonValue, path: string): string | null {
   if (!object(value)) return null;
+  if (path.startsWith('assetCashflows.')) {
+    if (path.endsWith('.overrides') && typeof value.assetId === 'string')
+      return `${value.assetId}:${value.year}:${value.kind}`;
+    if (path.endsWith('.workingCapital') && typeof value.owner === 'string') return value.owner;
+    if (
+      (path.endsWith('.replacements') || path.endsWith('.years')) &&
+      typeof value.year === 'number'
+    )
+      return String(value.year);
+  }
   if (typeof value.id === 'string') return value.id;
   if (typeof value.siteId === 'string') return value.siteId;
   if (
@@ -212,6 +247,17 @@ function itemName(
 ): string {
   if (!object(value)) return fallback;
   if (typeof value.name === 'string') return value.name;
+  if (path.startsWith('assetCashflows.')) {
+    if (typeof value.assetId === 'string')
+      return `${names.get(value.assetId) ?? value.assetId} · ${value.year} 年`;
+    if (typeof value.year === 'number') return `${value.year} 年`;
+    if (typeof value.owner === 'string')
+      return (
+        ({ station: '站方', transport: '运输方', external: '外部' } as Record<string, string>)[
+          value.owner
+        ] ?? value.owner
+      );
+  }
   if (
     (path === 'annualTransport' || path === 'operatingCashflows.years') &&
     typeof value.year === 'number'

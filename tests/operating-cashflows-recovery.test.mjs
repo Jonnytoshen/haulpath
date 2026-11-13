@@ -44,7 +44,7 @@ test(
     await app.stop();
     // Downgrade the fixture only: schema6 has the same physical tables, without the new finance table.
     const oldDatabase = new Database(join(app.directory, 'test.sqlite'));
-    oldDatabase.exec('DROP TABLE operating_cashflow_results');
+    oldDatabase.exec('DROP TABLE asset_cashflow_results; DROP TABLE operating_cashflow_results');
     oldDatabase.pragma('user_version = 6');
     oldDatabase.close();
     const environment = { HAULPATH_TEST_MODE: '1', AMAP_JS_KEY: '', AMAP_JS_SECURITY_CODE: '' };
