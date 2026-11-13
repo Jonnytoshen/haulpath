@@ -317,7 +317,7 @@ test('schema 3 project, route, point library and scenario inputs survive the pow
     const database = new Database(join(directory, 'test.sqlite'));
     try {
       database.exec(
-        'DROP TABLE daily_transport_task_details; DROP TABLE daily_transport_tasks; DROP TABLE road_preparation_tasks; DROP TABLE directed_roads; DROP TABLE project_power_connection_points; PRAGMA user_version = 3;',
+        'DROP TABLE operating_cashflow_results; DROP TABLE daily_transport_task_details; DROP TABLE daily_transport_tasks; DROP TABLE road_preparation_tasks; DROP TABLE directed_roads; DROP TABLE project_power_connection_points; PRAGMA user_version = 3;',
       );
     } finally {
       database.close();
