@@ -215,3 +215,24 @@ export function assetInputIssues(context: PlanningScenarioContext): string[] {
   }
   return issues;
 }
+
+/** The editor preview and authoritative batch input use the same classification rules. */
+export function assetAssociationIssue(
+  category: string,
+  siteId: string | null,
+  bucket: unknown,
+): string | null {
+  if (bucket !== null && bucket !== 'station' && bucket !== 'connection') return '预算对账分类无效';
+  if (
+    (bucket && !siteId) ||
+    (bucket === 'connection' && category !== 'connection') ||
+    (bucket === 'station' && !['station', 'battery', 'other'].includes(category)) ||
+    (siteId &&
+      ['station', 'battery', 'connection'].includes(category) &&
+      bucket !== (category === 'connection' ? 'connection' : 'station'))
+  )
+    return '站点建设、备电池及接电资产须归入对应站址预算，避免重复投资';
+  if (['station', 'connection'].includes(category) && !siteId)
+    return '站点及接电资产须显式关联固定布局站址';
+  return null;
+}

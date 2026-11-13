@@ -1,4 +1,4 @@
-/* global document */
+/* global document, window */
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { test } from 'node:test';
@@ -64,6 +64,55 @@ test(
       .getByLabel('资产资金粘贴内容', { exact: true })
       .fill(
         [
+          '未完成设备',
+          'other',
+          'station',
+          'new',
+          '',
+          '',
+          '',
+          '草稿待补齐',
+          '',
+          '',
+          '',
+          '',
+          '',
+        ].join('\t'),
+      );
+    await region.getByRole('button', { name: '预览资产资金粘贴', exact: true }).click();
+    await region
+      .getByRole('region', { name: '资产资金粘贴预览' })
+      .waitFor({ state: 'visible', timeout: 3000 });
+    await region
+      .getByLabel('资产资金粘贴内容', { exact: true })
+      .fill(
+        [
+          '错误站点',
+          'station',
+          'station',
+          'new',
+          '100',
+          '2030',
+          '报价',
+          '站点',
+          '',
+          '',
+          '2032',
+          '0',
+          '零',
+        ].join('\t'),
+      );
+    await region.getByRole('button', { name: '预览资产资金粘贴', exact: true }).click();
+    assert.match(await region.getByRole('alert').innerText(), /关联固定布局站址/);
+    assert.equal(
+      await region.getByRole('button', { name: '采用资产资金预览', exact: true }).count(),
+      0,
+    );
+
+    await region
+      .getByLabel('资产资金粘贴内容', { exact: true })
+      .fill(
+        [
           '已有车辆',
           'vehicle',
           'transport',
@@ -100,7 +149,17 @@ test(
     );
     await region.getByRole('button', { name: '预览资产资金粘贴', exact: true }).click();
     await region.getByRole('button', { name: '采用资产资金预览', exact: true }).click();
-    if (qa) await page.screenshot({ path: `${qa}/editor-desktop.png`, fullPage: true });
+    if (qa) {
+      await region.evaluate((element) => {
+        for (let current = element.parentElement; current; current = current.parentElement)
+          current.scrollTop = 0;
+        window.scrollTo(0, 0);
+      });
+      await page.waitForTimeout(150);
+      await page.screenshot({ path: `${qa}/editor-desktop.png`, fullPage: true });
+      await region.getByLabel('资产 1 取得金额（元）', { exact: true }).scrollIntoViewIfNeeded();
+      await page.screenshot({ path: `${qa}/asset-fields-desktop.png`, fullPage: true });
+    }
     const saving = page.waitForResponse(
       (r) => r.url().endsWith(`${path}/asset-cashflows`) && r.request().method() === 'PUT',
     );
@@ -142,8 +201,16 @@ test(
         [390, 844, 'mobile'],
       ]) {
         await page.setViewportSize({ width, height });
-        await region.scrollIntoViewIfNeeded();
-        await page.screenshot({ path: `${qa}/result-${name}.png`, fullPage: true });
+        await region.evaluate((element) => {
+          for (let current = element.parentElement; current; current = current.parentElement)
+            current.scrollTop = 0;
+          window.scrollTo(0, 0);
+        });
+        await page.waitForTimeout(150);
+        await page.screenshot({ path: `${qa}/result-${name}.png`, fullPage: false });
+        await region.getByRole('table', { name: '逐年资本收付汇总' }).scrollIntoViewIfNeeded();
+        await page.waitForTimeout(150);
+        await page.screenshot({ path: `${qa}/ledger-${name}.png`, fullPage: false });
         assert.equal(
           await page.evaluate(
             () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,

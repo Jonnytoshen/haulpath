@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   assetCategories,
+  assetAssociationIssue,
   assetOwners,
   assetEventNames,
   validAssetAmount,
@@ -102,19 +103,8 @@ export function assetCashflowInputOf(
       prior?.siteId !== siteId
     )
       throw new HttpError(400, '资产关联站址不属于本方案固定布局');
-    if (a.budgetBucket !== null && a.budgetBucket !== 'station' && a.budgetBucket !== 'connection')
-      throw new HttpError(400, '预算对账分类无效');
-    if (
-      (a.budgetBucket && !siteId) ||
-      (a.budgetBucket === 'connection' && a.category !== 'connection') ||
-      (a.budgetBucket === 'station' && !['station', 'battery', 'other'].includes(a.category)) ||
-      (siteId &&
-        ['station', 'battery', 'connection'].includes(a.category) &&
-        a.budgetBucket !== (a.category === 'connection' ? 'connection' : 'station'))
-    )
-      throw new HttpError(400, '站点建设、备电池及接电资产须归入对应站址预算，避免重复投资');
-    if (['station', 'connection'].includes(a.category) && !siteId)
-      throw new HttpError(400, '站点及接电资产须显式关联固定布局站址');
+    const associationIssue = assetAssociationIssue(a.category, siteId, a.budgetBucket);
+    if (associationIssue) throw new HttpError(400, associationIssue);
     const replacements = list(a.replacements)
       .map((entry) => {
         const r = object(entry, ['year', 'amount', 'disposal', 'source']);

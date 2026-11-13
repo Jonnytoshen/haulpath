@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from 'react';
 import {
   assetCategories,
+  assetAssociationIssue,
   assetOwners,
   assetEventNames,
   validAssetAmount,
@@ -101,10 +102,10 @@ function parsePreview(
   context: PlanningScenarioContext,
 ): Preview {
   const rows = raw
-    .trim()
     .split(/\r?\n/)
     .filter((r) => r.trim())
-    .map((r) => r.split('\t'));
+    .map((r) => r.split('\t').map((cell) => cell.trim()));
+  if (rows.some((row) => row.some((cell) => cell.length > 2000))) throw new Error('文本最多2000字');
   if (!raw.trim() || rows.length > 1000) throw new Error('请粘贴1至1000行资料');
   const money = (value: string) => {
     const result = value === '' ? null : value;
@@ -142,8 +143,14 @@ function parsePreview(
         throw new Error('资产名称、分类、归属或取得方式无效');
       if (siteId && !context.stationNetwork?.fixedLayout.some((s) => s.siteId === siteId))
         throw new Error('站址身份不属于固定布局');
-      if (budgetBucket && !['station', 'connection'].includes(budgetBucket))
-        throw new Error('预算归集须为station或connection');
+      const associationIssue = assetAssociationIssue(
+        category,
+        siteId || null,
+        budgetBucket || null,
+      );
+      if (associationIssue) throw new Error(associationIssue);
+      if (!residualYear && (residual || residualSource))
+        throw new Error('有残值资料时须填写残值年份');
       return {
         ...emptyAsset(),
         name,
