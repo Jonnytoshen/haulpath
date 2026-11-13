@@ -99,6 +99,8 @@ export function annualDaySnapshot(
   const targets = new Map(year.demands.map((d) => [d.demandId, d.dailyTonnes]));
   const context = { ...snapshot.context };
   delete context.annualTransport;
+  // Operating prices do not alter dispatch, battery or power constraints.
+  delete context.operatingCashflows;
   context.results = [];
   return {
     ...snapshot,

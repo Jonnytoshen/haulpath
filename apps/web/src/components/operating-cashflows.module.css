@@ -1,0 +1,161 @@
+.section {
+  min-width: 0;
+  margin-top: 24px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.heading h3,
+.heading h4 {
+  margin: 0;
+}
+.heading h3 {
+  font-size: 19px;
+  font-weight: 600;
+}
+.heading p,
+.heading > span {
+  margin: 8px 0;
+  color: var(--secondary);
+}
+.section h4 {
+  margin-top: 24px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.help {
+  max-width: 74ch;
+  color: var(--secondary);
+  margin: 12px 0;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+.actions > span {
+  color: var(--secondary);
+}
+.section svg {
+  width: 16px;
+  height: 16px;
+}
+.editor {
+  border: 0;
+  min-width: 0;
+  padding: 0;
+  margin: 24px 0;
+}
+.editor > legend {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+.yearEditor,
+.yearResult,
+.result {
+  border-top: 1px solid var(--border);
+  margin-top: 28px;
+  padding-top: 16px;
+  min-width: 0;
+}
+.fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 12px 20px;
+}
+.field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  margin: 10px 0;
+}
+.field select,
+.field input {
+  width: 100%;
+  min-width: 0;
+}
+.line {
+  border: 0;
+  border-top: 1px solid var(--border);
+  min-width: 0;
+  margin: 20px 0;
+  padding: 12px 0 0;
+}
+.line > legend {
+  padding-right: 12px;
+  font-weight: 600;
+}
+.adoption {
+  padding: 16px;
+  margin-top: 24px;
+  background: var(--muted);
+  border-radius: 6px;
+}
+.error,
+.issues {
+  color: var(--error-ink, #a2372e);
+  overflow-wrap: anywhere;
+}
+.notice {
+  color: var(--primary);
+}
+.trace {
+  margin-top: 20px;
+  overflow-wrap: anywhere;
+}
+.trace summary {
+  cursor: pointer;
+  padding: 8px 0;
+}
+.trace p {
+  max-width: 74ch;
+}
+.paste {
+  margin-top: 20px;
+}
+.paste textarea {
+  display: block;
+  width: 100%;
+  margin: 12px 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--background);
+  color: var(--foreground);
+  resize: vertical;
+}
+.section table {
+  font-variant-numeric: tabular-nums;
+}
+.section table td {
+  max-width: 300px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.section table td:nth-child(n + 4):nth-child(-n + 6) {
+  text-align: right;
+}
+.empty {
+  margin: 28px 0 16px;
+  color: var(--secondary);
+}
+@media (max-width: 600px) {
+  .adoption {
+    padding: 12px;
+  }
+  .heading {
+    align-items: start;
+  }
+  .section h4 {
+    font-size: 14px;
+  }
+}

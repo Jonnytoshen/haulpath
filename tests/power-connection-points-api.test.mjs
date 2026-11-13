@@ -101,7 +101,7 @@ test('twenty project power points retain explicit capacity, source and stable id
     await application.stop();
     const database = new Database(join(directory, 'test.sqlite'), { readonly: true });
     try {
-      assert.equal(database.pragma('user_version', { simple: true }), 6);
+      assert.equal(database.pragma('user_version', { simple: true }), 7);
       const row = database
         .prepare('SELECT payload FROM project_power_connection_points WHERE project_id = ?')
         .get(project.id);
