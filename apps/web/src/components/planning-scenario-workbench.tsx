@@ -27,6 +27,7 @@ import ScenarioVersionComparison from './scenario-version-comparison';
 import DirectedRoadData from './directed-road-data';
 import DailyTransport from './daily-transport';
 import AnnualTransport from './annual-transport';
+import OperatingCashflows from './operating-cashflows';
 import ScenarioInputValue, { scenarioInputNames } from './scenario-input-value';
 import comparisonStyles from './scenario-version-comparison.module.css';
 
@@ -50,7 +51,9 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
   const [deleting, setDeleting] = useState<PlanningScenario | null>(null);
   const [freezing, setFreezing] = useState<PlanningScenario | null>(null);
   const [comparing, setComparing] = useState(false);
-  const [scenarioTask, setScenarioTask] = useState<'inputs' | 'daily' | 'annual'>('inputs');
+  const [scenarioTask, setScenarioTask] = useState<'inputs' | 'daily' | 'annual' | 'operating'>(
+    'inputs',
+  );
   const [editing, setEditing] = useState(false);
   const alive = useRef(false);
   const generation = useRef(0);
@@ -463,8 +466,35 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
               >
                 年度能力
               </Button>
+              <Button
+                className="text-button"
+                aria-pressed={scenarioTask === 'operating'}
+                disabled={locked}
+                onClick={() => setScenarioTask('operating')}
+              >
+                运营收支
+              </Button>
             </nav>
-            {scenarioTask === 'annual' ? (
+            {scenarioTask === 'operating' ? (
+              <OperatingCashflows
+                key={`operating-${selected.id}`}
+                scenario={selected}
+                disabled={busy || reading || frozen}
+                onChange={(saved) => {
+                  setSelected(saved);
+                  setScenarios((items) =>
+                    items.map((item) => (item.id === saved.id ? saved : item)),
+                  );
+                }}
+                onEditingChange={setEditing}
+                onWritingChange={(value) => {
+                  writing.current = value;
+                  if (value) generation.current++;
+                  setBusy(value);
+                  setReading(false);
+                }}
+              />
+            ) : scenarioTask === 'annual' ? (
               <AnnualTransport
                 key={`annual-${selected.id}`}
                 scenario={selected}

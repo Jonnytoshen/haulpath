@@ -21,6 +21,16 @@ const fieldLabels: Record<string, string> = {
   resources: '其他资源',
   annual: '年度参数',
   annualTransport: '年度运输能力',
+  operatingCashflows: '年度运营收支',
+  boundary: '业务边界',
+  scopeSource: '收支范围依据',
+  stationCostMode: '站点运维口径',
+  lines: '收支项目',
+  electricity: '分时电价',
+  payer: '购电承担方',
+  windows: '电价窗口',
+  flow: '收支归属',
+  rate: '单价（元/单位）',
   operatingDays: '年运营天数（天）',
   demandId: '运输需求',
   demands: '年度需求',
@@ -147,6 +157,7 @@ const fieldLabels: Record<string, string> = {
 
 /** Shared input vocabulary; station totals and per-battery equivalent power remain distinct. */
 export function scenarioInputFieldLabel(key: string, path = ''): string {
+  if (key === 'basis' && path.startsWith('operatingCashflows')) return '计费单位';
   if (key === 'chargePowerKw')
     return path.includes('stationTypes') && !path.includes('batteryBasis')
       ? '站内总充电功率上限（kW）'
@@ -164,6 +175,7 @@ const sections: [keyof PlanningScenarioContext, string][] = [
   ['resources', '其他资源'],
   ['annual', '年度参数'],
   ['annualTransport', '年度运输能力'],
+  ['operatingCashflows', '年度运营收支'],
 ];
 
 function object(value: JsonValue | undefined): value is Record<string, JsonValue> {
@@ -174,9 +186,19 @@ function identity(value: JsonValue, path: string): string | null {
   if (!object(value)) return null;
   if (typeof value.id === 'string') return value.id;
   if (typeof value.siteId === 'string') return value.siteId;
-  if (path === 'annualTransport' && typeof value.year === 'number') return String(value.year);
+  if (
+    (path === 'annualTransport' || path === 'operatingCashflows.years') &&
+    typeof value.year === 'number'
+  )
+    return String(value.year);
   if (path.startsWith('annualTransport[') && typeof value.demandId === 'string')
     return value.demandId;
+  if (
+    path.startsWith('operatingCashflows.years[') &&
+    path.endsWith('.electricity') &&
+    typeof value.powerSourceId === 'string'
+  )
+    return value.powerSourceId;
   if (typeof value.fromPositionId === 'string' && typeof value.toPositionId === 'string')
     return `${value.fromPositionId}:${value.toPositionId}`;
   return null;
@@ -190,7 +212,11 @@ function itemName(
 ): string {
   if (!object(value)) return fallback;
   if (typeof value.name === 'string') return value.name;
-  if (path === 'annualTransport' && typeof value.year === 'number') return `${value.year} 年`;
+  if (
+    (path === 'annualTransport' || path === 'operatingCashflows.years') &&
+    typeof value.year === 'number'
+  )
+    return `${value.year} 年`;
   if (path.startsWith('annualTransport[') && typeof value.demandId === 'string')
     return names.get(value.demandId) ?? value.demandId;
   if (object(value.point) && typeof value.point.name === 'string') return value.point.name;

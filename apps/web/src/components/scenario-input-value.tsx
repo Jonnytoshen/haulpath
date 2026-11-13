@@ -1,5 +1,7 @@
 import {
   isStrategy,
+  operatingBases,
+  operatingFlows,
   scenarioInputFieldLabel,
   strategyLabels,
   type PlanningScenarioContext,
@@ -63,6 +65,24 @@ export default function ScenarioInputValue({
           : new Intl.NumberFormat('zh-CN', { maximumSignificantDigits: 17 }).format(value)}
       </span>
     );
+  if (typeof value === 'string' && path.startsWith('operatingCashflows.')) {
+    const labels: Record<string, string> = {
+      ...operatingBases,
+      ...operatingFlows,
+      integrated: '一体化',
+      'station-only': '仅站方',
+      'station-types': '逐站采用站型年度运维',
+      'annual-lines': '年度明细替代站型运维',
+      station: '站方',
+      transport: '运输方',
+      external: '外部',
+    };
+    if (
+      ['boundary', 'stationCostMode', 'basis', 'flow', 'payer'].includes(field) &&
+      Object.hasOwn(labels, value)
+    )
+      return <span>{labels[value]}</span>;
+  }
   if (typeof value === 'string')
     return <span>{!genericInput && field.endsWith('Id') ? inputName(names, value) : value}</span>;
   if (Array.isArray(value)) {

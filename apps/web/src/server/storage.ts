@@ -28,11 +28,13 @@ import {
   swapDetourLimitsOf,
 } from './scenario-validation';
 import { cyclePositions, confirmCycle } from './transport-cycle-validation';
+import { operatingCashflowInputOf } from './operating-cashflows-validation';
 import { annualTransportYearsOf } from './annual-transport-validation';
 import { transportDemandsOf } from './transport-demand-validation';
 import { fleetOperationsOf } from './fleet-operations-validation';
 import { powerResourceRevision } from './power-connection-points-validation';
 import { DirectedRoadStorage } from './directed-road-storage';
+import { OperatingCashflowStorage } from './operating-cashflows-storage';
 import { DailyTransportStorage } from './daily-transport-storage';
 
 function readScenario(payload: string): PlanningScenario {
@@ -57,6 +59,7 @@ class Storage {
   private db: Database.Database;
   readonly directedRoads: DirectedRoadStorage;
   readonly dailyTransport: DailyTransportStorage;
+  readonly operatingCashflows: OperatingCashflowStorage;
   constructor(path: string) {
     mkdirSync(dirname(path), { recursive: true });
     this.db = new Database(path);
@@ -64,7 +67,7 @@ class Storage {
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('busy_timeout = 5000');
     const version = this.db.pragma('user_version', { simple: true }) as number;
-    if (version > 6) throw new Error('本机数据库版本比当前应用更新，请使用匹配的应用版本');
+    if (version > 7) throw new Error('本机数据库版本比当前应用更新，请使用匹配的应用版本');
     if (version === 0)
       this.db.transaction(() => {
         this.db
@@ -131,6 +134,17 @@ class Storage {
         );`);
         this.db.pragma('user_version = 6');
       })();
+    if (version < 7)
+      this.db.transaction(() => {
+        this.db.exec(`CREATE TABLE operating_cashflow_results (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+          scenario_id TEXT NOT NULL REFERENCES planning_scenarios(id) ON DELETE CASCADE,
+          payload TEXT NOT NULL
+        );
+        CREATE INDEX operating_cashflow_results_scenario ON operating_cashflow_results(project_id, scenario_id);`);
+        this.db.pragma('user_version = 7');
+      })();
     this.directedRoads = new DirectedRoadStorage(this.db, (projectId, scenarioId) =>
       this.getScenario(projectId, scenarioId),
     );
@@ -138,6 +152,11 @@ class Storage {
       this.db,
       (projectId, scenarioId) => this.getScenario(projectId, scenarioId),
       this.directedRoads,
+    );
+    this.operatingCashflows = new OperatingCashflowStorage(
+      this.db,
+      (projectId, scenarioId) => this.getScenario(projectId, scenarioId),
+      this.dailyTransport,
     );
     // The process-global storage instance survives route reloads; only an initial open recovers abandoned work.
     this.db.transaction(() => {
@@ -360,6 +379,8 @@ class Storage {
         throw new HttpError(400, '换电绕行限额须通过专用接口维护，不能直接覆盖');
       if (!isDeepStrictEqual(context.annualTransport, scenario.context.annualTransport))
         throw new HttpError(400, '年度运输资料须通过专用接口维护，不能直接覆盖');
+      if (!isDeepStrictEqual(context.operatingCashflows, scenario.context.operatingCashflows))
+        throw new HttpError(400, '运营收支须通过专用接口维护，不能直接覆盖');
       const inputChanged = !isDeepStrictEqual(context, scenario.context);
       if (name === scenario.name && !inputChanged) return scenario;
       if (inputChanged) scenario.inputVersion++;
@@ -610,6 +631,29 @@ class Storage {
       if (scenarioRevision(expectedRevision) !== scenario.revision)
         throw new HttpError(409, '规划方案已被更新，请重新加载后删除');
       scenario.context.transportCycles = cycles.filter((cycle) => cycle.id !== cycleId);
+      scenario.inputVersion++;
+      scenario.revision++;
+      scenario.updatedAt = new Date().toISOString();
+      this.db
+        .prepare('UPDATE planning_scenarios SET payload = ? WHERE id = ? AND project_id = ?')
+        .run(JSON.stringify(scenario), scenarioId, projectId);
+      return scenario;
+    })();
+  }
+  replaceOperatingCashflows(
+    projectId: string,
+    scenarioId: string,
+    input: Record<string, unknown>,
+  ): PlanningScenario {
+    return this.db.transaction(() => {
+      const scenario = this.getScenario(projectId, scenarioId);
+      assertScenarioEditable(scenario);
+      scenarioFields(input, ['expectedRevision', 'input']);
+      if (scenarioRevision(input.expectedRevision) !== scenario.revision)
+        throw new HttpError(409, '规划方案已被更新，请重新加载后编辑');
+      const financial = operatingCashflowInputOf(input.input);
+      if (isDeepStrictEqual(financial, scenario.context.operatingCashflows)) return scenario;
+      scenario.context.operatingCashflows = financial;
       scenario.inputVersion++;
       scenario.revision++;
       scenario.updatedAt = new Date().toISOString();

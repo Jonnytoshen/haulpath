@@ -1,3 +1,4 @@
+import type { OperatingCashflowInput } from './operating-cashflows';
 import type { AnnualTransportYear } from './annual-transport';
 import type { TransportDemand } from './transport-demands';
 import type { FleetOperations } from './fleet-operations';
@@ -161,6 +162,7 @@ export interface PlanningScenarioContext {
   roadSettings?: RoadSettings;
   swapDetourLimits?: SwapDetourLimits;
   annualTransport?: AnnualTransportYear[];
+  operatingCashflows?: OperatingCashflowInput;
   annual: JsonObject[];
   results: JsonObject[];
 }
@@ -289,3 +291,7 @@ export * from './repeatable-day';
 export * from './daily-transport-search';
 
 export * from './annual-transport';
+
+export * from './operating-cashflows';
+
+export * from './operating-cashflow-calculation';

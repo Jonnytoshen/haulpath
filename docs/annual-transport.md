@@ -43,3 +43,5 @@
 | `POST /:taskId/continue` | `{ expectedRevision, maxRuntimeMs? }` 创建新年度任务                                                                             |
 
 年度结果中的 `evidence` 是该年完整代表日，`reusedFromYear` 指向同任务内等价年份；`economicStatus` 固定为 `not-ready`。未校核年的实际数量字段为null。后续收入与费用应消费本年已校验实际账目，不能将目标吨数当作收入依据。
+
+「运营收支」可显式采用本方案已结束的年度任务，核对实际业务及分时电价；价格变更须通过完整物理输入等价检查，不改写原任务。运营收支完整不改变年度物理任务的 `economicStatus: not-ready`，详见[运营收支](operating-cashflows.md)。

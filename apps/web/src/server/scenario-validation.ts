@@ -10,6 +10,7 @@ import type {
   RoadSettings,
   SwapDetourLimits,
   AnnualTransportYear,
+  OperatingCashflowInput,
 } from '@haulpath/domain';
 import { isStrategy } from '@haulpath/domain';
 import { HttpError } from './http';
@@ -83,6 +84,7 @@ export function scenarioContext(input: unknown): PlanningScenarioContext {
     'swapDetourLimits',
     'annual',
     'annualTransport',
+    'operatingCashflows',
     'results',
   ]);
   if (
@@ -96,6 +98,7 @@ export function scenarioContext(input: unknown): PlanningScenarioContext {
     (context.stationNetwork !== undefined && !jsonObject(context.stationNetwork)) ||
     (context.annualTransport !== undefined &&
       (!Array.isArray(context.annualTransport) || !jsonValue(context.annualTransport))) ||
+    (context.operatingCashflows !== undefined && !jsonObject(context.operatingCashflows)) ||
     !Array.isArray(context.annual) ||
     !context.annual.every((year) => jsonObject(year)) ||
     !Array.isArray(context.results) ||
@@ -132,6 +135,9 @@ export function scenarioContext(input: unknown): PlanningScenarioContext {
     ...(context.annualTransport === undefined
       ? {}
       : { annualTransport: context.annualTransport as unknown as AnnualTransportYear[] }),
+    ...(context.operatingCashflows === undefined
+      ? {}
+      : { operatingCashflows: context.operatingCashflows as unknown as OperatingCashflowInput }),
     annual: context.annual,
     results: context.results,
   };
