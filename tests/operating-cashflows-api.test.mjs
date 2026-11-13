@@ -289,6 +289,13 @@ test(
     ];
     await model.save('/operating-cashflows', 'PUT', { input });
     assert.match((await calculate()).body.years[0].issues.join(' '), /电价覆盖/);
+    input.years[0].electricity[0].windows = [
+      { startMinute: 562, endMinute: 752, rate: '1', source: '覆盖完整实际购电，不为闲置时段报价' },
+    ];
+    await model.save('/operating-cashflows', 'PUT', { input });
+    const actualOnly = (await calculate()).body;
+    assert.equal(actualOnly.complete, true, JSON.stringify(actualOnly.years[0].issues));
+    assert.equal(actualOnly.years[0].electricityTotalCents, 37889);
   },
 );
 
@@ -606,6 +613,53 @@ test(
     assert.equal(
       response.body.years[0].lines.filter((l) => l.id.startsWith('station-type:')).length,
       1,
+    );
+  },
+);
+
+test(
+  'a validated zero-energy operating day needs no electricity tariff or payer for its idle source',
+  { timeout: 240000 },
+  async (t) => {
+    const { request } = await startVehicleEnergyApplication(t);
+    const model = await repeatableFixture(request);
+    const { operationInputs, waitDailyTransportTask } =
+      await import('./helpers/daily-transport-fixture.mjs');
+    const operations = operationInputs(model.scenario.context.operations);
+    operations.vehicleGroups[0].emptyKwhPerKm = 0;
+    operations.vehicleGroups[0].fullKwhPerKm = 0;
+    operations.measuredSegments.forEach((s) => {
+      s.emptyKwh = 0;
+      s.fullKwh = 0;
+    });
+    await model.save('/operations', 'PUT', { operations });
+    const demandId = model.scenario.context.transportDemands[0].id;
+    await model.save('/annual-transport', 'PUT', {
+      years: [{ year: 2030, operatingDays: 1, demands: [{ demandId, dailyTonnes: 10 }] }],
+    });
+    await model.prepare();
+    const launch = await request(`${model.path}/annual-transport`, 'POST', {
+      expectedRevision: model.scenario.revision,
+    });
+    const source = await waitDailyTransportTask(request, model.path, launch.body.task.taskId);
+    assert.equal(source.annualResult.years[0].annualGridEnergyKwh, 0);
+    const input = financeInput();
+    await model.save('/operating-cashflows', 'PUT', { input });
+    const response = await request(`${model.path}/operating-cashflows`, 'POST', {
+      expectedRevision: model.scenario.revision,
+      sourceTaskId: source.taskId,
+    });
+    assert.equal(response.status, 201);
+    assert.equal(response.body.complete, true, JSON.stringify(response.body.years[0].issues));
+    assert.equal(response.body.years[0].electricityTotalCents, 0);
+    assert.deepEqual(response.body.years[0].electricity, []);
+    assert.deepEqual(
+      [
+        response.body.years[0].incomeCents,
+        response.body.years[0].expenseCents,
+        response.body.years[0].balanceCents,
+      ],
+      [100000, 21100, 78900],
     );
   },
 );

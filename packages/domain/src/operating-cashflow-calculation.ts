@@ -147,6 +147,11 @@ export function calculateOperatingYear(
   if (evidence && input) electricityLedger(input);
   function electricityLedger(input: OperatingCashflowYear) {
     for (const power of evidence!.sharedPower!.sources) {
+      // The shared-power ledger also records idle gaps; only actual purchases need prices.
+      const purchased = power.intervals.filter(
+        (interval) => interval.gridPowerKw > 0 && interval.endMinute > interval.startMinute,
+      );
+      if (!purchased.length) continue;
       const tariff = input.electricity.find((p) => p.powerSourceId === power.powerSourceId);
       const payer = tariff?.payer ?? null;
       const treatment =
@@ -155,7 +160,7 @@ export function calculateOperatingYear(
           : 'included';
       const included = treatment === 'included';
       if (included && !payer) issues.push(`${power.powerSourceName}：购电承担方待选择`);
-      for (const interval of power.intervals) {
+      for (const interval of purchased) {
         let covered = 0;
         for (const [windowIndex, window] of (tariff?.windows ?? []).entries()) {
           const pieces = tariffWindowPieces(window);
