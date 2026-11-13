@@ -1,4 +1,4 @@
-/* global document, window */
+/* global document, window, getComputedStyle */
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { test } from 'node:test';
@@ -189,6 +189,10 @@ test(
       await region.getByRole('table', { name: '逐年资本收付汇总' }).innerText(),
       /-1,100.00/,
     );
+    const initialCell = region
+      .getByRole('table', { name: '逐年资本收付汇总' })
+      .getByRole('cell', { name: '1,000.00', exact: true });
+    assert.equal(await initialCell.evaluate((el) => getComputedStyle(el).textAlign), 'right');
     await region.getByRole('button', { name: '核对 2032 年资本', exact: true }).click();
     assert.match(
       await region.getByRole('table', { name: '2032 年营运资金' }).innerText(),

@@ -215,6 +215,7 @@ export default function AssetCashflows({
             <p>{scenario.context.assetCashflows?.scopeSource || '范围依据待填写'}</p>
             <CashflowTable
               label="已保存分类资产"
+              numericColumns={[4]}
               columns={['资产', '分类', '归属', '取得方式', '取得金额（元）', '来源及范围']}
               rows={(scenario.context.assetCashflows?.assets ?? []).map((a) => [
                 a.name,
@@ -277,6 +278,7 @@ export default function AssetCashflows({
           )}
           <CashflowTable
             label="逐年资本收付汇总"
+            numericColumns={[1, 2, 3, 4, 5, 6, 7]}
             columns={[
               '年份',
               '初始投资（元）',
@@ -314,6 +316,7 @@ export default function AssetCashflows({
             </p>
             <CashflowTable
               label="站网投资对账"
+              numericColumns={[2, 3, 4]}
               columns={['站址', '预算项目', '站网预算（元）', '分类资产（元）', '差额（元）']}
               rows={displayed.reconciliation.map((r) => [
                 r.siteName,
@@ -329,6 +332,7 @@ export default function AssetCashflows({
               <h4>{year.year} 年资本明细</h4>
               <CashflowTable
                 label={`${year.year} 年资产收付`}
+                numericColumns={[4, 5]}
                 columns={[
                   '资产',
                   '分类及归属',
@@ -352,6 +356,7 @@ export default function AssetCashflows({
               />
               <CashflowTable
                 label={`${year.year} 年营运资金`}
+                numericColumns={[2, 3, 4, 5]}
                 columns={[
                   '归属',
                   '边界',
@@ -378,6 +383,7 @@ export default function AssetCashflows({
             <p>{displayed.input.scopeSource}</p>
             <CashflowTable
               label="采用资产依据"
+              numericColumns={[2, 3]}
               columns={['资产', '取得方式', '投运年份', '历史取得金额（元）', '资产范围及来源']}
               rows={displayed.assets.map((a) => [
                 a.name,

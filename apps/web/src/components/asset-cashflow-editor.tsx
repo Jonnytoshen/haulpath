@@ -753,6 +753,7 @@ export default function AssetCashflowEditor({
           <section aria-label="资产资金粘贴预览">
             <CashflowTable
               label="资产资金预览明细"
+              numericColumns={preview.kind === 'assets' ? [4, 5, 10, 11] : [1, 3, 4]}
               columns={
                 preview.kind === 'assets'
                   ? [
