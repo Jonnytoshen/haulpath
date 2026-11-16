@@ -19,6 +19,7 @@ import { assertScenarioEditable, scenarioFields, scenarioRevision } from './scen
 function physicalInput(context: PlanningScenarioContext) {
   const physical = { ...context };
   delete physical.operatingCashflows;
+  delete physical.assetCashflows;
   physical.results = [];
   return physical;
 }

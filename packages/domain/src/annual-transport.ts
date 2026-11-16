@@ -101,6 +101,7 @@ export function annualDaySnapshot(
   delete context.annualTransport;
   // Operating prices do not alter dispatch, battery or power constraints.
   delete context.operatingCashflows;
+  delete context.assetCashflows;
   context.results = [];
   return {
     ...snapshot,

@@ -1,4 +1,7 @@
 import {
+  assetCategories,
+  assetOwners,
+  assetEventNames,
   isStrategy,
   operatingBases,
   operatingFlows,
@@ -65,6 +68,18 @@ export default function ScenarioInputValue({
           : new Intl.NumberFormat('zh-CN', { maximumSignificantDigits: 17 }).format(value)}
       </span>
     );
+  if (typeof value === 'string' && path.startsWith('assetCashflows.')) {
+    const groups: Record<string, Record<string, string>> = {
+      category: assetCategories,
+      owner: assetOwners,
+      kind: assetEventNames,
+      boundary: { integrated: '一体化', 'station-only': '仅站方' },
+      acquisition: { new: '本次新增', existing: '历史已发生' },
+      budgetBucket: { station: '完整建站配置', connection: '接电工程' },
+    };
+    if (groups[field] && Object.hasOwn(groups[field], value))
+      return <span>{groups[field][value]}</span>;
+  }
   if (typeof value === 'string' && path.startsWith('operatingCashflows.')) {
     const labels: Record<string, string> = {
       ...operatingBases,

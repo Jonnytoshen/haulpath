@@ -1,3 +1,4 @@
+import type { AssetCashflowInput } from './asset-cashflows';
 import type { OperatingCashflowInput } from './operating-cashflows';
 import type { AnnualTransportYear } from './annual-transport';
 import type { TransportDemand } from './transport-demands';
@@ -163,6 +164,7 @@ export interface PlanningScenarioContext {
   swapDetourLimits?: SwapDetourLimits;
   annualTransport?: AnnualTransportYear[];
   operatingCashflows?: OperatingCashflowInput;
+  assetCashflows?: AssetCashflowInput;
   annual: JsonObject[];
   results: JsonObject[];
 }
@@ -295,3 +297,6 @@ export * from './annual-transport';
 export * from './operating-cashflows';
 
 export * from './operating-cashflow-calculation';
+
+export * from './asset-cashflows';
+export * from './asset-cashflow-calculation';

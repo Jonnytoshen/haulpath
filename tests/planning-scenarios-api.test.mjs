@@ -36,7 +36,7 @@ test('scenario drafts preserve their project and input context through restart',
     await application.stop();
     const fresh = new Database(join(directory, 'test.sqlite'), { readonly: true });
     try {
-      assert.equal(fresh.pragma('user_version', { simple: true }), 7);
+      assert.equal(fresh.pragma('user_version', { simple: true }), 8);
     } finally {
       fresh.close();
     }
@@ -201,7 +201,7 @@ test('schema two upgrades preserve routes, point library and remembered preferen
     await application.stop();
     const migrated = new Database(databasePath, { readonly: true });
     try {
-      assert.equal(migrated.pragma('user_version', { simple: true }), 7);
+      assert.equal(migrated.pragma('user_version', { simple: true }), 8);
     } finally {
       migrated.close();
     }

@@ -194,3 +194,5 @@ Docker 验收单独使用 `pnpm run test:docker`；双架构核心验收使用 `
 根 `haulpath` 是唯一版本与发布对象；Nx 中对两个子包的隐式依赖确保仅修改应用或领域包的提交也参与产品版本和日志分析，沿用现有领域 scope。发布仅维护源码版本、日志、Git tag 与 GitHub Release，始终跳过 npm 发布，不生成安装包或自动部署。历史验证基线与真实服务联调边界见[验收记录](docs/acceptance.md)。
 
 年度业务边界、价格、电价、费用归属和历史账目的使用方式见[运营收支](docs/operating-cashflows.md)；运营余额不表示税费、投资或融资已校核。
+
+规划方案的「资产与资金」支持独立核对分类资产、设备更换、残值及营运资金，见[资产与资本收付](docs/asset-cashflows.md)。税费、折旧、融资及 NPV 仍待独立校核。
