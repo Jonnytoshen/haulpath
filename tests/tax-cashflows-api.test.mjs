@@ -504,7 +504,20 @@ test(
       })
     ).body;
     const { taxInput } = await import('./helpers/tax-cashflows-fixture.mjs');
-    await m.save('/tax-cashflows', 'PUT', { input: taxInput(m.operating, m.assets) });
+    const tax = taxInput(m.operating, m.assets);
+    tax.historicalAssets.forEach((h) =>
+      Object.assign(h, {
+        openingBasis: null,
+        remainingYears: null,
+        residualBasis: null,
+        source: '',
+      }),
+    );
+    Object.assign(
+      tax.depreciation.find((d) => d.category === 'vehicle'),
+      { years: null, residualRate: null, start: null, source: '' },
+    );
+    await m.save('/tax-cashflows', 'PUT', { input: tax });
     const r = await m.calculateTax();
     assert.equal(r.complete, true, JSON.stringify(r));
     assert.equal(r.years[0].projectCashflowCents, -206000);
@@ -575,5 +588,38 @@ test(
         [2, null, null],
       ],
     );
+  },
+);
+
+test(
+  'tax rule drafts support more than 1000 annual tariff targets and enforce the documented byte resource limit atomically',
+  { timeout: 180000 },
+  async (t) => {
+    const { request, path, scenario } = await startAssetApplication(t);
+    const input = emptyTaxInput();
+    input.rules = Array.from({ length: 1200 }, (_, i) => ({
+      targetKey: `electricity:${2030 + Math.floor(i / 60)}:power-${Math.floor(i / 3) % 20}:site-${Math.floor(i / 3) % 20}:${(i % 3) * 480}:${((i % 3) + 1) * 480}`,
+      pricing: null,
+      vatRate: null,
+      credit: null,
+      incomeTax: null,
+      source: '',
+    }));
+    const saved = await request(`${path}/tax-cashflows`, 'PUT', {
+      expectedRevision: scenario.revision,
+      input,
+    });
+    assert.equal(saved.status, 200, JSON.stringify(saved.body));
+    assert.equal(saved.body.context.taxCashflows.rules.length, 1200);
+    assert.equal((await request(path)).body.context.taxCashflows.rules.length, 1200);
+    const oversized = structuredClone(input);
+    oversized.scopeSource = 'x'.repeat(8 * 1024 * 1024 + 1);
+    const refused = await request(`${path}/tax-cashflows`, 'PUT', {
+      expectedRevision: saved.body.revision,
+      input: oversized,
+    });
+    assert.equal(refused.status, 400);
+    assert.match(refused.body.error, /8 MiB/);
+    assert.deepEqual((await request(path)).body, saved.body);
   },
 );

@@ -3,6 +3,7 @@ import type { OperatingCashflowResult } from './operating-cashflows';
 import type { PlanningScenarioContext } from './index';
 import {
   taxInputIssues,
+  validTaxRate,
   taxTargets,
   type TaxCashflowInput,
   type TaxCashflowYearResult,
@@ -26,7 +27,7 @@ function rounded(n: bigint, d: bigint): number | null {
   return safe((n + d / 2n) / d);
 }
 function rateMicro(v: string | null): bigint | null {
-  if (v === null || !/^(0(\.\d{1,6})?|1(\.0{1,6})?)$/.test(v)) return null;
+  if (v === null || !validTaxRate(v)) return null;
   const [w, f = ''] = v.split('.');
   return BigInt(w) * 1000000n + BigInt(f.padEnd(6, '0'));
 }

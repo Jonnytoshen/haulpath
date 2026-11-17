@@ -1,5 +1,5 @@
 import type { AssetCashflowResult, AssetEntry, AssetEventKind } from './asset-cashflows';
-import { assetCategories, assetEventNames } from './asset-cashflows';
+import { assetCategories, assetEventNames, assetOwnerIncluded } from './asset-cashflows';
 import type { OperatingCashflowResult } from './operating-cashflows';
 import type { PlanningScenarioContext } from './index';
 
@@ -246,10 +246,18 @@ export function taxInputIssues(context: PlanningScenarioContext): string[] {
   for (const lot of input.openingLosses)
     if (lot.originYear >= (years[0] ?? 0) || lot.amount === null || !lot.source.trim())
       issues.push(`${lot.originYear}：期初剩余亏损依据无效或未知`);
-  for (const d of input.depreciation)
+  const includedAssets =
+    context.assetCashflows?.assets.filter((a) =>
+      assetOwnerIncluded(a.owner, context.assetCashflows?.boundary ?? null),
+    ) ?? [];
+  for (const d of input.depreciation.filter((d) =>
+    includedAssets.some((a) => a.category === d.category),
+  ))
     if (d.years === null || d.residualRate === null || !d.start || !d.source.trim())
       issues.push(`${assetCategories[d.category]}：分类折旧规则待填写`);
-  for (const h of input.historicalAssets)
+  for (const h of input.historicalAssets.filter((h) =>
+    includedAssets.some((a) => a.id === h.assetId),
+  ))
     if (
       h.openingBasis === null ||
       h.remainingYears === null ||

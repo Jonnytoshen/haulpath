@@ -2,6 +2,8 @@
 import { useState } from 'react';
 import {
   assetCategories,
+  assetOwnerIncluded,
+  validTaxRate,
   taxPricingNames,
   taxCreditNames,
   taxPaymentNames,
@@ -61,6 +63,7 @@ export function extendTaxInput(
         source: '',
       });
   for (const a of context.assetCashflows?.assets ?? []) {
+    if (!assetOwnerIncluded(a.owner, context.assetCashflows?.boundary ?? null)) continue;
     if (!next.depreciation.some((r) => r.category === a.category))
       next.depreciation.push({
         category: a.category,
@@ -144,8 +147,7 @@ function parseYears(raw: string): TaxYearInput[] {
     if (!/^\d{1,4}$/.test(year) || Number(year) < 1) throw new Error('税务年份须为1至9999的整数');
     if (activity && !['operating', 'non-operating'].includes(activity))
       throw new Error('年度活动须为operating或non-operating');
-    if (rate && !/^(0(\.\d{1,6})?|1(\.0{1,6})?)$/.test(rate))
-      throw new Error('税率须为0至1，最多6位小数');
+    if (!validTaxRate(nullable(rate))) throw new Error('税率须为0至1，最多6位小数');
     if (!validAssetAmount(nullable(tax))) throw new Error('其他税费金额无效');
     if (deductible && !['true', 'false'].includes(deductible))
       throw new Error('扣除条件须为true或false，未知留空');

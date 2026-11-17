@@ -1,6 +1,7 @@
 import {
   assetCategories,
   validAssetAmount,
+  validTaxRate,
   taxPricingNames,
   taxCreditNames,
   taxPaymentNames,
@@ -14,9 +15,12 @@ function object(v: unknown, fields: string[]): Record<string, unknown> {
   scenarioFields(v as Record<string, unknown>, fields);
   return v as Record<string, unknown>;
 }
-function list(v: unknown): unknown[] {
-  if (!Array.isArray(v) || v.length > 1000)
-    throw new HttpError(400, '税务列表须为最多1000项的数组');
+function list(v: unknown, limit = 1000): unknown[] {
+  if (!Array.isArray(v) || v.length > limit)
+    throw new HttpError(
+      400,
+      Number.isFinite(limit) ? '税务列表须为最多1000项的数组' : '税务规则须为数组',
+    );
   return v;
 }
 function text(v: unknown, required = false): string {
@@ -35,8 +39,7 @@ function money(v: unknown): string | null {
 }
 function rate(v: unknown): string | null {
   if (v === null) return null;
-  if (typeof v !== 'string' || !/^(0(\.\d{1,6})?|1(\.0{1,6})?)$/.test(v))
-    throw new HttpError(400, '税率或残值率须为0至1的小数，最多6位小数');
+  if (!validTaxRate(v)) throw new HttpError(400, '税率或残值率须为0至1的小数，最多6位小数');
   return v;
 }
 function choice<T extends string>(
@@ -53,6 +56,8 @@ function unique(v: (string | number)[]) {
     throw new HttpError(400, '税务年份、身份、分类或替代目标不能重复');
 }
 export function taxCashflowInputOf(v: unknown, context: PlanningScenarioContext): TaxCashflowInput {
+  if (Buffer.byteLength(JSON.stringify(v) ?? '', 'utf8') > 8 * 1024 * 1024)
+    throw new HttpError(400, '税务输入超过8 MiB资源限制，请减少重复或过长资料');
   const a = object(v, [
     'scopeSource',
     'openingVatCredit',
@@ -91,7 +96,7 @@ export function taxCashflowInputOf(v: unknown, context: PlanningScenarioContext)
     })
     .sort((a, b) => a.year - b.year);
   unique(years.map((y) => y.year));
-  const rules = list(a.rules).map((v) => {
+  const rules = list(a.rules, Infinity).map((v) => {
     const r = object(v, ['targetKey', 'pricing', 'vatRate', 'credit', 'incomeTax', 'source']);
     return {
       targetKey: text(r.targetKey, true),
