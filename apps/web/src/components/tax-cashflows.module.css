@@ -1,3 +1,7 @@
 .section table[aria-label='年度税基及留抵'] {
   min-width: 100%;
 }
+
+.section table[aria-label='年度税务与项目现金流'] {
+  min-width: 960px;
+}

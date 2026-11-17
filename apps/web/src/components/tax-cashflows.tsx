@@ -330,6 +330,7 @@ export default function TaxCashflows({
               ))}
             </ul>
           )}
+          <p className={styles.help}>金额单位：元。账目表可横向滚动查看全部年份收付列。</p>
           <CashflowTable
             label="年度税务与项目现金流"
             columns={[
