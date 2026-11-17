@@ -1,3 +1,5 @@
+import { TaxCashflowStorage } from './tax-cashflows-storage';
+import { taxCashflowInputOf } from './tax-cashflows-validation';
 import { assetCashflowInputOf } from './asset-cashflows-validation';
 import { AssetCashflowStorage } from './asset-cashflows-storage';
 import Database from 'better-sqlite3';
@@ -61,6 +63,7 @@ class Storage {
   private db: Database.Database;
   readonly directedRoads: DirectedRoadStorage;
   readonly dailyTransport: DailyTransportStorage;
+  readonly taxCashflows: TaxCashflowStorage;
   readonly assetCashflows: AssetCashflowStorage;
   readonly operatingCashflows: OperatingCashflowStorage;
   constructor(path: string) {
@@ -70,7 +73,7 @@ class Storage {
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('busy_timeout = 5000');
     const version = this.db.pragma('user_version', { simple: true }) as number;
-    if (version > 8) throw new Error('本机数据库版本比当前应用更新，请使用匹配的应用版本');
+    if (version > 9) throw new Error('本机数据库版本比当前应用更新，请使用匹配的应用版本');
     if (version === 0)
       this.db.transaction(() => {
         this.db
@@ -159,6 +162,17 @@ class Storage {
         CREATE INDEX asset_cashflow_results_scenario ON asset_cashflow_results(project_id, scenario_id);`);
         this.db.pragma('user_version = 8');
       })();
+    if (version < 9)
+      this.db.transaction(() => {
+        this.db.exec(`CREATE TABLE tax_cashflow_results (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+          scenario_id TEXT NOT NULL REFERENCES planning_scenarios(id) ON DELETE CASCADE,
+          payload TEXT NOT NULL
+        );
+        CREATE INDEX tax_cashflow_results_scenario ON tax_cashflow_results(project_id, scenario_id);`);
+        this.db.pragma('user_version = 9');
+      })();
     this.assetCashflows = new AssetCashflowStorage(this.db, (projectId, scenarioId) =>
       this.getScenario(projectId, scenarioId),
     );
@@ -187,6 +201,12 @@ class Storage {
         this.writeRoute(route);
       }
     })();
+    this.taxCashflows = new TaxCashflowStorage(
+      this.db,
+      (projectId, scenarioId) => this.getScenario(projectId, scenarioId),
+      this.operatingCashflows,
+      this.assetCashflows,
+    );
   }
   listProjects(): Project[] {
     return this.db
@@ -396,6 +416,8 @@ class Storage {
         throw new HttpError(400, '换电绕行限额须通过专用接口维护，不能直接覆盖');
       if (!isDeepStrictEqual(context.annualTransport, scenario.context.annualTransport))
         throw new HttpError(400, '年度运输资料须通过专用接口维护，不能直接覆盖');
+      if (!isDeepStrictEqual(context.taxCashflows, scenario.context.taxCashflows))
+        throw new HttpError(400, '税务规则请通过专用接口整批保存');
       if (!isDeepStrictEqual(context.assetCashflows, scenario.context.assetCashflows))
         throw new HttpError(400, '请通过专用资产接口保存资产与资金');
       if (!isDeepStrictEqual(context.operatingCashflows, scenario.context.operatingCashflows))
@@ -650,6 +672,29 @@ class Storage {
       if (scenarioRevision(expectedRevision) !== scenario.revision)
         throw new HttpError(409, '规划方案已被更新，请重新加载后删除');
       scenario.context.transportCycles = cycles.filter((cycle) => cycle.id !== cycleId);
+      scenario.inputVersion++;
+      scenario.revision++;
+      scenario.updatedAt = new Date().toISOString();
+      this.db
+        .prepare('UPDATE planning_scenarios SET payload = ? WHERE id = ? AND project_id = ?')
+        .run(JSON.stringify(scenario), scenarioId, projectId);
+      return scenario;
+    })();
+  }
+  replaceTaxCashflows(
+    projectId: string,
+    scenarioId: string,
+    input: Record<string, unknown>,
+  ): PlanningScenario {
+    return this.db.transaction(() => {
+      const scenario = this.getScenario(projectId, scenarioId);
+      assertScenarioEditable(scenario);
+      scenarioFields(input, ['expectedRevision', 'input']);
+      if (scenarioRevision(input.expectedRevision) !== scenario.revision)
+        throw new HttpError(409, '规划方案已被更新，请重新加载后编辑');
+      const financial = taxCashflowInputOf(input.input, scenario.context);
+      if (isDeepStrictEqual(financial, scenario.context.taxCashflows)) return scenario;
+      scenario.context.taxCashflows = financial;
       scenario.inputVersion++;
       scenario.revision++;
       scenario.updatedAt = new Date().toISOString();

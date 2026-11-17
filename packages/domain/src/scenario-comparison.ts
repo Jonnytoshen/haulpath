@@ -1,4 +1,6 @@
 import type { JsonValue, PlanningScenario, PlanningScenarioContext } from './index';
+import { assetCategories, assetEventNames } from './asset-cashflows';
+import { taxPaymentNames } from './tax-cashflows';
 
 export interface ScenarioInputDifference {
   kind: 'added' | 'removed' | 'changed';
@@ -23,6 +25,7 @@ const fieldLabels: Record<string, string> = {
   annualTransport: '年度运输能力',
   operatingCashflows: '年度运营收支',
   assetCashflows: '资产与资本收付',
+  taxCashflows: '税费与项目现金流',
   initialYear: '初始建设年份',
   assets: '分类资产',
   category: '资产分类',
@@ -176,6 +179,42 @@ const fieldLabels: Record<string, string> = {
 
 /** Shared input vocabulary; station totals and per-battery equivalent power remain distinct. */
 export function scenarioInputFieldLabel(key: string, path = ''): string {
+  if (path.startsWith('taxCashflows')) {
+    const labels: Record<string, string> = {
+      scopeSource: '税务范围依据',
+      openingVatCredit: '期初进项留抵（元）',
+      openingVatSource: '期初留抵来源',
+      lossCarryYears: '亏损结转年数',
+      lossSource: '亏损结转来源',
+      openingLosses: '期初亏损',
+      originYear: '发生年份',
+      years: path.includes('depreciation') ? '折旧年数' : '年度税务规则',
+      rules: '逐项税务规则',
+      targetKey: '计税目标',
+      pricing: '含税方式',
+      vatRate: '增值税率',
+      credit: '进项抵扣条件',
+      incomeTax: '所得税处理',
+      depreciation: '分类直线折旧',
+      residualRate: '税务残值率',
+      start: '折旧起算',
+      historicalAssets: '历史剩余税基',
+      openingBasis: '期初剩余税基（元）',
+      remainingYears: '剩余折旧年数',
+      residualBasis: '税务残值（元）',
+      overrides: '特殊税费替代',
+      kind: '税种',
+      incomeTaxRate: '所得税率',
+      otherTax: '其他税费（元）',
+      otherTaxDeductible: '其他税费可扣除',
+      taxSource: '税率及税费来源',
+      activity: '年度活动',
+      category: '资产分类',
+      assetId: '资产',
+      amount: '金额（元）',
+    };
+    if (Object.hasOwn(labels, key)) return labels[key];
+  }
   if (path.startsWith('assetCashflows') && key === 'scopeSource')
     return '全部资产及营运资金范围依据';
   if (path.startsWith('assetCashflows') && key === 'years') return '评价年份及资金余额';
@@ -201,6 +240,7 @@ const sections: [keyof PlanningScenarioContext, string][] = [
   ['annualTransport', '年度运输能力'],
   ['operatingCashflows', '年度运营收支'],
   ['assetCashflows', '资产与资本收付'],
+  ['taxCashflows', '税费与项目现金流'],
 ];
 
 function object(value: JsonValue | undefined): value is Record<string, JsonValue> {
@@ -209,6 +249,23 @@ function object(value: JsonValue | undefined): value is Record<string, JsonValue
 
 function identity(value: JsonValue, path: string): string | null {
   if (!object(value)) return null;
+  if (path.startsWith('taxCashflows.')) {
+    if (path === 'taxCashflows.years' && typeof value.year === 'number') return String(value.year);
+    if (path === 'taxCashflows.rules' && typeof value.targetKey === 'string')
+      return value.targetKey;
+    if (path === 'taxCashflows.depreciation' && typeof value.category === 'string')
+      return value.category;
+    if (path === 'taxCashflows.historicalAssets' && typeof value.assetId === 'string')
+      return value.assetId;
+    if (path === 'taxCashflows.openingLosses' && typeof value.originYear === 'number')
+      return String(value.originYear);
+    if (
+      path === 'taxCashflows.overrides' &&
+      typeof value.year === 'number' &&
+      typeof value.kind === 'string'
+    )
+      return `${value.year}:${value.kind}`;
+  }
   if (path.startsWith('assetCashflows.')) {
     if (path.endsWith('.overrides') && typeof value.assetId === 'string')
       return `${value.assetId}:${value.year}:${value.kind}`;
@@ -247,6 +304,18 @@ function itemName(
 ): string {
   if (!object(value)) return fallback;
   if (typeof value.name === 'string') return value.name;
+  if (path.startsWith('taxCashflows.')) {
+    if (typeof value.targetKey === 'string') {
+      const [kind, year, id, event] = value.targetKey.split(':');
+      return `${year} 年 · ${kind === 'electricity' ? '电费' : (names.get(id) ?? id)}${kind === 'capital' ? ` · ${assetEventNames[event as keyof typeof assetEventNames] ?? event}` : ''}`;
+    }
+    if (typeof value.assetId === 'string') return names.get(value.assetId) ?? value.assetId;
+    if (typeof value.category === 'string')
+      return assetCategories[value.category as keyof typeof assetCategories] ?? value.category;
+    if (typeof value.originYear === 'number') return `${value.originYear} 年亏损`;
+    if (typeof value.year === 'number')
+      return `${value.year} 年${typeof value.kind === 'string' ? ` · ${taxPaymentNames[value.kind as keyof typeof taxPaymentNames] ?? value.kind}` : ''}`;
+  }
   if (path.startsWith('assetCashflows.')) {
     if (typeof value.assetId === 'string')
       return `${names.get(value.assetId) ?? value.assetId} · ${value.year} 年`;

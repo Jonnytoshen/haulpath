@@ -1,5 +1,8 @@
 import {
   assetCategories,
+  taxPricingNames,
+  taxCreditNames,
+  taxPaymentNames,
   assetOwners,
   assetEventNames,
   isStrategy,
@@ -68,6 +71,20 @@ export default function ScenarioInputValue({
           : new Intl.NumberFormat('zh-CN', { maximumSignificantDigits: 17 }).format(value)}
       </span>
     );
+  if (typeof value === 'string' && path.startsWith('taxCashflows.')) {
+    const groups: Record<string, Record<string, string>> = {
+      pricing: taxPricingNames,
+      credit: taxCreditNames,
+      kind: taxPaymentNames,
+      category: assetCategories,
+      activity: { operating: '采用实际运营证据', 'non-operating': '明确无运营收支' },
+      incomeTax: { included: '纳入计税/扣除或投资税基', excluded: '明确排除计税及扣除' },
+      start: { 'service-year': '投运当年', 'next-year': '投运次年' },
+    };
+    if (groups[field] && Object.hasOwn(groups[field], value))
+      return <span>{groups[field][value]}</span>;
+    if (field === 'targetKey') return <span>{inputName(names, value)}</span>;
+  }
   if (typeof value === 'string' && path.startsWith('assetCashflows.')) {
     const groups: Record<string, Record<string, string>> = {
       category: assetCategories,

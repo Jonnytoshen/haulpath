@@ -28,7 +28,9 @@ test(
     // A genuine schema7 has all prior tables and no asset result table.
     await app.stop();
     const db = new Database(join(app.directory, 'test.sqlite'));
-    db.exec('DROP TABLE asset_cashflow_results; PRAGMA user_version = 7;');
+    db.exec(
+      'DROP TABLE tax_cashflow_results; DROP TABLE asset_cashflow_results; PRAGMA user_version = 7;',
+    );
     db.prepare(
       'INSERT INTO operating_cashflow_results(id,project_id,scenario_id,payload) VALUES(?,?,?,?)',
     ).run(
