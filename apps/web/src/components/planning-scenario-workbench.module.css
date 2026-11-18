@@ -304,6 +304,7 @@
 }
 .scenarioTasks {
   display: flex;
+  flex-wrap: wrap;
   gap: 20px;
   margin-top: 24px;
   border-bottom: 1px solid var(--border);

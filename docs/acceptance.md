@@ -942,3 +942,16 @@ Standards 与 Spec 按固定功能提交区间独立审查，均无未解决发�
 - 原始本地证据在该 worktree 的 `.scratch/haulpath-swap-station-siting/qa/18/`：`full-tests-final.log`、`typecheck-alignment.log`、`build-alignment.log`、`lint-final.log`、`production-aligned.log`、`production-aligned/`、`code-review.md`、`design-review.md` 和 `design-documentation.md`。`red-*`、早期用例和 `full-tests-before-alignment-aborted.log` 不作为最终全绿依据；临时路径可能清理。
 
 最终核对：`NX_DAEMON=false NX_ISOLATE_PLUGINS=false pnpm test` 在 `f3b82dc` 完整串行通过 **334/334**，失败、取消、跳过、todo均为0，Node报告1568417.785625ms（约26分8秒），根Nx入口成功退出。最终格式及新增提交区间检查通过；其后仅整理本验收文档。
+
+## 2026-11-17 · 税费与项目现金流（19 工单）
+
+源码及测试：`33debc7`（基线 `ad54472`）；后续验收记录提交仅改文档。Node 24.21.0、pnpm12.10.1、系统Chrome、SQLite3.54.0。独立worktree `/private/tmp/haulpath-taxes-project-cashflows`，分支 `codex/taxes-project-cashflows`。
+
+- 根入口串行 `format:check`、零诊断 `lint`、`typecheck`、`build`（webpack）通过；领域无产物检查可命中缓存，应用类型与构建实际执行。`commitlint --from ad544726060a3b4c9ae3e7230a327489e57901ea --to HEAD`及暂存格式/提交消息hook通过。
+- 完整 `pnpm test` **347/347通过**，失败、取消、跳过、todo均0，耗时约27分25秒（1644659毫秒）。完整入口按文件运行一次，不另加分类数量。
+- 新增税务13项全部纳入并通过上述完整套件；审查新增公开HTTP回归先红后绿。覆盖显式含税/未税/不适用/零/未知、可抵与不可抵进项、分类直线折旧/残值率/起算年、历史剩余税基、更换代际、处置剩余税基、亏损到期/不结转/不退税、税费替代、建设期/年度空档、半分舍入与溢出、业务边界、旧证据采用/失配拒绝、修订/冻结复制/历史隔离，以及1200税务目标与8MiB资源拒绝。
+- 独立三年算例：折旧600/300/300元，抵亏前计税收益−400/800/1400元，所得税0/100/350元，增值税0/40/170元，税后项目现金流−980/1160/1470元；次年所得税替代90元后现金1170元，仍保留基准100元。借款、本金、利息及股本未进入项目现金流，融资及NPV未校核。
+- 真实webpack生产Chrome经表单/年度TSV预览→保存→核对→历史重开及替代闭环；1440/1000/390宽度页面不横溢，数字保持右对齐，宽表内部横滚，2列表格窄屏可见。视觉覆盖目标上下文、账目视口和桌面局部编辑器，不证明移动全长表单/全部焦点/横滚最右列/像素色差。独立finish reviewer首轮仅金额列间距，限定复核为ship、该项resolved；独立规范审查两项P2及一项P3判断项均修复并复核resolved，规格复核无新增问题；普通局部扩展的文档核验保持既有DESIGN与sidecar。
+- 真实生产schema8→9保留原年度任务及运营/资产账目，SIGKILL/重启与sqlite3在线.backup恢复后输入和完整税务结果相同；既有schema1/2/3等升级夹具同步新增表清理与版本断言，未来schema10拒绝写入。
+- Next16.4.2内置CLI安全升级提醒曾主动退出开发服务，使早期专项出现断连；按已安装CLI自动化分支使用`CI=1 __NEXT_AGENT_UPGRADE=security`继续，另用`NX_DAEMON=false NX_ISOLATE_PLUGINS=false`运行受限环境Nx。没有修改Next提醒配置或依赖；CLI报告的升级提示单独保留，当前任务不构成依赖安全审计。
+- 本轮未执行真实高德、Docker、最低Node完整套件、100需求/50车/20站/20年联合性能、真实软件发布或法定税务认定。高德仅在服务边界使用替身；普通驾车仍未校验重卡限高、限重及货车限行。

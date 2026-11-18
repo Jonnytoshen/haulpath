@@ -20,6 +20,7 @@ function physicalInput(context: PlanningScenarioContext) {
   const physical = { ...context };
   delete physical.operatingCashflows;
   delete physical.assetCashflows;
+  delete physical.taxCashflows;
   physical.results = [];
   return physical;
 }
@@ -53,6 +54,18 @@ export class OperatingCashflowStorage {
       .get(resultId, projectId, scenarioId) as { payload: string } | undefined;
     if (!row) throw new HttpError(404, '该规划方案下的运营收支结果不存在');
     return JSON.parse(row.payload);
+  }
+  assertCurrentEvidence(projectId: string, scenarioId: string, result: OperatingCashflowResult) {
+    const scenario = this.scenario(projectId, scenarioId);
+    const task = this.transport.getTask(projectId, scenarioId, result.sourceTaskId);
+    if (
+      task.config.stage !== 'annual-transport' ||
+      task.algorithmVersion !== ANNUAL_TRANSPORT_ALGORITHM_VERSION ||
+      !task.annualResult?.complete ||
+      ['queued', 'running'].includes(task.status) ||
+      !isDeepStrictEqual(physicalInput(scenario.context), physicalInput(task.snapshot.context))
+    )
+      throw new HttpError(409, '运营来源年度证据与当前完整物理输入不等价，请重新校核');
   }
   calculate(
     projectId: string,

@@ -29,7 +29,10 @@ export function CashflowTable({
 }) {
   const alignment = (index: number) =>
     numericColumns
-      ? { textAlign: numericColumns.includes(index) ? ('right' as const) : ('left' as const) }
+      ? {
+          textAlign: numericColumns.includes(index) ? ('right' as const) : ('left' as const),
+          whiteSpace: numericColumns.includes(index) ? ('nowrap' as const) : undefined,
+        }
       : undefined;
   return (
     <LedgerTable label={label}>

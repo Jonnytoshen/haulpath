@@ -29,6 +29,7 @@ import DailyTransport from './daily-transport';
 import AnnualTransport from './annual-transport';
 import OperatingCashflows from './operating-cashflows';
 import AssetCashflows from './asset-cashflows';
+import TaxCashflows from './tax-cashflows';
 import ScenarioInputValue, { scenarioInputNames } from './scenario-input-value';
 import comparisonStyles from './scenario-version-comparison.module.css';
 
@@ -53,7 +54,7 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
   const [freezing, setFreezing] = useState<PlanningScenario | null>(null);
   const [comparing, setComparing] = useState(false);
   const [scenarioTask, setScenarioTask] = useState<
-    'inputs' | 'daily' | 'annual' | 'operating' | 'assets'
+    'inputs' | 'daily' | 'annual' | 'operating' | 'assets' | 'taxes'
   >('inputs');
   const [editing, setEditing] = useState(false);
   const alive = useRef(false);
@@ -483,8 +484,35 @@ export default function PlanningScenarioWorkbench({ project }: { project: Projec
               >
                 资产与资金
               </Button>
+              <Button
+                className="text-button"
+                aria-pressed={scenarioTask === 'taxes'}
+                disabled={locked}
+                onClick={() => setScenarioTask('taxes')}
+              >
+                税费与现金流
+              </Button>
             </nav>
-            {scenarioTask === 'assets' ? (
+            {scenarioTask === 'taxes' ? (
+              <TaxCashflows
+                key={`taxes-${selected.id}`}
+                scenario={selected}
+                disabled={busy || reading || frozen}
+                onChange={(saved) => {
+                  setSelected(saved);
+                  setScenarios((items) =>
+                    items.map((item) => (item.id === saved.id ? saved : item)),
+                  );
+                }}
+                onEditingChange={setEditing}
+                onWritingChange={(value) => {
+                  writing.current = value;
+                  if (value) generation.current++;
+                  setBusy(value);
+                  setReading(false);
+                }}
+              />
+            ) : scenarioTask === 'assets' ? (
               <AssetCashflows
                 key={`assets-${selected.id}`}
                 scenario={selected}

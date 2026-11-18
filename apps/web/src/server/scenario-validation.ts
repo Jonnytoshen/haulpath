@@ -12,6 +12,7 @@ import type {
   AnnualTransportYear,
   OperatingCashflowInput,
   AssetCashflowInput,
+  TaxCashflowInput,
 } from '@haulpath/domain';
 import { isStrategy } from '@haulpath/domain';
 import { HttpError } from './http';
@@ -87,6 +88,7 @@ export function scenarioContext(input: unknown): PlanningScenarioContext {
     'annualTransport',
     'operatingCashflows',
     'assetCashflows',
+    'taxCashflows',
     'results',
   ]);
   if (
@@ -100,6 +102,7 @@ export function scenarioContext(input: unknown): PlanningScenarioContext {
     (context.stationNetwork !== undefined && !jsonObject(context.stationNetwork)) ||
     (context.annualTransport !== undefined &&
       (!Array.isArray(context.annualTransport) || !jsonValue(context.annualTransport))) ||
+    (context.taxCashflows !== undefined && !jsonObject(context.taxCashflows)) ||
     (context.assetCashflows !== undefined && !jsonObject(context.assetCashflows)) ||
     (context.operatingCashflows !== undefined && !jsonObject(context.operatingCashflows)) ||
     !Array.isArray(context.annual) ||
@@ -141,6 +144,9 @@ export function scenarioContext(input: unknown): PlanningScenarioContext {
     ...(context.operatingCashflows === undefined
       ? {}
       : { operatingCashflows: context.operatingCashflows as unknown as OperatingCashflowInput }),
+    ...(context.taxCashflows === undefined
+      ? {}
+      : { taxCashflows: context.taxCashflows as unknown as TaxCashflowInput }),
     ...(context.assetCashflows === undefined
       ? {}
       : { assetCashflows: context.assetCashflows as unknown as AssetCashflowInput }),

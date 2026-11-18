@@ -1,3 +1,4 @@
+import type { TaxCashflowInput } from './tax-cashflows';
 import type { AssetCashflowInput } from './asset-cashflows';
 import type { OperatingCashflowInput } from './operating-cashflows';
 import type { AnnualTransportYear } from './annual-transport';
@@ -165,6 +166,7 @@ export interface PlanningScenarioContext {
   annualTransport?: AnnualTransportYear[];
   operatingCashflows?: OperatingCashflowInput;
   assetCashflows?: AssetCashflowInput;
+  taxCashflows?: TaxCashflowInput;
   annual: JsonObject[];
   results: JsonObject[];
 }
@@ -300,3 +302,7 @@ export * from './operating-cashflow-calculation';
 
 export * from './asset-cashflows';
 export * from './asset-cashflow-calculation';
+
+export * from './tax-cashflows';
+
+export * from './tax-cashflow-calculation';
